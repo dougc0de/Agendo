@@ -157,8 +157,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="dashboard-page">
-    <div class="dashboard-shell">
+  <div class="dashboard-page page-view">
+    <div class="dashboard-shell page-shell">
       <AppNavbar
         :links="dashboardLinks"
         action-label="Cerrar Sesion"
@@ -271,14 +271,9 @@ onMounted(async () => {
 
 <style scoped>
 .dashboard-page {
-  min-height: 100vh;
-  background: var(--page-bg);
 }
 
 .dashboard-shell {
-  width: 100%;
-  background: var(--page-bg);
-  min-height: 100vh;
 }
 
 .dashboard-main {
@@ -441,10 +436,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 760px) {
-  .dashboard-shell {
-    min-height: 100vh;
-  }
-
   .dashboard-main {
     padding: 1.25rem;
   }

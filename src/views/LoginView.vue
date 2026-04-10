@@ -14,6 +14,8 @@ import reservar from "../../src/assets/reservar.png";
 import eliminar from "../../src/assets/eliminar.png";
 import revisar from "../../src/assets/revisar.png";
 import founderDouglas from "../../src/assets/founderDouglas.jpg";
+import calend from "../../src/assets/calend.png";
+
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -78,8 +80,8 @@ function submitContact() {
 </script>
 
 <template>
-  <div class="landing-page">
-    <div class="landing-shell">
+  <div class="landing-page page-view">
+    <div class="landing-shell page-shell">
       <AppNavbar :links="navLinks" action-label="Iniciar Sesion" @action="scrollToLogin" />
 
       <main>
@@ -136,7 +138,7 @@ function submitContact() {
           </div>
         </section>
         
-        <section id="servicios" class="section-block">
+        <section id="servicios" class="section-block section-shell">
           <div class="section-heading">
           <span class="section-label">Servicios</span>
 
@@ -178,7 +180,7 @@ function submitContact() {
 
         <Divisor />
 
-        <section id="sobre" class="section-block section-block--about">
+        <section id="sobre" class="section-block section-shell section-block--about">
           <div class="section-heading section-heading--left">
             <span class="section-label">Sobre Nosotros</span>
             <h2>Sobre AGENDO</h2>
@@ -211,7 +213,9 @@ function submitContact() {
             </article>
 
             <article class="vision-strip">
-              <div class="vision-strip__art"></div>
+              <div class="vision-strip__art">
+                <img :src="calend" alt="calendario">
+              </div>
               <div class="vision-strip__copy">
                 <h3>Nuestra vision</h3>
             <p class="textinfo">
@@ -240,7 +244,7 @@ function submitContact() {
 
         <Divisor />
 
-        <section id="contacto" class="section-block section-block--contact">
+        <section id="contacto" class="section-block section-shell section-block--contact">
           <div class="section-heading">
             <span class="section-label">Contacto</span>
             <h2>Necesita acceso o mas informacion?</h2>
@@ -299,14 +303,9 @@ function submitContact() {
 
 <style scoped>
 .landing-page {
-  min-height: 100vh;
-  background: var(--page-bg);
 }
 
 .landing-shell {
-  width: 100%;
-  background: var(--page-bg);
-  min-height: 100vh;
 }
 
 .hero-section {
@@ -463,7 +462,6 @@ function submitContact() {
 }
 
 .section-block {
-  padding: 3rem 2rem;
   margin-top: 1rem;
 }
 
@@ -731,12 +729,7 @@ function submitContact() {
 }
 
 @media (max-width: 760px) {
-  .landing-shell {
-    min-height: 100vh;
-  }
-
-  .hero-copy,
-  .section-block {
+  .hero-copy {
     padding-inline: 1.25rem;
   }
 

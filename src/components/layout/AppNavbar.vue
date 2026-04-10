@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 
 const props = defineProps({
@@ -17,15 +18,43 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["action"]);
+
+const menuOpen = ref(false);
+
+function toggleMenu(){
+  menuOpen.value = !menuOpen.value
+}
+
+function closeMenu(){
+  menuOpen.value = false;
+}
+
+function handleAction(){
+  closeMenu();
+  emit("action");
+}
+
+
 </script>
 
 <template>
   <header class="navbar">
     <div class="navbar__brand">
-      <span class="navbar__brand-mark">AG</span>
       <span class="navbar__brand-name">AGENDO</span>
     </div>
 
+    <button
+      type="button"
+      class="navbar__burger"
+      :aria-expanded="menuOpen ? 'true' : 'false'"
+      aria-controls="navbar-mobile-menu"
+      aria-label="Abrir menu de navegacion"
+      @click="toggleMenu"
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
     <nav class="navbar__links">
       <a
         v-for="link in props.links"
@@ -46,11 +75,27 @@ const emit = defineEmits(["action"]);
         v-if="props.actionLabel"
         size="sm"
         variant="primary"
-        @click="emit('action')"
+        @click="handleAction"
       >
         {{ props.actionLabel }}
       </BaseButton>
     </div>
+
+    <nav
+      v-if="menuOpen"
+      id="navbar-mobile-menu"
+      class="navbar__mobile-menu"
+    >
+      <a
+        v-for="link in props.links"
+        :key="`mobile-${link.label}`"
+        class="navbar__mobile-link"
+        :href="link.href"
+        @click="closeMenu"
+      >
+        {{ link.label }}
+      </a>
+    </nav>
   </header>
 </template>
 
@@ -141,10 +186,76 @@ const emit = defineEmits(["action"]);
   background: #fff;
 }
 
-@media (max-width: 820px) {
+
+.navbar__burger,
+.navbar__mobile-menu {
+  display: none;
+}
+
+.navbar__burger {
+  border: 1px solid rgba(95, 135, 151, 0.24);
+  border-radius: 8px;
+  background: #fff;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navbar__burger span {
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text);
+}
+
+.navbar__mobile-link {
+  display: block;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(95, 135, 151, 0.18);
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.navbar__mobile-link:hover {
+  color: var(--primary-dark);
+}
+
+@media (max-width: 980px) {
   .navbar {
-    grid-template-columns: 1fr;
-    justify-items: center;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .navbar__links {
+    display: none;
+  }
+
+  .navbar__burger {
+    display: inline-flex;
+    justify-self: end;
+  }
+
+  .navbar__actions {
+    grid-column: 1 / -1;
+    justify-content: center;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .navbar__mobile-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    grid-column: 1 / -1;
+    width: 100%;
+    padding-top: 0.75rem;
   }
 }
 </style>
