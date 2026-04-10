@@ -183,11 +183,13 @@ function submitContact() {
         <section id="sobre" class="section-block section-shell section-block--about">
           <div class="section-heading section-heading--left">
             <span class="section-label">Sobre Nosotros</span>
+            <div class="sobreNosotrosTitle">
             <h2>Sobre AGENDO</h2>
             <p class="textinfo">
               AGENDO nace como una solucion para facilitar la organizacion de salas dentro
               de entornos clinicos y mejorar la claridad operativa del dia a dia.
             </p>
+            </div>
           </div>
 
           <div class="about-grid">
@@ -228,8 +230,7 @@ function submitContact() {
               <div class="founder-card__copy">
                 <h3>Quien esta detras</h3>
             <p class="textinfo">
-                  AGENDO es una iniciativa desarrollada con el objetivo de transformar procesos de organización en experiencias más claras, eficientes y fáciles de usar. El proyecto combina visión funcional, enfoque en el usuario y una base pensada para crecer de forma sólida, de tal forma que con el tiempo no sea solo uno sino varios usuarios puedan hacer sus reservas en una respectiva institucion en este caso medica y asi poder reservar su espacio y su tiempo evitando colisiones con otros miembros de dicha institucion, pero a su vez no solo esta pensado a futuro para servir como una herramienta de organizacion en la parte de la salud sino tambien en otras areas ya que el alma del proyecto es ser una herramienta de gestion de los espacios fisicos y el tiempo que usaran.
-                </p>
+                AGENDO es una solución orientada a optimizar la gestión de citas y reservas de espacios físicos mediante una experiencia clara, eficiente y centrada en el usuario. Diseñada con una visión escalable, la plataforma busca evolucionar desde un uso individual hacia un entorno colaborativo donde múltiples usuarios puedan coordinar, reservar y administrar espacios dentro de clínicas, empresas o instituciones, con orden, transparencia y agilidad. Su valor radica en reducir errores de coordinación, evitar conflictos de horario y garantizar un uso más inteligente del tiempo y de los recursos disponibles.                </p>
               </div>
               <div class="founder-card__profile">
                 <div class="founder-avatar">
@@ -617,7 +618,7 @@ function submitContact() {
 
 .vision-strip__art {
   min-height: 160px;
-  border-radius: 8px;
+  border-radius: 30px;
   background: linear-gradient(135deg, #e6f1f5, #bed6df);
 }
 
@@ -796,4 +797,20 @@ function submitContact() {
   text-justify: inter-word
 
 }
+
+.sobreNosotrosTitle{
+  background-color: #608896;
+  padding: 2rem;
+  border-radius: 20px;
+  margin-top: 15px;
+}
+.sobreNosotrosTitle p{
+  color: white;
+
+}
+
+.sobreNosotrosTitle h2{
+  color: white;
+}
+
 </style>
