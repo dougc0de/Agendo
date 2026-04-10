@@ -38,6 +38,7 @@ const filters = ref({
     status: "todos"
 });
 const feedback = ref("");
+const modalError = ref("");
 
 const dashboardLinks = [
     { label: "Inicio", href: "#dashboard-top" },
@@ -70,6 +71,7 @@ const filteredAppointments = computed(() => {
 
 function openCreateModal() {
     modalMode.value = "create";
+    modalError.value = "";
     currentAppointment.value = {
         estado: "pendiente",
         usuarioId: 1,
@@ -81,6 +83,7 @@ function openCreateModal() {
 
 function openEditModal(appointment) {
     modalMode.value = "edit";
+    modalError.value = "";
     currentAppointment.value = {
         ...appointment
     };
@@ -89,11 +92,13 @@ function openEditModal(appointment) {
 
 function closeModal() {
     modalOpen.value = false;
+    modalError.value = "";
     currentAppointment.value = {};
 }
 
 async function handleSaveAppointment(payload) {
     let result;
+    modalError.value = "";
 
     if (modalMode.value === "edit" && currentAppointment.value.id) {
         result = await updateAppointment(currentAppointment.value.id, payload);
@@ -101,11 +106,13 @@ async function handleSaveAppointment(payload) {
         result = await createAppointment(payload);
     }
 
-    feedback.value = result.msg;
-
     if (result.ok) {
+        feedback.value = result.msg;
         closeModal();
+        return;
     }
+
+    modalError.value = result.msg;
 }
 
 async function handleDeleteAppointment(appointment) {
@@ -229,7 +236,7 @@ onMounted(async () => {
             />
 
             <p v-if="feedback" class="dashboard-feedback">{{ feedback }}</p>
-            <p v-if="error" class="dashboard-error">{{ error }}</p>
+            <p v-if="error && !modalOpen" class="dashboard-error">{{ error }}</p>
 
             <AppointmentTable
               :appointments="filteredAppointments"
@@ -254,6 +261,7 @@ onMounted(async () => {
         :initial-value="currentAppointment"
         :mode="modalMode"
         :submitting="saving"
+        :error-message="modalError"
         @submit="handleSaveAppointment"
         @cancel="closeModal"
       />

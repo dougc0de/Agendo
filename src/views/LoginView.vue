@@ -7,14 +7,13 @@ import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import Divisor from "./Divisor.vue";
 import { useAuthStore } from "../stores/authStore.js";
-import avatarImage from "../../t/avatar.jpg";
-import heroBackground from "../../t/doctorHero.jpg";
-import crear from "../../t/crear.png";
-import reservar from "../../t/reservar.png";
-import eliminar from "../../t/eliminar.png";
-import revisar from "../../t/revisar.png";
-import founderDouglas from "../../t/founderDouglas.jpg";
-
+import heroBackground from "../assets/doctorHero.jpg";
+import avatarImage from "../../src/assets/avatar.jpg";
+import crear from "../../src/assets/crear.png";
+import reservar from "../../src/assets/reservar.png";
+import eliminar from "../../src/assets/eliminar.png";
+import revisar from "../../src/assets/revisar.png";
+import founderDouglas from "../../src/assets/founderDouglas.jpg";
 
 const router = useRouter();
 const authStore = useAuthStore();

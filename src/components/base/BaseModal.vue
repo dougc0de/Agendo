@@ -53,11 +53,14 @@ const emit = defineEmits(["close"]);
 }
 
 .modal-card {
-  width: min(760px, 100%);
+  width: min(940px, 100%);
+  max-height: calc(100vh - 2rem);
   background: #fff;
   border-radius: 8px;
   box-shadow: var(--shadow);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -89,5 +92,6 @@ const emit = defineEmits(["close"]);
 
 .modal-body {
   padding: 1.4rem;
+  overflow: auto;
 }
 </style>

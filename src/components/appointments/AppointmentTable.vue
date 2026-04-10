@@ -56,7 +56,7 @@ function appointmentTimeRange(appointment) {
               {{ appointment.estado }}
             </span>
           </td>
-          <td>
+          <td class="appointment-table__actions-cell">
             <div class="appointment-table__actions">
               <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
                 Editar
@@ -129,8 +129,16 @@ function appointmentTimeRange(appointment) {
 
 .appointment-table__actions {
   display: flex;
+  flex-direction: column;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  margin: 0 auto;
+}
+
+.appointment-table__actions-cell {
+  text-align: center;
 }
 
 @media (max-width: 920px) {

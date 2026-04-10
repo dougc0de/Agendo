@@ -15,6 +15,10 @@ const props = defineProps({
     mode: {
         type: String,
         default: "create"
+    },
+    errorMessage: {
+        type: String,
+        default: ""
     }
 });
 
@@ -65,6 +69,7 @@ function handleSubmit() {
         label="ID de sala"
         type="number"
         min="1"
+        :required="true"
         @update:model-value="form.salaId = $event"
       />
       <BaseInput
@@ -72,6 +77,7 @@ function handleSubmit() {
         label="ID de usuario"
         type="number"
         min="1"
+        :required="true"
         @update:model-value="form.usuarioId = $event"
       />
       <BaseInput
@@ -79,35 +85,43 @@ function handleSubmit() {
         label="ID de paciente"
         type="number"
         min="1"
+        :required="true"
         @update:model-value="form.pacienteId = $event"
       />
       <BaseInput
         :model-value="form.fecha"
         label="Fecha"
         type="date"
+        :required="true"
         @update:model-value="form.fecha = $event"
       />
       <BaseInput
         :model-value="form.horaInicio"
         label="Hora de inicio"
         type="time"
+        :required="true"
         @update:model-value="form.horaInicio = $event"
       />
       <BaseInput
         :model-value="form.horaFin"
         label="Hora de fin"
         type="time"
+        :required="true"
         @update:model-value="form.horaFin = $event"
       />
       <BaseInput
         :model-value="form.tipoConsulta"
         label="Tipo de procedimiento"
         placeholder="Ej. Circuncision"
+        :required="true"
         @update:model-value="form.tipoConsulta = $event"
       />
 
-      <label class="appointment-form__field">
-        <span class="appointment-form__label">Estado</span>
+      <label class="appointment-form__field appointment-form__field--compact">
+        <span class="appointment-form__label">
+          Estado
+          <span class="appointment-form__required">*</span>
+        </span>
         <select
           v-model="form.estado"
           class="appointment-form__select"
@@ -119,16 +133,29 @@ function handleSubmit() {
       </label>
     </div>
 
-    <BaseInput
-      :model-value="form.descripcion"
-      label="Descripcion"
-      as="textarea"
-      placeholder="Agrega una nota breve sobre la reserva."
-      @update:model-value="form.descripcion = $event"
-    />
+    <div class="appointment-form__footer-grid">
+      <BaseInput
+        :model-value="form.descripcion"
+        label="Descripcion"
+        as="textarea"
+        :rows="3"
+        :required="true"
+        placeholder="Agrega una nota breve sobre la reserva."
+        @update:model-value="form.descripcion = $event"
+      />
 
-    <p class="appointment-form__helper">
-      Usa IDs reales existentes en MySQL para sala, usuario y paciente.
+      <div class="appointment-form__summary">
+        <p class="appointment-form__helper">
+          Los campos con <span class="appointment-form__required">*</span> son obligatorios.
+        </p>
+        <p class="appointment-form__helper">
+          Usa IDs reales existentes en MySQL para sala, usuario y paciente.
+        </p>
+      </div>
+    </div>
+
+    <p v-if="props.errorMessage" class="appointment-form__error">
+      {{ props.errorMessage }}
     </p>
 
     <div class="appointment-form__actions">
@@ -146,13 +173,13 @@ function handleSubmit() {
 .appointment-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .appointment-form__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
 }
 
 .appointment-form__field {
@@ -161,9 +188,17 @@ function handleSubmit() {
   gap: 0.45rem;
 }
 
+.appointment-form__field--compact {
+  min-width: 0;
+}
+
 .appointment-form__label {
   font-size: 0.92rem;
   font-weight: 600;
+}
+
+.appointment-form__required {
+  color: #c83d32;
 }
 
 .appointment-form__select {
@@ -176,10 +211,36 @@ function handleSubmit() {
   outline: none;
 }
 
+.appointment-form__footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.appointment-form__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border-radius: 8px;
+  background: #f4f8fa;
+}
+
 .appointment-form__helper {
   margin: 0;
   color: var(--text-soft);
   font-size: 0.9rem;
+}
+
+.appointment-form__error {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: rgba(235, 85, 69, 0.14);
+  border: 1px solid rgba(235, 85, 69, 0.22);
+  color: #b8392d;
+  font-size: 0.92rem;
 }
 
 .appointment-form__actions {
@@ -188,8 +249,20 @@ function handleSubmit() {
   gap: 0.75rem;
 }
 
+@media (max-width: 980px) {
+  .appointment-form__grid,
+  .appointment-form__footer-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .appointment-form__footer-grid > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 760px) {
-  .appointment-form__grid {
+  .appointment-form__grid,
+  .appointment-form__footer-grid {
     grid-template-columns: 1fr;
   }
 

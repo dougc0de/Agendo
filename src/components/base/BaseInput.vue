@@ -47,7 +47,10 @@ function updateValue(event) {
 
 <template>
   <label class="base-input">
-    <span v-if="props.label" class="base-input__label">{{ props.label }}</span>
+    <span v-if="props.label" class="base-input__label">
+      {{ props.label }}
+      <span v-if="props.required" class="base-input__required">*</span>
+    </span>
 
     <textarea
       v-if="props.as === 'textarea'"
@@ -85,6 +88,10 @@ function updateValue(event) {
   font-size: 0.92rem;
   font-weight: 600;
   color: var(--text);
+}
+
+.base-input__required {
+  color: #c83d32;
 }
 
 .base-input__control {
