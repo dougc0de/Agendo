@@ -711,9 +711,16 @@ function submitContact() {
   font-weight: 600;
 }
 
-@media (max-width: 1024px) {
-  .hero-section,
-  .services-grid,
+@media (max-width: 980px) {
+  .hero-title {
+    max-width: none;
+    font-size: 2.5rem;
+  }
+
+  .services-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .about-grid,
   .contact-grid,
   .vision-strip,
@@ -721,20 +728,66 @@ function submitContact() {
   .contact-form__row {
     grid-template-columns: 1fr;
   }
-
-  .hero-title {
-    max-width: none;
-    font-size: 2.5rem;
-  }
 }
 
 @media (max-width: 760px) {
+  .hero-section,
+  .services-grid {
+    grid-template-columns: 1fr;
+  }
+
   .hero-copy {
     padding-inline: 1.25rem;
   }
 
   .hero-copy {
     padding-top: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-copy {
+    padding: 2rem 1.25rem 1.5rem;
+  }
+
+  .hero-title {
+    font-size: 2.15rem;
+    line-height: 1.05;
+  }
+
+  .hero-highlight-row {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    width: 100%;
+  }
+
+  .hero-highlight {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .hero-highlight-avatar {
+    width: min(140px, 100%);
+    min-width: 0;
+  }
+
+  .hero-pills {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 28px;
+  }
+
+  .hero-pills span {
+    text-align: center;
+  }
+
+  .login-card {
+    margin: 1rem;
+    width: auto;
+  }
+
+  .section-heading h2 {
+    font-size: 2rem;
   }
 }
 

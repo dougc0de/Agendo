@@ -227,10 +227,27 @@ function handleAction(){
   color: var(--primary-dark);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 820px) {
   .navbar {
-    grid-template-columns: 1fr auto;
+    gap: 0.85rem;
+    padding: 0.95rem 1rem;
+  }
+
+  .navbar__links {
+    gap: 1rem;
+  }
+
+  .navbar__actions {
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .navbar {
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    padding: 0.9rem 1rem;
+    justify-items: stretch;
   }
 
   .navbar__links {
@@ -244,6 +261,8 @@ function handleAction(){
 
   .navbar__actions {
     grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     width: 100%;
     margin-top: 0.5rem;
@@ -256,6 +275,17 @@ function handleAction(){
     grid-column: 1 / -1;
     width: 100%;
     padding-top: 0.75rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .navbar {
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+
+  .navbar__actions {
+    margin-top: 0.25rem;
   }
 }
 </style>
