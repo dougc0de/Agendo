@@ -1,7 +1,8 @@
 <script setup>
-import { reactive, watch } from "vue";
+import { onBeforeUnmount, reactive, ref, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
+import { searchPatients } from "../../services/patientApi.js";
 
 const props = defineProps({
     initialValue: {
@@ -19,6 +20,10 @@ const props = defineProps({
     errorMessage: {
         type: String,
         default: ""
+    },
+    currentUserId: {
+        type: Number,
+        default: 1
     }
 });
 
@@ -32,21 +37,255 @@ function createDefaultForm() {
         descripcion: "",
         estado: "pendiente",
         tipoConsulta: "",
-        usuarioId: 1,
-        pacienteId: 1,
+        usuarioId: Number(props.currentUserId) || 1,
         salaId: 1
     };
 }
 
+function createDefaultNewPatient() {
+    return {
+        nombre: "",
+        telefono: "",
+        correo: "",
+        fechaNacimiento: "",
+        observaciones: "",
+        tipoProcedimiento: ""
+    };
+}
+
+function mapInitialPatient(value) {
+    const pacienteId = Number(value?.pacienteId);
+
+    if (!Number.isInteger(pacienteId) || pacienteId <= 0) {
+        return null;
+    }
+
+    return {
+        id: pacienteId,
+        nombre: value?.pacienteNombre ?? `Paciente #${pacienteId}`,
+        telefono: value?.pacienteTelefono ?? "",
+        correo: value?.pacienteCorreo ?? ""
+    };
+}
+
 const form = reactive(createDefaultForm());
+const newPatient = reactive(createDefaultNewPatient());
+const patientMode = ref("existing");
+const patientSearch = ref("");
+const patientResults = ref([]);
+const patientSearching = ref(false);
+const patientSearchError = ref("");
+const patientValidationError = ref("");
+const selectedPatient = ref(null);
+
+let patientSearchTimeout = null;
+let patientSearchRequest = 0;
+
+function clearPatientSearchTimer() {
+    if (patientSearchTimeout) {
+        window.clearTimeout(patientSearchTimeout);
+        patientSearchTimeout = null;
+    }
+}
+
+function resetPatientState() {
+    clearPatientSearchTimer();
+    patientResults.value = [];
+    patientSearching.value = false;
+    patientSearchError.value = "";
+    patientValidationError.value = "";
+    Object.assign(newPatient, createDefaultNewPatient());
+
+    const initialPatient = mapInitialPatient(props.initialValue);
+    selectedPatient.value = initialPatient;
+    patientMode.value = "existing";
+    patientSearch.value = initialPatient?.nombre ?? "";
+}
 
 function syncForm() {
     Object.assign(form, createDefaultForm(), props.initialValue ?? {});
+
+    if (!Number.isInteger(Number(form.usuarioId)) || Number(form.usuarioId) <= 0) {
+        form.usuarioId = Number(props.currentUserId) || 1;
+    }
+
+    resetPatientState();
 }
 
 watch(() => props.initialValue, syncForm, { deep: true, immediate: true });
 
+watch(
+    () => props.currentUserId,
+    (value) => {
+        if (!props.initialValue?.id) {
+            form.usuarioId = Number(value) || 1;
+        }
+    }
+);
+
+watch(
+    () => form.tipoConsulta,
+    (value) => {
+        if (!newPatient.tipoProcedimiento) {
+            newPatient.tipoProcedimiento = value ?? "";
+        }
+    }
+);
+
+watch(patientSearch, (value) => {
+    clearPatientSearchTimer();
+    patientResults.value = [];
+    patientSearchError.value = "";
+
+    if (patientMode.value !== "existing" || selectedPatient.value) {
+        return;
+    }
+
+    const query = String(value ?? "").trim();
+
+    if (query.length < 2) {
+        patientSearching.value = false;
+        return;
+    }
+
+    patientSearchTimeout = window.setTimeout(async () => {
+        const requestId = ++patientSearchRequest;
+        patientSearching.value = true;
+
+        try {
+            const response = await searchPatients(query);
+
+            if (requestId !== patientSearchRequest) {
+                return;
+            }
+
+            patientResults.value = response.data ?? [];
+        } catch (error) {
+            if (requestId !== patientSearchRequest) {
+                return;
+            }
+
+            patientSearchError.value =
+                error.response?.msg || error.message || "No fue posible buscar pacientes.";
+        } finally {
+            if (requestId === patientSearchRequest) {
+                patientSearching.value = false;
+            }
+        }
+    }, 250);
+});
+
+onBeforeUnmount(() => {
+    clearPatientSearchTimer();
+});
+
+function selectPatient(patient) {
+    selectedPatient.value = {
+        id: Number(patient.id),
+        nombre: patient.nombre,
+        telefono: patient.telefono ?? "",
+        correo: patient.correo ?? ""
+    };
+    patientSearch.value = patient.nombre;
+    patientResults.value = [];
+    patientSearchError.value = "";
+    patientValidationError.value = "";
+}
+
+function clearSelectedPatient() {
+    selectedPatient.value = null;
+    patientSearch.value = "";
+    patientResults.value = [];
+    patientSearchError.value = "";
+    patientValidationError.value = "";
+}
+
+function startNewPatientFlow() {
+    const canPrefillFromSearch = !selectedPatient.value;
+    patientMode.value = "new";
+    patientValidationError.value = "";
+    patientSearchError.value = "";
+    patientResults.value = [];
+
+    if (canPrefillFromSearch && !newPatient.nombre) {
+        const rawSearch = patientSearch.value.trim();
+        const looksLikeEmail = rawSearch.includes("@");
+        const looksLikePhone = /^[+\d\s()-]+$/.test(rawSearch) && rawSearch.length >= 6;
+
+        if (rawSearch && !looksLikeEmail && !looksLikePhone) {
+            newPatient.nombre = rawSearch;
+        }
+    }
+
+    if (!newPatient.tipoProcedimiento) {
+        newPatient.tipoProcedimiento = form.tipoConsulta ?? "";
+    }
+
+    selectedPatient.value = null;
+}
+
+function useExistingPatientFlow() {
+    patientMode.value = "existing";
+    patientValidationError.value = "";
+    patientSearchError.value = "";
+    patientResults.value = [];
+
+    if (!selectedPatient.value) {
+        patientSearch.value = "";
+    }
+}
+
+function buildPatientPayload() {
+    if (patientMode.value === "existing") {
+        const pacienteId = Number(selectedPatient.value?.id);
+
+        if (!Number.isInteger(pacienteId) || pacienteId <= 0) {
+            patientValidationError.value = "Selecciona un paciente existente o crea uno nuevo.";
+            return null;
+        }
+
+        return {
+            mode: "existing",
+            pacienteId
+        };
+    }
+
+    const nombre = String(newPatient.nombre ?? "").trim();
+    const telefono = String(newPatient.telefono ?? "").trim();
+    const correo = String(newPatient.correo ?? "").trim();
+    const fechaNacimiento = String(newPatient.fechaNacimiento ?? "").trim();
+    const observaciones = String(newPatient.observaciones ?? "").trim();
+    const tipoProcedimiento = String(newPatient.tipoProcedimiento ?? "").trim();
+
+    if (!nombre) {
+        patientValidationError.value = "El nombre del paciente es obligatorio.";
+        return null;
+    }
+
+    if (!telefono) {
+        patientValidationError.value = "El telefono del paciente es obligatorio.";
+        return null;
+    }
+
+    return {
+        mode: "new",
+        nombre,
+        telefono,
+        correo: correo || null,
+        fechaNacimiento: fechaNacimiento || null,
+        observaciones: observaciones || null,
+        tipoProcedimiento: tipoProcedimiento || form.tipoConsulta || null
+    };
+}
+
 function handleSubmit() {
+    patientValidationError.value = "";
+    const paciente = buildPatientPayload();
+
+    if (!paciente) {
+        return;
+    }
+
     emit("submit", {
         fecha: form.fecha,
         horaInicio: form.horaInicio,
@@ -54,9 +293,9 @@ function handleSubmit() {
         descripcion: form.descripcion,
         estado: form.estado,
         tipoConsulta: form.tipoConsulta,
-        usuarioId: Number(form.usuarioId),
-        pacienteId: Number(form.pacienteId),
-        salaId: Number(form.salaId)
+        usuarioId: Number(form.usuarioId || props.currentUserId || 1),
+        salaId: Number(form.salaId),
+        paciente
     });
 }
 </script>
@@ -71,22 +310,6 @@ function handleSubmit() {
         min="1"
         :required="true"
         @update:model-value="form.salaId = $event"
-      />
-      <BaseInput
-        :model-value="form.usuarioId"
-        label="ID de usuario"
-        type="number"
-        min="1"
-        :required="true"
-        @update:model-value="form.usuarioId = $event"
-      />
-      <BaseInput
-        :model-value="form.pacienteId"
-        label="ID de paciente"
-        type="number"
-        min="1"
-        :required="true"
-        @update:model-value="form.pacienteId = $event"
       />
       <BaseInput
         :model-value="form.fecha"
@@ -133,6 +356,169 @@ function handleSubmit() {
       </label>
     </div>
 
+    <section class="appointment-form__patient-panel">
+      <div class="appointment-form__patient-header">
+        <div>
+          <h3>Paciente</h3>
+          <p>Selecciona un paciente existente o crea uno nuevo sin salir de la reserva.</p>
+        </div>
+
+        <BaseButton
+          v-if="patientMode === 'existing'"
+          type="button"
+          size="sm"
+          variant="ghost"
+          @click="startNewPatientFlow"
+        >
+          + Crear paciente nuevo
+        </BaseButton>
+
+        <BaseButton
+          v-else
+          type="button"
+          size="sm"
+          variant="ghost"
+          @click="useExistingPatientFlow"
+        >
+          Buscar existente
+        </BaseButton>
+      </div>
+
+      <div v-if="patientMode === 'existing'" class="appointment-form__patient-body">
+        <div v-if="selectedPatient" class="appointment-form__patient-card">
+          <div class="appointment-form__patient-card-copy">
+            <strong>{{ selectedPatient.nombre }}</strong>
+            <span v-if="selectedPatient.telefono">Telefono: {{ selectedPatient.telefono }}</span>
+            <span v-if="selectedPatient.correo">Correo: {{ selectedPatient.correo }}</span>
+            <span v-if="!selectedPatient.telefono && !selectedPatient.correo">
+              Paciente seleccionado para esta reserva.
+            </span>
+          </div>
+
+          <div class="appointment-form__patient-card-actions">
+            <BaseButton
+              type="button"
+              size="sm"
+              variant="ghost"
+              @click="clearSelectedPatient"
+            >
+              Cambiar paciente
+            </BaseButton>
+            <BaseButton
+              type="button"
+              size="sm"
+              variant="ghost"
+              @click="startNewPatientFlow"
+            >
+              Crear nuevo
+            </BaseButton>
+          </div>
+        </div>
+
+        <template v-else>
+          <BaseInput
+            :model-value="patientSearch"
+            label="Buscar paciente"
+            placeholder="Nombre, telefono o correo"
+            :required="true"
+            @update:model-value="patientSearch = $event"
+          />
+
+          <p class="appointment-form__helper">
+            Escribe al menos 2 caracteres para buscar en pacientes existentes.
+          </p>
+
+          <p v-if="patientSearching" class="appointment-form__search-state">
+            Buscando pacientes...
+          </p>
+
+          <p v-else-if="patientSearchError" class="appointment-form__search-state appointment-form__search-state--error">
+            {{ patientSearchError }}
+          </p>
+
+          <ul
+            v-else-if="patientResults.length"
+            class="appointment-form__patient-results"
+          >
+            <li v-for="patient in patientResults" :key="patient.id">
+              <button
+                type="button"
+                class="appointment-form__patient-result"
+                @click="selectPatient(patient)"
+              >
+                <strong>{{ patient.nombre }}</strong>
+                <span v-if="patient.telefono">Telefono: {{ patient.telefono }}</span>
+                <span v-if="patient.correo">Correo: {{ patient.correo }}</span>
+              </button>
+            </li>
+          </ul>
+
+          <p
+            v-else-if="patientSearch.trim().length >= 2"
+            class="appointment-form__search-state"
+          >
+            No encontramos coincidencias. Puedes crear el paciente nuevo desde aqui.
+          </p>
+        </template>
+      </div>
+
+      <div v-else class="appointment-form__patient-body">
+        <div class="appointment-form__patient-grid">
+          <BaseInput
+            :model-value="newPatient.nombre"
+            label="Nombre del paciente"
+            placeholder="Nombre completo"
+            :required="true"
+            @update:model-value="newPatient.nombre = $event"
+          />
+          <BaseInput
+            :model-value="newPatient.telefono"
+            label="Telefono"
+            placeholder="8888-8888"
+            :required="true"
+            @update:model-value="newPatient.telefono = $event"
+          />
+          <BaseInput
+            :model-value="newPatient.correo"
+            label="Correo"
+            placeholder="correo@ejemplo.com"
+            @update:model-value="newPatient.correo = $event"
+          />
+          <BaseInput
+            :model-value="newPatient.fechaNacimiento"
+            label="Fecha de nacimiento"
+            type="date"
+            @update:model-value="newPatient.fechaNacimiento = $event"
+          />
+        </div>
+
+        <div class="appointment-form__patient-grid appointment-form__patient-grid--secondary">
+          <BaseInput
+            :model-value="newPatient.tipoProcedimiento"
+            label="Procedimiento principal"
+            placeholder="Se completara con el tipo de consulta si lo dejas vacio"
+            @update:model-value="newPatient.tipoProcedimiento = $event"
+          />
+          <BaseInput
+            :model-value="newPatient.observaciones"
+            label="Observaciones del paciente"
+            as="textarea"
+            :rows="2"
+            placeholder="Dato util para esta atencion"
+            @update:model-value="newPatient.observaciones = $event"
+          />
+        </div>
+
+        <p class="appointment-form__helper">
+          El paciente se registrara como activo y podra reutilizarse en reservas futuras.
+        </p>
+      </div>
+
+      <p v-if="patientValidationError" class="appointment-form__error">
+        {{ patientValidationError }}
+      </p>
+    </section>
+
     <div class="appointment-form__footer-grid">
       <BaseInput
         :model-value="form.descripcion"
@@ -149,7 +535,10 @@ function handleSubmit() {
           Los campos con <span class="appointment-form__required">*</span> son obligatorios.
         </p>
         <p class="appointment-form__helper">
-          Usa IDs reales existentes en MySQL para sala, usuario y paciente.
+          Busca un paciente existente o crea uno nuevo antes de guardar la reserva.
+        </p>
+        <p class="appointment-form__helper">
+          La reserva usara tu usuario actual de sesion.
         </p>
       </div>
     </div>
@@ -211,6 +600,125 @@ function handleSubmit() {
   outline: none;
 }
 
+.appointment-form__patient-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid #d9e7ec;
+  border-radius: 8px;
+  background: #fbfdfe;
+}
+
+.appointment-form__patient-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.appointment-form__patient-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.appointment-form__patient-header p {
+  margin: 0.35rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.appointment-form__patient-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.appointment-form__patient-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 8px;
+  background: rgba(95, 135, 151, 0.1);
+  border: 1px solid rgba(95, 135, 151, 0.18);
+}
+
+.appointment-form__patient-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.appointment-form__patient-card-copy strong {
+  color: var(--primary-dark);
+}
+
+.appointment-form__patient-card-copy span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.appointment-form__patient-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.appointment-form__patient-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.appointment-form__patient-result {
+  width: 100%;
+  border: 1px solid #dbe8ed;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.appointment-form__patient-result strong {
+  color: var(--primary-dark);
+}
+
+.appointment-form__patient-result span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.appointment-form__patient-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+}
+
+.appointment-form__patient-grid--secondary {
+  align-items: start;
+}
+
+.appointment-form__search-state {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.appointment-form__search-state--error {
+  color: #b8392d;
+}
+
 .appointment-form__footer-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.9fr);
@@ -251,7 +759,8 @@ function handleSubmit() {
 
 @media (max-width: 980px) {
   .appointment-form__grid,
-  .appointment-form__footer-grid {
+  .appointment-form__footer-grid,
+  .appointment-form__patient-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -262,8 +771,19 @@ function handleSubmit() {
 
 @media (max-width: 760px) {
   .appointment-form__grid,
-  .appointment-form__footer-grid {
+  .appointment-form__footer-grid,
+  .appointment-form__patient-grid {
     grid-template-columns: 1fr;
+  }
+
+  .appointment-form__patient-header,
+  .appointment-form__patient-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .appointment-form__patient-card-actions {
+    justify-content: flex-start;
   }
 
   .appointment-form__actions {

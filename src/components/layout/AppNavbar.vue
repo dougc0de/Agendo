@@ -154,6 +154,10 @@ function handleAction(){
   gap: 0.9rem;
 }
 
+.navbar__actions:empty {
+  display: none;
+}
+
 .navbar__profile-icon {
   width: 2rem;
   height: 2rem;
@@ -244,10 +248,14 @@ function handleAction(){
 
 @media (max-width: 560px) {
   .navbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     padding: 0.9rem 1rem;
     justify-items: stretch;
+  }
+
+  .navbar__brand {
+    min-width: 0;
   }
 
   .navbar__links {
@@ -256,16 +264,34 @@ function handleAction(){
 
   .navbar__burger {
     display: inline-flex;
+    grid-column: 3;
+    grid-row: 1;
     justify-self: end;
   }
 
   .navbar__actions {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    width: 100%;
-    margin-top: 0.5rem;
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    display: inline-flex;
+    justify-self: end;
+    justify-content: flex-end;
+    width: auto;
+    margin-top: 0;
+    gap: 0.5rem;
+  }
+
+  .navbar__actions :deep(.base-button) {
+    white-space: nowrap;
+  }
+
+  .navbar__actions :deep(.base-button--sm) {
+    padding: 0.42rem 0.72rem;
+    font-size: 0.82rem;
+  }
+
+  .navbar__profile-icon {
+    display: none;
   }
 
   .navbar__mobile-menu {
@@ -284,8 +310,39 @@ function handleAction(){
     padding: 0.85rem;
   }
 
+  .navbar__brand-name {
+    font-size: 0.95rem;
+  }
+
   .navbar__actions {
-    margin-top: 0.25rem;
+    gap: 0.4rem;
+  }
+
+  .navbar__actions :deep(.base-button--sm) {
+    padding: 0.4rem 0.64rem;
+    font-size: 0.79rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .navbar {
+    gap: 0.5rem;
+    padding: 0.75rem 0.65rem;
+  }
+
+  .navbar__brand-name {
+    font-size: 0.88rem;
+    letter-spacing: 0.02em;
+  }
+
+  .navbar__burger {
+    width: 40px;
+    height: 40px;
+  }
+
+  .navbar__actions :deep(.base-button--sm) {
+    padding: 0.34rem 0.5rem;
+    font-size: 0.74rem;
   }
 }
 </style>

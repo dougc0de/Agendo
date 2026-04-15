@@ -9,6 +9,7 @@ import BaseModal from "../components/base/BaseModal.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAppointments } from "../composables/useAppointments.js";
+import { createPatient } from "../services/patientApi.js";
 import { useAuthStore } from "../stores/authStore.js";
 
 const router = useRouter();
@@ -57,6 +58,8 @@ const filteredAppointments = computed(() => {
         const haystack = [
             appointment.descripcion,
             appointment.tipoConsulta,
+            appointment.pacienteNombre,
+            appointment.pacienteCorreo,
             `sala ${appointment.salaId}`,
             `paciente ${appointment.pacienteId}`
         ]
@@ -74,8 +77,7 @@ function openCreateModal() {
     modalError.value = "";
     currentAppointment.value = {
         estado: "pendiente",
-        usuarioId: 1,
-        pacienteId: 1,
+        usuarioId: authStore.user?.id ?? 1,
         salaId: 1
     };
     modalOpen.value = true;
@@ -99,11 +101,46 @@ function closeModal() {
 async function handleSaveAppointment(payload) {
     let result;
     modalError.value = "";
+    let pacienteCreado = null;
+
+    let pacienteId = Number(payload?.paciente?.pacienteId);
+
+    if (payload?.paciente?.mode === "new") {
+        try {
+            const patientResponse = await createPatient({
+                nombre: payload.paciente.nombre,
+                telefono: payload.paciente.telefono,
+                correo: payload.paciente.correo,
+                fechaNacimiento: payload.paciente.fechaNacimiento,
+                observaciones: payload.paciente.observaciones,
+                tipoProcedimiento: payload.paciente.tipoProcedimiento ?? payload.tipoConsulta
+            });
+
+            pacienteCreado = patientResponse.data ?? null;
+            pacienteId = Number(patientResponse.data?.id);
+        } catch (error) {
+            modalError.value =
+                error.response?.msg || error.message || "No fue posible crear el paciente.";
+            return;
+        }
+    }
+
+    const appointmentPayload = {
+        fecha: payload.fecha,
+        horaInicio: payload.horaInicio,
+        horaFin: payload.horaFin,
+        descripcion: payload.descripcion,
+        estado: payload.estado,
+        tipoConsulta: payload.tipoConsulta,
+        usuarioId: Number(payload.usuarioId || authStore.user?.id || 1),
+        pacienteId,
+        salaId: Number(payload.salaId)
+    };
 
     if (modalMode.value === "edit" && currentAppointment.value.id) {
-        result = await updateAppointment(currentAppointment.value.id, payload);
+        result = await updateAppointment(currentAppointment.value.id, appointmentPayload);
     } else {
-        result = await createAppointment(payload);
+        result = await createAppointment(appointmentPayload);
     }
 
     if (result.ok) {
@@ -112,7 +149,20 @@ async function handleSaveAppointment(payload) {
         return;
     }
 
-    modalError.value = result.msg;
+    if (pacienteCreado) {
+        currentAppointment.value = {
+            ...currentAppointment.value,
+            ...appointmentPayload,
+            pacienteId,
+            pacienteNombre: pacienteCreado.nombre,
+            pacienteTelefono: pacienteCreado.telefono,
+            pacienteCorreo: pacienteCreado.correo
+        };
+    }
+
+    modalError.value = pacienteCreado
+        ? `${result.msg} El paciente fue creado y podras seleccionarlo en un nuevo intento.`
+        : result.msg;
 }
 
 async function handleDeleteAppointment(appointment) {
@@ -172,12 +222,6 @@ onMounted(async () => {
             <div class="dashboard-logo-card__icon">AG</div>
           </div>
 
-          <div class="dashboard-profile-card">
-            <small>Perfil activo</small>
-            <strong>{{ authStore.user?.displayName || "Usuario" }}</strong>
-            <span>{{ authStore.user?.email || "sin correo" }}</span>
-          </div>
-
           <div class="dashboard-actions">
             <BaseButton block @click="openCreateModal">
               Agregar Reserva
@@ -185,13 +229,6 @@ onMounted(async () => {
             <BaseButton block variant="secondary" @click="fetchAppointments">
               Recargar Reservas
             </BaseButton>
-          </div>
-
-          <div class="dashboard-status-panel">
-            <button type="button" @click="applyStatusFilter('todos')">Ver Reservas</button>
-            <button type="button" @click="applyStatusFilter('pendiente')">Pendientes</button>
-            <button type="button" @click="applyStatusFilter('confirmada')">Confirmadas</button>
-            <button type="button" @click="applyStatusFilter('cancelada')">Canceladas</button>
           </div>
         </aside>
 
@@ -220,7 +257,7 @@ onMounted(async () => {
             <div class="dashboard-panel__header">
               <div>
                 <h2>Panel de reservas</h2>
-                <p>Usa IDs existentes en MySQL para usuario, paciente y sala.</p>
+                <p>Busca un paciente existente o crea uno nuevo antes de guardar la reserva.</p>
               </div>
               <BaseButton size="sm" @click="openCreateModal">
                 Nueva Reserva
@@ -262,6 +299,7 @@ onMounted(async () => {
         :mode="modalMode"
         :submitting="saving"
         :error-message="modalError"
+        :current-user-id="authStore.user?.id ?? 1"
         @submit="handleSaveAppointment"
         @cancel="closeModal"
       />

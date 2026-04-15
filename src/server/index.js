@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
+import pacienteRoutes from "./routes/pacienteRoutes.js";
 import reservaRoutes from "./routes/reservaRoutes.js";
 
 
@@ -21,6 +22,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/pacientes", pacienteRoutes);
 app.use("/reservas", reservaRoutes);
 
 app.listen(PORT, () => {

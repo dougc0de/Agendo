@@ -46,7 +46,7 @@ function appointmentTimeRange(appointment) {
           <td>{{ `Sala #${appointment.salaId}` }}</td>
           <td>{{ appointment.fecha }}</td>
           <td>{{ appointmentTimeRange(appointment) }}</td>
-          <td>{{ `Paciente #${appointment.pacienteId}` }}</td>
+          <td>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</td>
           <td>{{ appointment.tipoConsulta }}</td>
           <td>
             <span

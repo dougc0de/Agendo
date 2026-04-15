@@ -79,6 +79,9 @@ function formatearReservaSalida(filaReserva) {
         tipoConsulta: filaReserva.tipo_consulta,
         usuarioId: filaReserva.usuario_id,
         pacienteId: filaReserva.paciente_id,
+        pacienteNombre: filaReserva.paciente_nombre ?? null,
+        pacienteTelefono: filaReserva.paciente_telefono ?? null,
+        pacienteCorreo: filaReserva.paciente_correo ?? null,
         salaId: filaReserva.sala_id,
         createdAt: filaReserva.created_at,
         updatedAt: filaReserva.updated_at
@@ -87,7 +90,9 @@ function formatearReservaSalida(filaReserva) {
 
 function normalizarDatosEntrada(datosReserva) {
     return {
-        id: datosReserva?.id ?? null,
+        id: datosReserva?.id !== undefined && datosReserva?.id !== null
+            ? Number(datosReserva.id)
+            : null,
         fecha: normalizarFecha(datosReserva?.fecha),
         horaInicio: normalizarHora(datosReserva?.horaInicio),
         horaFin: normalizarHora(datosReserva?.horaFin),
@@ -192,7 +197,7 @@ function construirClinicaDominio(filaClinica) {
 
 function construirReservaDominio(datosReserva) {
     return new Reserva(
-        datosReserva.id ?? 0,
+        Number(datosReserva.id ?? 0),
         normalizarFecha(datosReserva.fecha),
         normalizarHora(datosReserva.horaInicio ?? datosReserva.hora_inicio),
         normalizarHora(datosReserva.horaFin ?? datosReserva.hora_fin),
@@ -241,7 +246,7 @@ async function obtenerSalaYClinica(salaId) {
     };
 }
 
-async function validarReservaContraContexto(datosReserva) {
+async function validarReservaContraContexto(datosReserva, opciones = {}) {
     const resultadoEntrada = validarEntradaReserva(datosReserva);
 
     if (!resultadoEntrada.ok) {
@@ -270,9 +275,15 @@ async function validarReservaContraContexto(datosReserva) {
         return validacionClinica;
     }
 
+    const excluirReservaId =
+        opciones?.excluirReservaId !== undefined && opciones?.excluirReservaId !== null
+            ? Number(opciones.excluirReservaId)
+            : null;
+
     const filasReservasExistentes = await buscarReservasPorSalaYFechaRepository(
         datosNormalizados.salaId,
-        datosNormalizados.fecha
+        datosNormalizados.fecha,
+        excluirReservaId
     );
 
     const reservasExistentes = filasReservasExistentes.map((filaReserva) =>
@@ -400,7 +411,9 @@ export async function editarReserva(id, datosReserva) {
             salaId: datosReserva?.salaId ?? filaReservaActual.sala_id
         };
 
-        const resultadoValidacion = await validarReservaContraContexto(datosActualizados);
+        const resultadoValidacion = await validarReservaContraContexto(datosActualizados, {
+            excluirReservaId: id
+        });
 
         if (!resultadoValidacion.ok) {
             return resultadoValidacion;

@@ -24,6 +24,7 @@
   --page-padding-mobile: 1rem;
   --section-padding-desktop: 3rem 2rem;
   --section-padding-mobile: 2rem 1.25rem;
+  --section-padding-narrow: 1.5rem 0.9rem;
 }
 
 * {
@@ -42,7 +43,6 @@ html {
 
 body {
   margin: 0;
-  min-width: 320px;
   background: var(--page-bg);
   color: var(--text);
 }
@@ -173,5 +173,11 @@ video {
   .grid-3,
   .grid-4 {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  .section-shell {
+    padding: var(--section-padding-narrow);
   }
 }

@@ -87,11 +87,16 @@ function submitContact() {
       <main>
         <section class="hero-section" :style="{ '--hero-bg': `url(${heroBackground})` }">
           <div class="hero-copy">
-            <span class="section-label">Gestion de salas</span>
-            <h1 class="hero-title">Ordena reservas y disponibilidad en un solo lugar</h1>
+            <div class="titleDiv">
+            <h1 class="hero-title">Sistema de Gestión de Salas</h1>
+            </div>
             <div class="hero-highlight-row">
               <div class="hero-highlight">
-                Sistema de gestion de salas para una operacion mas clara, rapida y visible.
+                <p>
+                Ordena reservas y 
+                disponibilidad 
+                en un solo lugar        
+                </p>      
               </div>
 
               <div class="hero-highlight-avatar">
@@ -100,9 +105,9 @@ function submitContact() {
             </div>
 
             <div class="hero-pills">
-              <span>Reserva salas</span>
-              <span>Consulta disponibilidad</span>
-              <span>Manten el control diario</span>
+              <span>⚫ Reserva salas</span>
+              <span>⚫ Consulta disponibilidad</span>
+              <span>⚫ Manten el control diario</span>
             </div>
           </div>
 
@@ -313,8 +318,17 @@ function submitContact() {
   display: grid;
   grid-template-columns: 1.4fr 0.9fr;
   min-height: 560px;
-  background-color: rgba(74, 195, 235, 0.18);
-  background-image: var(--hero-bg), linear-gradient(rgba(243, 207, 207, 0.36), rgba(95, 135, 151, 0.36)), linear-gradient(120deg, #8fb2c0 0%, #d5e9f2 48%, #cfe1ea 48%, #dceef6 100%);
+  background-color: #d9eef8;
+  background-image:
+    var(--hero-bg),
+    linear-gradient(rgba(119, 177, 197, 0.28), rgba(95, 135, 151, 0.28)),
+    linear-gradient(
+      120deg,
+      rgba(143, 178, 192, 0.68) 0%,
+      rgba(213, 233, 242, 0.68) 48%,
+      rgba(207, 225, 234, 0.68) 48%,
+      rgba(220, 238, 246, 0.68) 100%
+    );
   background-size: cover, cover, cover;
   background-position: center center, center center, center center;
   background-repeat: no-repeat, no-repeat, no-repeat;
@@ -331,6 +345,11 @@ function submitContact() {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 30px;
   box-shadow: 0 24px 80px rgba(38, 67, 84, 0.12);
+}
+
+.titleDiv {
+  width: min(100%, 520px);
+  margin: 0 auto;
 }
 
 .section-label {
@@ -351,19 +370,22 @@ function submitContact() {
 
 .hero-title {
   margin: 0;
-  font-size: 3rem;
+  font-size: 2rem;
   line-height: 1.08;
-  max-width: 10ch;
+  width: 100%;
   color: #fff;
+  text-align: center;
 }
 
 .hero-highlight {
   max-width: 440px;
-  padding: 1.2rem 1.4rem;
-  border-radius: 8px;
+  padding: 0rem 2rem;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.6);
   color: var(--text);
   font-size: 1.2rem;
+  font-size: 5rem;
+  font-weight: 400;
 }
 
 .hero-highlight-row {
@@ -792,6 +814,99 @@ function submitContact() {
   }
 }
 
+@media (max-width: 360px) {
+  .hero-copy {
+    padding: 1.6rem 0.9rem 1.25rem;
+    gap: 1.1rem;
+  }
+
+  .titleDiv,
+  .hero-highlight-row,
+  .hero-pills,
+  .login-card {
+    width: 100%;
+  }
+
+  .titleDiv,
+  .sobreNosotrosTitle {
+    padding: 0.9rem;
+  }
+
+  .hero-title {
+    font-size: 1.8rem;
+  }
+
+  .hero-highlight {
+    padding: 0 0.9rem;
+  }
+
+  .hero-highlight p {
+    font-size: clamp(1.9rem, 10vw, 2.4rem);
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+
+  .hero-pills {
+    padding: 0.65rem;
+    border-radius: 22px;
+  }
+
+  .hero-pills span {
+    width: 100%;
+  }
+
+  .login-card {
+    margin: 0.75rem;
+    padding: 1.35rem 1rem;
+  }
+
+  .section-heading h2,
+  .sobreNosotrosTitle h2 {
+    font-size: 1.75rem;
+  }
+
+  .info-panel,
+  .vision-strip__copy,
+  .founder-card,
+  .contact-form {
+    padding: 1rem;
+  }
+
+  .calendar-panel__card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .founder-avatar {
+    width: min(160px, 100%);
+    height: auto;
+    aspect-ratio: 1;
+  }
+}
+
+@media (max-width: 320px) {
+  .hero-copy {
+    padding-inline: 0.75rem;
+  }
+
+  .hero-title {
+    font-size: 1.6rem;
+  }
+
+  .hero-highlight p {
+    font-size: clamp(1.7rem, 9vw, 2.1rem);
+  }
+
+  .section-heading h2,
+  .sobreNosotrosTitle h2 {
+    font-size: 1.55rem;
+  }
+
+  .section-label::before {
+    width: 2rem;
+  }
+}
+
 .textinfo {
   text-align: justify;
   text-justify: inter-word
@@ -811,6 +926,19 @@ function submitContact() {
 
 .sobreNosotrosTitle h2{
   color: white;
+}
+
+.titleDiv{
+  background-color: rgba(125, 124, 124, 0.363);
+  border-radius: 30px;
+  padding: 1rem;
+}
+
+
+.hero-highlight p{
+  font-size: 3rem;
+  font-weight: 2rem;
+  color: #49454F;
 }
 
 </style>
