@@ -8,13 +8,13 @@ import AppNavbar from "../components/layout/AppNavbar.vue";
 import Divisor from "./Divisor.vue";
 import { useAuthStore } from "../stores/authStore.js";
 import heroBackground from "../assets/doctorHero.jpg";
-import avatarImage from "../../src/assets/avatar.jpg";
-import crear from "../../src/assets/crear.png";
-import reservar from "../../src/assets/reservar.png";
-import eliminar from "../../src/assets/eliminar.png";
-import revisar from "../../src/assets/revisar.png";
-import founderDouglas from "../../src/assets/founderDouglas.jpg";
-import calend from "../../src/assets/calend.png";
+import avatarImage from "../assets/avatar.jpg";
+import crear from "../assets/crear.png";
+import reservar from "../assets/reservar.png";
+import eliminar from "../assets/eliminar.png";
+import revisar from "../assets/revisar.png";
+import founderDouglas from "../assets/founderDouglas.jpg";
+import calend from "../assets/calend.png";
 
 
 const router = useRouter();

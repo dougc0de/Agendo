@@ -223,8 +223,7 @@ onMounted(async () => {
           </div>
 
           <div class="dashboard-actions">
-            <BaseButton block @click="openCreateModal">
-              Agregar Reserva
+            <BaseButton block @click="openCreateModal">              Agregar Reserva
             </BaseButton>
             <BaseButton block variant="secondary" @click="fetchAppointments">
               Recargar Reservas

@@ -3,7 +3,8 @@ import pool from "../db/connection.js";
 export async function buscarPacientesPorTermino(termino, limite = 8) {
     const terminoNormalizado = String(termino ?? "").trim();
     const patron = `%${terminoNormalizado}%`;
-    const [rows] = await pool.query(
+
+    const { rows } = await pool.query(
         `
             SELECT
                 id,
@@ -19,25 +20,22 @@ export async function buscarPacientesPorTermino(termino, limite = 8) {
             FROM pacientes
             WHERE estado = 'activo'
               AND (
-                    nombre LIKE ?
-                 OR telefono LIKE ?
-                 OR correo LIKE ?
+                    nombre ILIKE $1
+                 OR telefono ILIKE $1
+                 OR correo ILIKE $1
               )
             ORDER BY
                 CASE
-                    WHEN telefono = ? THEN 0
-                    WHEN LOWER(COALESCE(correo, '')) = LOWER(?) THEN 1
-                    WHEN LOWER(nombre) LIKE LOWER(CONCAT(?, '%')) THEN 2
+                    WHEN telefono = $2 THEN 0
+                    WHEN LOWER(COALESCE(correo, '')) = LOWER($2) THEN 1
+                    WHEN LOWER(nombre) LIKE LOWER($3 || '%') THEN 2
                     ELSE 3
                 END,
                 nombre ASC
-            LIMIT ?
+            LIMIT $4
         `,
         [
             patron,
-            patron,
-            patron,
-            terminoNormalizado,
             terminoNormalizado,
             terminoNormalizado,
             Number(limite)
@@ -48,11 +46,11 @@ export async function buscarPacientesPorTermino(termino, limite = 8) {
 }
 
 export async function buscarPacientePorTelefono(telefono) {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
         `
             SELECT id, nombre, telefono, correo
             FROM pacientes
-            WHERE telefono = ?
+            WHERE telefono = $1
             LIMIT 1
         `,
         [telefono]
@@ -62,11 +60,11 @@ export async function buscarPacientePorTelefono(telefono) {
 }
 
 export async function buscarPacientePorCorreo(correo) {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
         `
             SELECT id, nombre, telefono, correo
             FROM pacientes
-            WHERE LOWER(correo) = LOWER(?)
+            WHERE LOWER(correo) = LOWER($1)
             LIMIT 1
         `,
         [correo]
@@ -76,11 +74,12 @@ export async function buscarPacientePorCorreo(correo) {
 }
 
 export async function crearPaciente(datosPaciente) {
-    const [result] = await pool.query(
+    const { rows } = await pool.query(
         `
             INSERT INTO pacientes
                 (nombre, fecha_nacimiento, telefono, correo, observaciones, estado, tipo_procedimiento)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
         `,
         [
             datosPaciente.nombre,
@@ -93,11 +92,13 @@ export async function crearPaciente(datosPaciente) {
         ]
     );
 
-    return result;
+    return {
+        insertId: rows[0].id
+    };
 }
 
 export async function buscarPacientePorId(id) {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
         `
             SELECT
                 id,
@@ -111,7 +112,7 @@ export async function buscarPacientePorId(id) {
                 created_at,
                 updated_at
             FROM pacientes
-            WHERE id = ?
+            WHERE id = $1
             LIMIT 1
         `,
         [id]

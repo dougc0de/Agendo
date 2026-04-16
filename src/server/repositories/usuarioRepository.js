@@ -1,11 +1,11 @@
 import pool from "../db/connection.js";
 
 export async function buscarUsuarioPorCorreo(correo) {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
         `
         SELECT *
         FROM usuarios
-        WHERE correo = ?
+        WHERE correo = $1
         LIMIT 1
         `,
         [correo]

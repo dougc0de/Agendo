@@ -1,10 +1,13 @@
 import pool from "../db/connection.js";
 
 export async function crearReserva(reserva) {
-    const [result] = await pool.query(
+    const { rows } = await pool.query(
         `
-        INSERT INTO reservas
-    (fecha, hora_inicio, hora_fin, descripcion, estado, tipo_consulta, usuario_id, paciente_id, sala_id) VALUES (?,?,?,?,?,?,?,?,?)`,
+            INSERT INTO reservas
+                (fecha, hora_inicio, hora_fin, descripcion, estado, tipo_consulta, usuario_id, paciente_id, sala_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id
+        `,
         [
             reserva.fecha,
             reserva.horaInicio,
@@ -18,11 +21,13 @@ export async function crearReserva(reserva) {
         ]
     );
 
-    return result;
+    return {
+        insertId: rows[0].id
+    };
 }
 
 export async function buscarReservaPorId(id) {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
         `
             SELECT
                 r.*,
@@ -31,34 +36,33 @@ export async function buscarReservaPorId(id) {
                 p.correo AS paciente_correo
             FROM reservas r
             LEFT JOIN pacientes p ON p.id = r.paciente_id
-            WHERE r.id = ?
+            WHERE r.id = $1
         `,
         [id]
     );
+
     return rows[0];
 }
 
 export async function buscarReservasPorSalaYFecha(salaId, fecha, excluirReservaId = null) {
-    const query = [
-        "SELECT * FROM reservas",
-        "WHERE sala_id = ? AND fecha = ?"
-    ];
     const params = [salaId, fecha];
+    let query = `
+        SELECT *
+        FROM reservas
+        WHERE sala_id = $1 AND fecha = $2
+    `;
 
     if (excluirReservaId !== null && excluirReservaId !== undefined) {
-        query.push("AND id <> ?");
         params.push(excluirReservaId);
+        query += ` AND id <> $3`;
     }
 
-    const [rows] = await pool.query(
-        query.join(" "),
-        params
-    );
+    const { rows } = await pool.query(query, params);
     return rows;
 }
 
 export async function listarReservas() {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
         `
             SELECT
                 r.*,
@@ -69,15 +73,25 @@ export async function listarReservas() {
             LEFT JOIN pacientes p ON p.id = r.paciente_id
         `
     );
+
     return rows;
 }
 
 export async function actualizarReserva(id, datos) {
-    const [result] = await pool.query(
+    const result = await pool.query(
         `
             UPDATE reservas
-            SET fecha = ?, hora_inicio = ?, hora_fin = ?, descripcion = ?, estado = ?, tipo_consulta = ?, usuario_id = ?, paciente_id = ?, sala_id = ?
-            WHERE id = ?
+            SET
+                fecha = $1,
+                hora_inicio = $2,
+                hora_fin = $3,
+                descripcion = $4,
+                estado = $5,
+                tipo_consulta = $6,
+                usuario_id = $7,
+                paciente_id = $8,
+                sala_id = $9
+            WHERE id = $10
         `,
         [
             datos.fecha,
@@ -92,15 +106,22 @@ export async function actualizarReserva(id, datos) {
             id
         ]
     );
-    return result;
+
+    return {
+        affectedRows: result.rowCount
+    };
 }
 
 export async function eliminarReserva(id) {
-    const [result] = await pool.query(
+    const result = await pool.query(
         `
-        DELETE FROM reservas WHERE id=?
-    `,
+            DELETE FROM reservas
+            WHERE id = $1
+        `,
         [id]
     );
-    return result;
+
+    return {
+        affectedRows: result.rowCount
+    };
 }
