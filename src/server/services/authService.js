@@ -53,6 +53,13 @@ export async function iniciarSesion(credentials) {
             };
         }
 
+        if (!process.env.JWT_SECRET) {
+            return {
+                ok: false,
+                msg: "JWT_SECRET no esta configurado en el backend."
+            };
+        }
+
         const token = jwt.sign(
             {
                 id: usuario.id,
@@ -74,9 +81,11 @@ export async function iniciarSesion(credentials) {
             }
         };
     } catch (error) {
+        console.error("Error en iniciarSesion:", error);
+
         return {
             ok: false,
-            msg: `Error al iniciar sesion: ${error.message}`
+            msg: `Error al iniciar sesion: ${error?.message || "sin mensaje"}`
         };
     }
 }
