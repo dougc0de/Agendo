@@ -3,7 +3,10 @@ import { RouterView } from "vue-router";
 import { useAuthStore } from "./stores/authStore.js";
 
 const authStore = useAuthStore();
-authStore.hydrate();
+
+if (!authStore.isHydrated) {
+    authStore.hydrate();
+}
 </script>
 
 <template>

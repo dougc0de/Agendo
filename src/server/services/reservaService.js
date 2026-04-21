@@ -9,12 +9,33 @@ import {
 } from "../repositories/reservaRepository.js";
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
 import { buscarClinicaPorId } from "../repositories/clinicaRepository.js";
+import { buscarPacientePorId as buscarPacientePorIdRepository } from "../repositories/pacienteRepository.js";
 
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
 
 function esIdValido(valor) {
     const numero = Number(valor);
     return Number.isInteger(numero) && numero > 0;
+}
+
+function resolveWorkspaceId(auth) {
+    const workspaceId = Number(auth?.workspaceId);
+
+    if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
+        return null;
+    }
+
+    return workspaceId;
+}
+
+function resolveUserId(auth) {
+    const userId = Number(auth?.userId);
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+        return null;
+    }
+
+    return userId;
 }
 
 function normalizarFecha(fecha) {
@@ -101,7 +122,8 @@ function normalizarDatosEntrada(datosReserva) {
         tipoConsulta: datosReserva?.tipoConsulta ?? null,
         usuarioId: Number(datosReserva?.usuarioId),
         pacienteId: Number(datosReserva?.pacienteId),
-        salaId: Number(datosReserva?.salaId)
+        salaId: Number(datosReserva?.salaId),
+        workspaceId: Number(datosReserva?.workspaceId)
     };
 }
 
@@ -209,8 +231,8 @@ function construirReservaDominio(datosReserva) {
     );
 }
 
-async function obtenerSalaYClinica(salaId) {
-    const filaSala = await buscarSalaPorId(salaId);
+async function obtenerSalaYClinica(salaId, workspaceId) {
+    const filaSala = await buscarSalaPorId(salaId, workspaceId);
 
     if (!filaSala) {
         return {
@@ -226,7 +248,7 @@ async function obtenerSalaYClinica(salaId) {
         return validacionSala;
     }
 
-    const filaClinica = await buscarClinicaPorId(filaSala.clinica_id);
+    const filaClinica = await buscarClinicaPorId(filaSala.clinica_id, workspaceId);
 
     if (!filaClinica) {
         return {
@@ -246,7 +268,16 @@ async function obtenerSalaYClinica(salaId) {
     };
 }
 
-async function validarReservaContraContexto(datosReserva, opciones = {}) {
+async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
+    const workspaceId = resolveWorkspaceId(auth);
+
+    if (!workspaceId) {
+        return {
+            ok: false,
+            msg: "No autorizado. Falta el contexto de workspace."
+        };
+    }
+
     const resultadoEntrada = validarEntradaReserva(datosReserva);
 
     if (!resultadoEntrada.ok) {
@@ -254,7 +285,10 @@ async function validarReservaContraContexto(datosReserva, opciones = {}) {
     }
 
     const datosNormalizados = resultadoEntrada.data;
-    const resultadoContexto = await obtenerSalaYClinica(datosNormalizados.salaId);
+    const resultadoContexto = await obtenerSalaYClinica(
+        datosNormalizados.salaId,
+        workspaceId
+    );
 
     if (!resultadoContexto.ok) {
         return resultadoContexto;
@@ -275,6 +309,18 @@ async function validarReservaContraContexto(datosReserva, opciones = {}) {
         return validacionClinica;
     }
 
+    const filaPaciente = await buscarPacientePorIdRepository(
+        datosNormalizados.pacienteId,
+        workspaceId
+    );
+
+    if (!filaPaciente) {
+        return {
+            ok: false,
+            msg: "El paciente no existe en este workspace."
+        };
+    }
+
     const excluirReservaId =
         opciones?.excluirReservaId !== undefined && opciones?.excluirReservaId !== null
             ? Number(opciones.excluirReservaId)
@@ -283,6 +329,7 @@ async function validarReservaContraContexto(datosReserva, opciones = {}) {
     const filasReservasExistentes = await buscarReservasPorSalaYFechaRepository(
         datosNormalizados.salaId,
         datosNormalizados.fecha,
+        workspaceId,
         excluirReservaId
     );
 
@@ -303,13 +350,25 @@ async function validarReservaContraContexto(datosReserva, opciones = {}) {
 
     return {
         ok: true,
-        data: datosNormalizados
+        data: {
+            ...datosNormalizados,
+            workspaceId
+        }
     };
 }
 
-export async function listarReservas() {
+export async function listarReservas(auth) {
     try {
-        const filasReservas = await listarReservasRepository();
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        const filasReservas = await listarReservasRepository(workspaceId);
 
         return {
             ok: true,
@@ -324,8 +383,17 @@ export async function listarReservas() {
     }
 }
 
-export async function buscarReservaPorId(id) {
+export async function buscarReservaPorId(id, auth) {
     try {
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
         if (!esIdValido(id)) {
             return {
                 ok: false,
@@ -333,7 +401,7 @@ export async function buscarReservaPorId(id) {
             };
         }
 
-        const filaReserva = await buscarReservaPorIdRepository(id);
+        const filaReserva = await buscarReservaPorIdRepository(id, workspaceId);
 
         if (!filaReserva) {
             return {
@@ -355,9 +423,24 @@ export async function buscarReservaPorId(id) {
     }
 }
 
-export async function crearReserva(datosReserva) {
+export async function crearReserva(datosReserva, auth) {
     try {
-        const resultadoValidacion = await validarReservaContraContexto(datosReserva);
+        const usuarioId = resolveUserId(auth);
+
+        if (!usuarioId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el usuario de sesion."
+            };
+        }
+
+        const resultadoValidacion = await validarReservaContraContexto(
+            {
+                ...datosReserva,
+                usuarioId
+            },
+            auth
+        );
 
         if (!resultadoValidacion.ok) {
             return resultadoValidacion;
@@ -365,7 +448,10 @@ export async function crearReserva(datosReserva) {
 
         const datosNormalizados = resultadoValidacion.data;
         const result = await crearReservaRepository(datosNormalizados);
-        const filaReservaCreada = await buscarReservaPorIdRepository(result.insertId);
+        const filaReservaCreada = await buscarReservaPorIdRepository(
+            result.insertId,
+            datosNormalizados.workspaceId
+        );
 
         return {
             ok: true,
@@ -380,8 +466,25 @@ export async function crearReserva(datosReserva) {
     }
 }
 
-export async function editarReserva(id, datosReserva) {
+export async function editarReserva(id, datosReserva, auth) {
     try {
+        const workspaceId = resolveWorkspaceId(auth);
+        const usuarioId = resolveUserId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        if (!usuarioId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el usuario de sesion."
+            };
+        }
+
         if (!esIdValido(id)) {
             return {
                 ok: false,
@@ -389,7 +492,7 @@ export async function editarReserva(id, datosReserva) {
             };
         }
 
-        const filaReservaActual = await buscarReservaPorIdRepository(id);
+        const filaReservaActual = await buscarReservaPorIdRepository(id, workspaceId);
 
         if (!filaReservaActual) {
             return {
@@ -406,21 +509,30 @@ export async function editarReserva(id, datosReserva) {
             descripcion: datosReserva?.descripcion ?? filaReservaActual.descripcion,
             estado: datosReserva?.estado ?? filaReservaActual.estado,
             tipoConsulta: datosReserva?.tipoConsulta ?? filaReservaActual.tipo_consulta,
-            usuarioId: datosReserva?.usuarioId ?? filaReservaActual.usuario_id,
+            usuarioId,
             pacienteId: datosReserva?.pacienteId ?? filaReservaActual.paciente_id,
-            salaId: datosReserva?.salaId ?? filaReservaActual.sala_id
+            salaId: datosReserva?.salaId ?? filaReservaActual.sala_id,
+            workspaceId
         };
 
-        const resultadoValidacion = await validarReservaContraContexto(datosActualizados, {
-            excluirReservaId: id
-        });
+        const resultadoValidacion = await validarReservaContraContexto(
+            datosActualizados,
+            auth,
+            {
+                excluirReservaId: id
+            }
+        );
 
         if (!resultadoValidacion.ok) {
             return resultadoValidacion;
         }
 
         const datosNormalizados = resultadoValidacion.data;
-        const result = await actualizarReservaRepository(id, datosNormalizados);
+        const result = await actualizarReservaRepository(
+            id,
+            datosNormalizados,
+            workspaceId
+        );
 
         if (result.affectedRows === 0) {
             return {
@@ -429,7 +541,7 @@ export async function editarReserva(id, datosReserva) {
             };
         }
 
-        const filaReservaActualizada = await buscarReservaPorIdRepository(id);
+        const filaReservaActualizada = await buscarReservaPorIdRepository(id, workspaceId);
 
         return {
             ok: true,
@@ -444,8 +556,17 @@ export async function editarReserva(id, datosReserva) {
     }
 }
 
-export async function eliminarReserva(id) {
+export async function eliminarReserva(id, auth) {
     try {
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
         if (!esIdValido(id)) {
             return {
                 ok: false,
@@ -453,7 +574,7 @@ export async function eliminarReserva(id) {
             };
         }
 
-        const filaReserva = await buscarReservaPorIdRepository(id);
+        const filaReserva = await buscarReservaPorIdRepository(id, workspaceId);
 
         if (!filaReserva) {
             return {
@@ -462,7 +583,7 @@ export async function eliminarReserva(id) {
             };
         }
 
-        const result = await eliminarReservaRepository(id);
+        const result = await eliminarReservaRepository(id, workspaceId);
 
         if (result.affectedRows === 0) {
             return {

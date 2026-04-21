@@ -23,7 +23,7 @@ const props = defineProps({
     },
     currentUserId: {
         type: Number,
-        default: 1
+        default: 0
     }
 });
 
@@ -37,7 +37,7 @@ function createDefaultForm() {
         descripcion: "",
         estado: "pendiente",
         tipoConsulta: "",
-        usuarioId: Number(props.currentUserId) || 1,
+        usuarioId: Number(props.currentUserId) || null,
         salaId: 1
     };
 }
@@ -106,7 +106,7 @@ function syncForm() {
     Object.assign(form, createDefaultForm(), props.initialValue ?? {});
 
     if (!Number.isInteger(Number(form.usuarioId)) || Number(form.usuarioId) <= 0) {
-        form.usuarioId = Number(props.currentUserId) || 1;
+        form.usuarioId = Number(props.currentUserId) || null;
     }
 
     resetPatientState();
@@ -118,7 +118,7 @@ watch(
     () => props.currentUserId,
     (value) => {
         if (!props.initialValue?.id) {
-            form.usuarioId = Number(value) || 1;
+            form.usuarioId = Number(value) || null;
         }
     }
 );
@@ -293,7 +293,7 @@ function handleSubmit() {
         descripcion: form.descripcion,
         estado: form.estado,
         tipoConsulta: form.tipoConsulta,
-        usuarioId: Number(form.usuarioId || props.currentUserId || 1),
+        usuarioId: Number(form.usuarioId || props.currentUserId || 0) || null,
         salaId: Number(form.salaId),
         paciente
     });

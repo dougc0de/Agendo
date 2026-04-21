@@ -1,11 +1,16 @@
 import { defineStore } from "pinia";
 import { apiRequest } from "../services/api.js";
 
+let hydratePromise = null;
+
 const TOKEN_KEY = "agendo-token";
 const USER_KEY = "agendo-user";
+const WORKSPACE_KEY = "agendo-workspace";
+const SUBSCRIPTION_KEY = "agendo-subscription";
+const MEMBERSHIP_ROLE_KEY = "agendo-membership-role";
 
-function readUserFromStorage() {
-    const raw = localStorage.getItem(USER_KEY);
+function readJsonFromStorage(key) {
+    const raw = localStorage.getItem(key);
 
     if (!raw) {
         return null;
@@ -18,18 +23,107 @@ function readUserFromStorage() {
     }
 }
 
+function persistJson(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+}
+
+function clearSessionStorage() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(WORKSPACE_KEY);
+    localStorage.removeItem(SUBSCRIPTION_KEY);
+    localStorage.removeItem(MEMBERSHIP_ROLE_KEY);
+}
+
 export const useAuthStore = defineStore("auth", {
     state: () => ({
         isAuthenticated: false,
+        isHydrated: false,
         token: null,
-        user: null
+        user: null,
+        workspace: null,
+        subscription: null,
+        membershipRole: null
     }),
 
     actions: {
-        hydrate() {
-            this.token = localStorage.getItem(TOKEN_KEY);
-            this.user = readUserFromStorage();
+        applySessionData(sessionData = {}) {
+            this.token = sessionData.token ?? this.token ?? null;
+            this.user = sessionData.user ?? null;
+            this.workspace = sessionData.workspace ?? null;
+            this.subscription = sessionData.subscription ?? null;
+            this.membershipRole = sessionData.membershipRole ?? null;
             this.isAuthenticated = Boolean(this.token);
+
+            if (this.token) {
+                localStorage.setItem(TOKEN_KEY, this.token);
+            }
+
+            if (this.user) {
+                persistJson(USER_KEY, this.user);
+            } else {
+                localStorage.removeItem(USER_KEY);
+            }
+
+            if (this.workspace) {
+                persistJson(WORKSPACE_KEY, this.workspace);
+            } else {
+                localStorage.removeItem(WORKSPACE_KEY);
+            }
+
+            if (this.subscription) {
+                persistJson(SUBSCRIPTION_KEY, this.subscription);
+            } else {
+                localStorage.removeItem(SUBSCRIPTION_KEY);
+            }
+
+            if (this.membershipRole) {
+                localStorage.setItem(MEMBERSHIP_ROLE_KEY, this.membershipRole);
+            } else {
+                localStorage.removeItem(MEMBERSHIP_ROLE_KEY);
+            }
+        },
+
+        clearSessionState() {
+            this.isAuthenticated = false;
+            this.token = null;
+            this.user = null;
+            this.workspace = null;
+            this.subscription = null;
+            this.membershipRole = null;
+        },
+
+        async hydrate() {
+            if (hydratePromise) {
+                return hydratePromise;
+            }
+
+            this.token = localStorage.getItem(TOKEN_KEY);
+            this.user = readJsonFromStorage(USER_KEY);
+            this.workspace = readJsonFromStorage(WORKSPACE_KEY);
+            this.subscription = readJsonFromStorage(SUBSCRIPTION_KEY);
+            this.membershipRole = localStorage.getItem(MEMBERSHIP_ROLE_KEY);
+            this.isAuthenticated = Boolean(this.token);
+
+            if (!this.token) {
+                this.clearSessionState();
+                this.isHydrated = true;
+                return {
+                    ok: false,
+                    msg: "No hay una sesion guardada."
+                };
+            }
+
+            hydratePromise = this.fetchMe()
+                .then((result) => {
+                    this.isHydrated = true;
+                    return result;
+                })
+                .finally(() => {
+                    hydratePromise = null;
+                });
+
+            return hydratePromise;
         },
 
         async login(credentials) {
@@ -52,23 +146,17 @@ export const useAuthStore = defineStore("auth", {
                     }
                 });
 
-                this.token = response.data.token;
-                this.user = {
-                    id: response.data.user.id,
-                    email: response.data.user.correo,
-                    displayName: response.data.user.nombre,
-                    role: response.data.user.rol
-                };
-                this.isAuthenticated = true;
-
-                localStorage.setItem(TOKEN_KEY, this.token);
-                localStorage.setItem(USER_KEY, JSON.stringify(this.user));
+                this.applySessionData(response.data);
+                this.isHydrated = true;
 
                 return {
                     ok: true,
                     msg: response.msg
                 };
             } catch (error) {
+                this.clearSessionState();
+                clearSessionStorage();
+
                 return {
                     ok: false,
                     msg: error.response?.msg || error.message || "No fue posible iniciar sesion."
@@ -76,12 +164,64 @@ export const useAuthStore = defineStore("auth", {
             }
         },
 
+        async signup(payload) {
+            try {
+                const response = await apiRequest("/auth/signup", {
+                    method: "POST",
+                    body: payload
+                });
+
+                this.applySessionData(response.data);
+                this.isHydrated = true;
+
+                return {
+                    ok: true,
+                    msg: response.msg
+                };
+            } catch (error) {
+                this.clearSessionState();
+                clearSessionStorage();
+
+                return {
+                    ok: false,
+                    msg: error.response?.msg || error.message || "No fue posible crear la cuenta."
+                };
+            }
+        },
+
+        async fetchMe() {
+            if (!this.token) {
+                this.clearSessionState();
+                clearSessionStorage();
+                return {
+                    ok: false,
+                    msg: "No hay token para recuperar la sesion."
+                };
+            }
+
+            try {
+                const response = await apiRequest("/auth/me");
+                this.applySessionData(response.data);
+
+                return {
+                    ok: true,
+                    msg: response.msg
+                };
+            } catch (error) {
+                this.clearSessionState();
+                clearSessionStorage();
+
+                return {
+                    ok: false,
+                    msg: error.response?.msg || error.message || "No fue posible recuperar la sesion."
+                };
+            }
+        },
+
         logout() {
-            this.isAuthenticated = false;
-            this.token = null;
-            this.user = null;
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(USER_KEY);
+            this.clearSessionState();
+            this.isHydrated = true;
+            clearSessionStorage();
         }
     }
 });

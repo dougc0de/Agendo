@@ -96,18 +96,21 @@ function updateValue(event) {
 
 .base-input__control {
   width: 100%;
-  border: 1px solid #bfd4dc;
-  border-radius: 8px;
-  background: #fff;
+  border: 2px solid var(--border);
+  border-radius: var(--border-radius);
+  background: var(--surface);
   color: var(--text);
   padding: 0.8rem 0.9rem;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all var(--transition-fast);
+  font-size: 1rem;
+  box-shadow: var(--shadow);
 }
 
 .base-input__control:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(95, 135, 151, 0.15);
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15), var(--shadow-hover);
+  transform: translateY(-1px);
 }
 
 .base-input__control--textarea {

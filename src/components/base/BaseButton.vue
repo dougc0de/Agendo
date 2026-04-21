@@ -41,14 +41,16 @@ const props = defineProps({
 <style scoped>
 .base-button {
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--border-radius);
   cursor: pointer;
   font-weight: 600;
-  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow);
 }
 
 .base-button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
 }
 
 .base-button:disabled {
@@ -76,32 +78,38 @@ const props = defineProps({
 }
 
 .base-button--primary {
-  background: var(--primary-dark);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
 }
 
 .base-button--primary:hover:not(:disabled) {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
 }
 
 .base-button--secondary {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
   color: #fff;
 }
 
 .base-button--ghost {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.9);
   border-color: var(--border);
   color: var(--text);
+  box-shadow: none;
+}
+
+.base-button--ghost:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--primary);
 }
 
 .base-button--danger {
-  background: var(--danger);
+  background: linear-gradient(135deg, var(--danger) 0%, #d32f2f 100%);
   color: #fff;
 }
 
 .base-button--warning {
-  background: var(--warning);
+  background: linear-gradient(135deg, var(--warning) 0%, #f57c00 100%);
   color: #fff;
 }
 </style>

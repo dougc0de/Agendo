@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from "vue";
+import { useRoute } from "vue-router";
 import BaseButton from "../base/BaseButton.vue";
 
 const props = defineProps({
@@ -14,34 +15,88 @@ const props = defineProps({
     showProfileIcon: {
         type: Boolean,
         default: false
+    },
+    brandHref: {
+        type: String,
+        default: "/"
     }
 });
 
 const emit = defineEmits(["action"]);
+const route = useRoute();
 
 const menuOpen = ref(false);
 
-function toggleMenu(){
-  menuOpen.value = !menuOpen.value
+function toggleMenu() {
+    menuOpen.value = !menuOpen.value;
 }
 
-function closeMenu(){
-  menuOpen.value = false;
+function closeMenu() {
+    menuOpen.value = false;
 }
 
-function handleAction(){
-  closeMenu();
-  emit("action");
+function handleAction() {
+    closeMenu();
+    emit("action");
 }
 
+function isRouterHref(href) {
+    return typeof href === "string" && href.startsWith("/");
+}
 
+function resolveRouterTarget(href) {
+    if (!isRouterHref(href)) {
+        return href;
+    }
+
+    const [path, hash] = href.split("#");
+
+    if (hash) {
+        return {
+            path,
+            hash: `#${hash}`
+        };
+    }
+
+    return path;
+}
+
+function isActiveLink(href) {
+    if (!isRouterHref(href)) {
+        return false;
+    }
+
+    const [path] = href.split("#");
+    return route.path === path;
+}
 </script>
 
 <template>
   <header class="navbar">
-    <div class="navbar__brand">
-      <span class="navbar__brand-name">AGENDO</span>
-    </div>
+    <RouterLink
+      v-if="isRouterHref(props.brandHref)"
+      :to="resolveRouterTarget(props.brandHref)"
+      class="navbar__brand"
+      @click="closeMenu"
+    >
+      <span class="navbar__brand-badge">A</span>
+      <span class="navbar__brand-copy">
+        <strong class="navbar__brand-name">AGENDO</strong>
+        <small class="navbar__brand-tagline">Gestion clinica de salas</small>
+      </span>
+    </RouterLink>
+    <a
+      v-else
+      :href="props.brandHref"
+      class="navbar__brand"
+      @click="closeMenu"
+    >
+      <span class="navbar__brand-badge">A</span>
+      <span class="navbar__brand-copy">
+        <strong class="navbar__brand-name">AGENDO</strong>
+        <small class="navbar__brand-tagline">Gestion clinica de salas</small>
+      </span>
+    </a>
 
     <button
       type="button"
@@ -56,14 +111,23 @@ function handleAction(){
       <span></span>
     </button>
     <nav class="navbar__links">
-      <a
-        v-for="link in props.links"
-        :key="link.label"
-        class="navbar__link"
-        :href="link.href"
-      >
-        {{ link.label }}
-      </a>
+      <template v-for="link in props.links" :key="link.label">
+        <RouterLink
+          v-if="isRouterHref(link.href)"
+          :to="resolveRouterTarget(link.href)"
+          class="navbar__link"
+          :class="{ 'navbar__link--active': isActiveLink(link.href) }"
+        >
+          {{ link.label }}
+        </RouterLink>
+        <a
+          v-else
+          class="navbar__link"
+          :href="link.href"
+        >
+          {{ link.label }}
+        </a>
+      </template>
     </nav>
 
     <div class="navbar__actions">
@@ -86,15 +150,25 @@ function handleAction(){
       id="navbar-mobile-menu"
       class="navbar__mobile-menu"
     >
-      <a
-        v-for="link in props.links"
-        :key="`mobile-${link.label}`"
-        class="navbar__mobile-link"
-        :href="link.href"
-        @click="closeMenu"
-      >
-        {{ link.label }}
-      </a>
+      <template v-for="link in props.links" :key="`mobile-${link.label}`">
+        <RouterLink
+          v-if="isRouterHref(link.href)"
+          :to="resolveRouterTarget(link.href)"
+          class="navbar__mobile-link"
+          :class="{ 'navbar__mobile-link--active': isActiveLink(link.href) }"
+          @click="closeMenu"
+        >
+          {{ link.label }}
+        </RouterLink>
+        <a
+          v-else
+          class="navbar__mobile-link"
+          :href="link.href"
+          @click="closeMenu"
+        >
+          {{ link.label }}
+        </a>
+      </template>
     </nav>
   </header>
 </template>
@@ -106,30 +180,54 @@ function handleAction(){
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.5rem;
-  background: rgba(255, 255, 255, 0.94);
-  border-bottom: 1px solid rgba(95, 135, 151, 0.24);
+  background: rgba(250, 253, 253, 0.92);
+  border-bottom: 1px solid rgba(111, 145, 153, 0.18);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 40px rgba(17, 39, 46, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 30;
 }
 
 .navbar__brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
-  font-weight: 700;
+  gap: 0.8rem;
+  min-width: 0;
   color: var(--primary-dark);
 }
 
-.navbar__brand-mark {
-  display: inline-grid;
+.navbar__brand-badge {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 60%),
+    linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  display: grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
-  border-radius: 8px;
-  background: rgba(95, 135, 151, 0.15);
-  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: 0 12px 28px rgba(47, 122, 134, 0.24);
+}
+
+.navbar__brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .navbar__brand-name {
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.navbar__brand-tagline {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 500;
 }
 
 .navbar__links {
@@ -142,10 +240,19 @@ function handleAction(){
 .navbar__link {
   color: var(--text-soft);
   font-size: 0.95rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .navbar__link:hover {
+  color: var(--primary);
+  background: rgba(47, 122, 134, 0.08);
+}
+
+.navbar__link--active {
   color: var(--primary-dark);
+  background: rgba(47, 122, 134, 0.12);
 }
 
 .navbar__actions {
@@ -161,10 +268,11 @@ function handleAction(){
 .navbar__profile-icon {
   width: 2rem;
   height: 2rem;
-  border: 1px solid #c3d7de;
+  border: 1px solid rgba(111, 145, 153, 0.28);
   border-radius: 999px;
   display: grid;
   place-items: center;
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .navbar__profile-icon span {
@@ -197,9 +305,9 @@ function handleAction(){
 }
 
 .navbar__burger {
-  border: 1px solid rgba(95, 135, 151, 0.24);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid rgba(111, 145, 153, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
   width: 44px;
   height: 44px;
   padding: 0;
@@ -219,10 +327,10 @@ function handleAction(){
 
 .navbar__mobile-link {
   display: block;
-  padding: 0.85rem 1rem;
-  border-radius: 8px;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(95, 135, 151, 0.18);
+  border: 1px solid rgba(111, 145, 153, 0.18);
   color: var(--text-soft);
   text-align: center;
 }
@@ -231,26 +339,17 @@ function handleAction(){
   color: var(--primary-dark);
 }
 
-@media (max-width: 820px) {
-  .navbar {
-    gap: 0.85rem;
-    padding: 0.95rem 1rem;
-  }
-
-  .navbar__links {
-    gap: 1rem;
-  }
-
-  .navbar__actions {
-    gap: 0.75rem;
-  }
+.navbar__mobile-link--active {
+  color: var(--primary-dark);
+  background: rgba(47, 122, 134, 0.1);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 980px) {
   .navbar {
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    padding: 0.9rem 1rem;
+    gap: 0.85rem;
+    padding: 0.95rem 1rem;
     justify-items: stretch;
   }
 
@@ -273,11 +372,31 @@ function handleAction(){
     grid-column: 2;
     grid-row: 1;
     min-width: 0;
-    display: inline-flex;
     justify-self: end;
     justify-content: flex-end;
-    width: auto;
-    margin-top: 0;
+    gap: 0.75rem;
+  }
+
+  .navbar__mobile-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    grid-column: 1 / -1;
+    width: 100%;
+    padding-top: 0.75rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .navbar {
+    padding: 0.9rem 1rem;
+  }
+
+  .navbar__brand-tagline {
+    display: none;
+  }
+
+  .navbar__actions {
     gap: 0.5rem;
   }
 
@@ -292,15 +411,6 @@ function handleAction(){
 
   .navbar__profile-icon {
     display: none;
-  }
-
-  .navbar__mobile-menu {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    grid-column: 1 / -1;
-    width: 100%;
-    padding-top: 0.75rem;
   }
 }
 

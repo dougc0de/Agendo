@@ -1,11 +1,22 @@
 import pool from "../db/connection.js";
 
-export async function crearReserva(reserva) {
-    const { rows } = await pool.query(
+export async function crearReserva(reserva, executor = pool) {
+    const { rows } = await executor.query(
         `
             INSERT INTO reservas
-                (fecha, hora_inicio, hora_fin, descripcion, estado, tipo_consulta, usuario_id, paciente_id, sala_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (
+                    fecha,
+                    hora_inicio,
+                    hora_fin,
+                    descripcion,
+                    estado,
+                    tipo_consulta,
+                    usuario_id,
+                    paciente_id,
+                    sala_id,
+                    workspace_id
+                )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id
         `,
         [
@@ -17,7 +28,8 @@ export async function crearReserva(reserva) {
             reserva.tipoConsulta,
             reserva.usuarioId,
             reserva.pacienteId,
-            reserva.salaId
+            reserva.salaId,
+            reserva.workspaceId
         ]
     );
 
@@ -26,8 +38,8 @@ export async function crearReserva(reserva) {
     };
 }
 
-export async function buscarReservaPorId(id) {
-    const { rows } = await pool.query(
+export async function buscarReservaPorId(id, workspaceId, executor = pool) {
+    const { rows } = await executor.query(
         `
             SELECT
                 r.*,
@@ -35,34 +47,45 @@ export async function buscarReservaPorId(id) {
                 p.telefono AS paciente_telefono,
                 p.correo AS paciente_correo
             FROM reservas r
-            LEFT JOIN pacientes p ON p.id = r.paciente_id
+            LEFT JOIN pacientes p
+                ON p.id = r.paciente_id
+               AND p.workspace_id = r.workspace_id
             WHERE r.id = $1
+              AND r.workspace_id = $2
         `,
-        [id]
+        [id, workspaceId]
     );
 
     return rows[0];
 }
 
-export async function buscarReservasPorSalaYFecha(salaId, fecha, excluirReservaId = null) {
-    const params = [salaId, fecha];
+export async function buscarReservasPorSalaYFecha(
+    salaId,
+    fecha,
+    workspaceId,
+    excluirReservaId = null,
+    executor = pool
+) {
+    const params = [salaId, fecha, workspaceId];
     let query = `
         SELECT *
         FROM reservas
-        WHERE sala_id = $1 AND fecha = $2
+        WHERE sala_id = $1
+          AND fecha = $2
+          AND workspace_id = $3
     `;
 
     if (excluirReservaId !== null && excluirReservaId !== undefined) {
         params.push(excluirReservaId);
-        query += ` AND id <> $3`;
+        query += ` AND id <> $4`;
     }
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await executor.query(query, params);
     return rows;
 }
 
-export async function listarReservas() {
-    const { rows } = await pool.query(
+export async function listarReservas(workspaceId, executor = pool) {
+    const { rows } = await executor.query(
         `
             SELECT
                 r.*,
@@ -70,15 +93,20 @@ export async function listarReservas() {
                 p.telefono AS paciente_telefono,
                 p.correo AS paciente_correo
             FROM reservas r
-            LEFT JOIN pacientes p ON p.id = r.paciente_id
-        `
+            LEFT JOIN pacientes p
+                ON p.id = r.paciente_id
+               AND p.workspace_id = r.workspace_id
+            WHERE r.workspace_id = $1
+            ORDER BY r.fecha DESC, r.hora_inicio DESC
+        `,
+        [workspaceId]
     );
 
     return rows;
 }
 
-export async function actualizarReserva(id, datos) {
-    const result = await pool.query(
+export async function actualizarReserva(id, datos, workspaceId, executor = pool) {
+    const result = await executor.query(
         `
             UPDATE reservas
             SET
@@ -92,6 +120,7 @@ export async function actualizarReserva(id, datos) {
                 paciente_id = $8,
                 sala_id = $9
             WHERE id = $10
+              AND workspace_id = $11
         `,
         [
             datos.fecha,
@@ -103,7 +132,8 @@ export async function actualizarReserva(id, datos) {
             datos.usuarioId,
             datos.pacienteId,
             datos.salaId,
-            id
+            id,
+            workspaceId
         ]
     );
 
@@ -112,13 +142,14 @@ export async function actualizarReserva(id, datos) {
     };
 }
 
-export async function eliminarReserva(id) {
-    const result = await pool.query(
+export async function eliminarReserva(id, workspaceId, executor = pool) {
+    const result = await executor.query(
         `
             DELETE FROM reservas
             WHERE id = $1
+              AND workspace_id = $2
         `,
-        [id]
+        [id, workspaceId]
     );
 
     return {

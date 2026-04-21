@@ -10,6 +10,16 @@ function normalizarTexto(valor) {
     return String(valor ?? "").trim();
 }
 
+function resolveWorkspaceId(auth) {
+    const workspaceId = Number(auth?.workspaceId);
+
+    if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
+        return null;
+    }
+
+    return workspaceId;
+}
+
 function normalizarPacienteSalida(filaPaciente) {
     if (!filaPaciente) {
         return null;
@@ -24,12 +34,13 @@ function normalizarPacienteSalida(filaPaciente) {
         observaciones: filaPaciente.observaciones,
         estado: filaPaciente.estado,
         tipoProcedimiento: filaPaciente.tipo_procedimiento,
+        workspaceId: filaPaciente.workspace_id ?? null,
         createdAt: filaPaciente.created_at,
         updatedAt: filaPaciente.updated_at
     };
 }
 
-function normalizarDatosPaciente(datosPaciente) {
+function normalizarDatosPaciente(datosPaciente, workspaceId) {
     return {
         nombre: normalizarTexto(datosPaciente?.nombre),
         fechaNacimiento: normalizarTexto(datosPaciente?.fechaNacimiento) || null,
@@ -37,6 +48,7 @@ function normalizarDatosPaciente(datosPaciente) {
         correo: normalizarTexto(datosPaciente?.correo) || null,
         observaciones: normalizarTexto(datosPaciente?.observaciones) || null,
         estado: "activo",
+        workspaceId,
         tipoProcedimiento:
             normalizarTexto(datosPaciente?.tipoProcedimiento) ||
             normalizarTexto(datosPaciente?.tipoConsulta) ||
@@ -44,8 +56,17 @@ function normalizarDatosPaciente(datosPaciente) {
     };
 }
 
-export async function buscarPacientes(search) {
+export async function buscarPacientes(search, auth) {
     try {
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
         const termino = normalizarTexto(search);
 
         if (termino.length < 2) {
@@ -56,7 +77,7 @@ export async function buscarPacientes(search) {
             };
         }
 
-        const filasPacientes = await buscarPacientesPorTermino(termino);
+        const filasPacientes = await buscarPacientesPorTermino(termino, workspaceId);
 
         return {
             ok: true,
@@ -71,9 +92,18 @@ export async function buscarPacientes(search) {
     }
 }
 
-export async function crearPaciente(datosPaciente) {
+export async function crearPaciente(datosPaciente, auth) {
     try {
-        const datosNormalizados = normalizarDatosPaciente(datosPaciente);
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        const datosNormalizados = normalizarDatosPaciente(datosPaciente, workspaceId);
 
         if (!datosNormalizados.nombre) {
             return {
@@ -89,7 +119,10 @@ export async function crearPaciente(datosPaciente) {
             };
         }
 
-        const pacienteConTelefono = await buscarPacientePorTelefono(datosNormalizados.telefono);
+        const pacienteConTelefono = await buscarPacientePorTelefono(
+            datosNormalizados.telefono,
+            workspaceId
+        );
 
         if (pacienteConTelefono) {
             return {
@@ -99,7 +132,10 @@ export async function crearPaciente(datosPaciente) {
         }
 
         if (datosNormalizados.correo) {
-            const pacienteConCorreo = await buscarPacientePorCorreo(datosNormalizados.correo);
+            const pacienteConCorreo = await buscarPacientePorCorreo(
+                datosNormalizados.correo,
+                workspaceId
+            );
 
             if (pacienteConCorreo) {
                 return {
@@ -110,7 +146,7 @@ export async function crearPaciente(datosPaciente) {
         }
 
         const result = await crearPacienteRepository(datosNormalizados);
-        const filaPacienteCreado = await buscarPacientePorId(result.insertId);
+        const filaPacienteCreado = await buscarPacientePorId(result.insertId, workspaceId);
 
         return {
             ok: true,

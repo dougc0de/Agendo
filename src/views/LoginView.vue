@@ -5,301 +5,142 @@ import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
-import Divisor from "./Divisor.vue";
 import { useAuthStore } from "../stores/authStore.js";
-import heroBackground from "../assets/doctorHero.jpg";
-import avatarImage from "../assets/avatar.jpg";
-import crear from "../assets/crear.png";
-import reservar from "../assets/reservar.png";
-import eliminar from "../assets/eliminar.png";
-import revisar from "../assets/revisar.png";
-import founderDouglas from "../assets/founderDouglas.jpg";
-import calend from "../assets/calend.png";
-
+import loginShowcaseImage from "../assets/hero-illustration.svg";
 
 const router = useRouter();
 const authStore = useAuthStore();
 const loginError = ref("");
-const contactSent = ref(false);
+const submitting = ref(false);
 
 const loginForm = reactive({
     email: "",
     password: ""
 });
 
-const contactForm = reactive({
-    name: "",
-    email: "",
-    message: ""
-});
-
 const navLinks = [
-    { label: "Sobre Nosotros", href: "#sobre" },
-    { label: "Contactanos", href: "#contacto" },
-    { label: "Servicios", href: "#servicios" }
+    { label: "Servicios", href: "/#servicios" },
+    { label: "Sobre Nosotros", href: "/#sobre" },
+    { label: "Contacto", href: "/#contacto" }
 ];
 
-function scrollToLogin() {
-    document.getElementById("login-card")?.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-    });
+function goHome() {
+    router.push("/");
+}
+
+function goToSignup() {
+    router.push("/signup");
 }
 
 async function submitLogin() {
     loginError.value = "";
-    const resultado = await authStore.login(loginForm);
+    submitting.value = true;
 
-    if (!resultado.ok) {
-        if (resultado.msg === "Debe completar correo y contrasena.") {
-            loginError.value = resultado.msg;
+    try {
+        const resultado = await authStore.login(loginForm);
+
+        if (!resultado.ok) {
+            if (resultado.msg === "Debe completar correo y contrasena.") {
+                loginError.value = resultado.msg;
+                return;
+            }
+
+            loginError.value = "Usuario o contrasena incorrecta, por favor intente otra vez.";
             return;
         }
 
-        loginError.value = "Usuario o contrasena incorrecta, por favor intente otra vez";
-        return;
+        router.push("/dashboard");
+    } finally {
+        submitting.value = false;
     }
-
-    router.push("/dashboard");
-}
-
-function submitContact() {
-    if (!contactForm.name || !contactForm.email || !contactForm.message) {
-        return;
-    }
-
-    contactSent.value = true;
-    contactForm.name = "";
-    contactForm.email = "";
-    contactForm.message = "";
-
-    window.setTimeout(() => {
-        contactSent.value = false;
-    }, 2500);
 }
 </script>
 
 <template>
-  <div class="landing-page page-view">
-    <div class="landing-shell page-shell">
-      <AppNavbar :links="navLinks" action-label="Iniciar Sesion" @action="scrollToLogin" />
+  <div class="login-page page-view">
+    <div class="login-shell page-shell">
+      <AppNavbar
+        :links="navLinks"
+        brand-href="/"
+        action-label="Crear Cuenta"
+        @action="goToSignup"
+      />
 
-      <main>
-        <section class="hero-section" :style="{ '--hero-bg': `url(${heroBackground})` }">
-          <div class="hero-copy">
-            <div class="titleDiv">
-            <h1 class="hero-title">Sistema de Gestión de Salas</h1>
+      <main class="login-main">
+        <div class="login-layout">
+          <section class="login-showcase">
+            <button type="button" class="login-showcase__brand" @click="goHome">
+              <span class="login-showcase__brand-mark">A</span>
+              <span class="login-showcase__brand-copy">
+                <strong>AGENDO</strong>
+              </span>
+            </button>
+
+            <div class="login-showcase__content">
+              <h1>Administra tu operacion diaria con una entrada clara y profesional.</h1>
+
+              <figure class="login-showcase__figure">
+                <img :src="loginShowcaseImage" alt="Ilustracion del acceso de AGENDO" />
+              </figure>
             </div>
-            <div class="hero-highlight-row">
-              <div class="hero-highlight">
-                <p>
-                Ordena reservas y 
-                disponibilidad 
-                en un solo lugar        
-                </p>      
-              </div>
+          </section>
 
-              <div class="hero-highlight-avatar">
-                <img :src="avatarImage" alt="Avatar de AGENDO" />
-              </div>
-            </div>
+          <section class="login-panel">
+            <div class="login-panel__card">
+              <h2>Inicia sesion en tu cuenta</h2>
 
-            <div class="hero-pills">
-              <span>⚫ Reserva salas</span>
-              <span>⚫ Consulta disponibilidad</span>
-              <span>⚫ Manten el control diario</span>
-            </div>
-          </div>
-
-          <div id="login-card" class="login-card">
-            <div class="login-card__accent"></div>
-            <h2>Iniciar sesion</h2>
-            <p class="login-card__text">
-              Entra al panel para gestionar reservas y disponibilidad.
-            </p>
-
-            <form class="login-form" @submit.prevent="submitLogin">
-              <BaseInput
-                :model-value="loginForm.email"
-                label="Usuario"
-                placeholder="correo@clinica.com"
-                @update:model-value="loginForm.email = $event"
-              />
-
-              <BaseInput
-                :model-value="loginForm.password"
-                label="Contrasena"
-                type="password"
-                placeholder="Ingrese su contrasena"
-                @update:model-value="loginForm.password = $event"
-              />
-
-              <p v-if="loginError" class="form-error">{{ loginError }}</p>
-
-              <BaseButton type="submit" block>
-                Ingresar
-              </BaseButton>
-            </form>
-          </div>
-        </section>
-        
-        <section id="servicios" class="section-block section-shell">
-          <div class="section-heading">
-          <span class="section-label">Servicios</span>
-
-            <h2>Funciones clave de AGENDO</h2>
-            <p>Lo esencial para gestionar salas con rapidez, orden y visibilidad.</p>
-          </div>
-
-          <div class="services-grid">
-            <article class="service-card">
-              <div class="service-card__visual service-card__visual--one">
-                <img :src="crear" alt="Crear salas" />
-              </div>
-              <h3>Crear salas</h3>
-              <p>Registra espacios disponibles con la informacion necesaria.</p>
-            </article>
-            <article class="service-card">
-              <div class="service-card__visual service-card__visual--two">
-                <img :src="reservar" alt="Reservar salas">
-              </div>
-              <h3>Reservar salas</h3>
-              <p>Asigna horarios de forma rapida y clara.</p>
-            </article>
-            <article class="service-card">
-              <div class="service-card__visual service-card__visual--three">
-                <img :src="revisar" alt="Ver disponibilidad">
-              </div>
-              <h3>Ver disponibilidad</h3>
-              <p>Consulta que salas estan libres o reservadas.</p>
-            </article>
-            <article class="service-card">
-              <div class="service-card__visual service-card__visual--four">
-                <img :src="eliminar" alt="Eliminar registros">
-              </div>
-              <h3>Eliminar registros</h3>
-              <p>Manten la informacion actualizada durante la operacion diaria.</p>
-            </article>
-          </div>
-        </section>
-
-        <Divisor />
-
-        <section id="sobre" class="section-block section-shell section-block--about">
-          <div class="section-heading section-heading--left">
-            <span class="section-label">Sobre Nosotros</span>
-            <div class="sobreNosotrosTitle">
-            <h2>Sobre AGENDO</h2>
-            <p class="textinfo">
-              AGENDO nace como una solucion para facilitar la organizacion de salas dentro
-              de entornos clinicos y mejorar la claridad operativa del dia a dia.
-            </p>
-            </div>
-          </div>
-
-          <div class="about-grid">
-            <article class="info-panel">
-              <h3>Nuestra mision</h3>
-            <p class="textinfo">
-              AGENDO tiene como misión facilitar la gestión de salas dentro de entornos clínicos mediante una experiencia clara, ordenada y funcional. Busca optimizar la reserva de espacios, la consulta de disponibilidad y el control de uso diario, ayudando a reducir cruces de horario, mejorar la organización interna y apoyar una operación más eficiente.
-              </p>
-            </article>
-
-            <article class="calendar-panel">
-              <div class="calendar-panel__card">
-                <div class="calendar-panel__header">
-                  <span>Sep</span>
-                  <span>2026</span>
-                </div>
-                <div class="calendar-panel__grid">
-                  <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span>
-                  <span>8</span><span class="active">9</span><span>10</span><span>11</span><span>12</span><span class="active">13</span><span>14</span>
-                  <span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span><span>21</span>
-                </div>
-              </div>
-            </article>
-
-            <article class="vision-strip">
-              <div class="vision-strip__art">
-                <img :src="calend" alt="calendario">
-              </div>
-              <div class="vision-strip__copy">
-                <h3>Nuestra vision</h3>
-            <p class="textinfo">
-                  AGENDO tiene la visión de evolucionar hacia una herramienta adaptable, escalable y confiable para la organización y reserva de espacios, comenzando en el entorno clínico y proyectándose hacia otros contextos donde la planificación, la disponibilidad y la coordinación sean esenciales.
-                </p>
-              </div>
-            </article>
-
-            <article class="founder-card">
-              <div class="founder-card__copy">
-                <h3>Quien esta detras</h3>
-            <p class="textinfo">
-                AGENDO es una solución orientada a optimizar la gestión de citas y reservas de espacios físicos mediante una experiencia clara, eficiente y centrada en el usuario. Diseñada con una visión escalable, la plataforma busca evolucionar desde un uso individual hacia un entorno colaborativo donde múltiples usuarios puedan coordinar, reservar y administrar espacios dentro de clínicas, empresas o instituciones, con orden, transparencia y agilidad. Su valor radica en reducir errores de coordinación, evitar conflictos de horario y garantizar un uso más inteligente del tiempo y de los recursos disponibles.                </p>
-              </div>
-              <div class="founder-card__profile">
-                <div class="founder-avatar">
-                  <img :src="founderDouglas" alt="Douglas Espinoza">
-                </div>
-                <strong>Founder</strong>
-                <span>Douglas Andres Espinoza</span>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <Divisor />
-
-        <section id="contacto" class="section-block section-shell section-block--contact">
-          <div class="section-heading">
-            <span class="section-label">Contacto</span>
-            <h2>Necesita acceso o mas informacion?</h2>
-            <p>Escribanos y le ayudaremos con su consulta.</p>
-          </div>
-
-          <div class="contact-grid">
-            <div class="contact-copy">
-              <h3>AGENDO</h3>
-              <p>Gestion mas ordenada, rapida y confiable dentro de la clinica.</p>
-              <p>Correo: soporte@agendo.com</p>
-              <p>Telefono: 89134973</p>
-              <p>Horario: Lunes a viernes, 8:00 a.m. - 5:00 p.m.</p>
-            </div>
-
-            <form class="contact-form" @submit.prevent="submitContact">
-              <div class="contact-form__row">
+              <form class="login-form" @submit.prevent="submitLogin">
                 <BaseInput
-                  :model-value="contactForm.name"
-                  label="Nombre"
-                  placeholder="Coloque su nombre"
-                  @update:model-value="contactForm.name = $event"
-                />
-                <BaseInput
-                  :model-value="contactForm.email"
+                  :model-value="loginForm.email"
                   label="Correo"
-                  placeholder="Ej: aaa@gmail.com"
-                  @update:model-value="contactForm.email = $event"
+                  type="email"
+                  placeholder="correo@clinica.com"
+                  @update:model-value="loginForm.email = $event"
                 />
+
+                <BaseInput
+                  :model-value="loginForm.password"
+                  label="Contrasena"
+                  type="password"
+                  placeholder="Ingresa tu contrasena"
+                  @update:model-value="loginForm.password = $event"
+                />
+
+                <p v-if="loginError" class="login-form__error">{{ loginError }}</p>
+
+                <BaseButton type="submit" block :disabled="submitting">
+                  {{ submitting ? "Ingresando..." : "Iniciar Sesion" }}
+                </BaseButton>
+              </form>
+
+              <div class="login-panel__support">
+                <p>Si necesitas recuperar tu acceso, consulta al owner del workspace.</p>
+                <RouterLink to="/#contacto" class="login-panel__support-link">
+                  Ir a contacto
+                </RouterLink>
               </div>
 
-              <BaseInput
-                :model-value="contactForm.message"
-                label="Mensaje"
-                as="textarea"
-                placeholder="Escriba aqui su mensaje"
-                @update:model-value="contactForm.message = $event"
-              />
+              <div class="login-panel__divider">
+                <span></span>
+                <small>o</small>
+                <span></span>
+              </div>
 
-              <p v-if="contactSent" class="contact-form__success">
-                Consulta enviada correctamente.
-              </p>
+              <button
+                type="button"
+                class="login-panel__secondary-button"
+                @click="goToSignup"
+              >
+                Crear una cuenta nueva
+              </button>
 
-              <BaseButton type="submit">
-                Enviar Consulta
-              </BaseButton>
-            </form>
-          </div>
-        </section>
+              <button type="button" class="login-panel__back-link" @click="goHome">
+                Volver al inicio
+              </button>
+            </div>
+          </section>
+        </div>
+
       </main>
 
       <AppFooter />
@@ -308,637 +149,320 @@ function submitContact() {
 </template>
 
 <style scoped>
-.landing-page {
+.login-page {
+  background: linear-gradient(180deg, #dceaf7 0%, #d9e8f6 100%);
 }
 
-.landing-shell {
-}
-
-.hero-section {
-  display: grid;
-  grid-template-columns: 1.4fr 0.9fr;
-  min-height: 560px;
-  background-color: #d9eef8;
-  background-image:
-    var(--hero-bg),
-    linear-gradient(rgba(119, 177, 197, 0.28), rgba(95, 135, 151, 0.28)),
-    linear-gradient(
-      120deg,
-      rgba(143, 178, 192, 0.68) 0%,
-      rgba(213, 233, 242, 0.68) 48%,
-      rgba(207, 225, 234, 0.68) 48%,
-      rgba(220, 238, 246, 0.68) 100%
-    );
-  background-size: cover, cover, cover;
-  background-position: center center, center center, center center;
-  background-repeat: no-repeat, no-repeat, no-repeat;
-  background-blend-mode: overlay, normal, normal;
-  border-bottom: 1px solid rgba(95, 135, 151, 0.2);
-}
-
-.hero-copy {
-  padding: 4rem 3rem 3rem;
+.login-shell {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 30px;
-  box-shadow: 0 24px 80px rgba(38, 67, 84, 0.12);
+  background: transparent;
 }
 
-.titleDiv {
-  width: min(100%, 520px);
-  margin: 0 auto;
+.login-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
-.section-label {
+.login-layout {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(420px, 0.88fr);
+  gap: 1.4rem;
+  padding: 1rem;
+}
+
+.login-showcase,
+.login-panel {
+  min-height: 0;
+}
+
+.login-showcase {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(1.1rem, 2vw, 1.8rem);
+}
+
+.login-showcase__brand {
+  align-self: center;
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.9rem;
+  border: none;
+  background: transparent;
+  padding: 0;
   color: var(--text);
-  font-weight: 600;
+  cursor: pointer;
 }
 
-.section-label::before {
-  content: "";
+.login-showcase__brand-mark {
   width: 3rem;
-  height: 0.35rem;
-  background: #7fa7b7;
+  height: 3rem;
   border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary) 0%, #1556cf 100%);
+  box-shadow: 0 12px 28px rgba(21, 86, 207, 0.2);
 }
 
-.hero-title {
-  margin: 0;
-  font-size: 2rem;
-  line-height: 1.08;
-  width: 100%;
-  color: #fff;
+.login-showcase__brand-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.08rem;
+}
+
+.login-showcase__brand-copy strong {
+  font-size: clamp(2rem, 3vw, 3rem);
+  letter-spacing: -0.05em;
+  color: #0c2330;
+}
+
+.login-showcase__brand-copy small {
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.login-showcase__content {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: clamp(1rem, 2vw, 1.6rem);
+  min-height: 0;
   text-align: center;
 }
 
-.hero-highlight {
-  max-width: 440px;
-  padding: 0rem 2rem;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.6);
-  color: var(--text);
-  font-size: 1.2rem;
-  font-size: 5rem;
-  font-weight: 400;
+.login-showcase__content h1 {
+  margin: 0;
+  max-width: 16ch;
+  font-size: clamp(2rem, 3.4vw, 3.2rem);
+  line-height: 1.03;
+  letter-spacing: -0.04em;
+  color: #123b68;
 }
 
-.hero-highlight-row {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) 140px;
-  gap: 1.25rem;
-  align-items: center;
+.login-showcase__figure {
+  margin: 0;
   width: min(100%, 720px);
 }
 
-.hero-highlight-avatar {
-  width: 140px;
-  min-width: 140px;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 18px 45px rgba(38, 67, 84, 0.16);
-  background: #ffffff;
-  display: grid;
-  place-items: center;
-}
-
-.hero-highlight-avatar img {
+.login-showcase__figure img {
   width: 100%;
-  display: block;
-  height: auto;
+  max-height: 48vh;
+  object-fit: contain;
 }
 
-.hero-pills {
-  display: flex;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  width: min(100%, 640px);
-  margin: 0 auto;
-  padding: 0.75rem 0.75rem 0.5rem;
-  background: rgba(255, 255, 255, 0.86);
-  border-radius: 999px;
-  box-shadow: 0 14px 34px rgba(38, 67, 84, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-}
-
-.hero-pills span {
-  background: rgba(255, 255, 255, 0.96);
-  padding: 0.55rem 1rem;
-  border-radius: 999px;
-  font-size: 0.92rem;
-  color: #2d4856;
-}
-
-.login-card {
-  margin: 1.5rem;
-  align-self: center;
-  justify-self: center;
-  width: min(360px, calc(100% - 2rem));
-  background: var(--primary);
-  color: #fff;
-  border-radius: 8px;
-  padding: 2rem 1.75rem;
-  box-shadow: var(--shadow);
-  position: relative;
-}
-
-.login-card__accent {
-  width: 80px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  margin-bottom: 1rem;
-}
-
-.login-card h2 {
+.login-showcase__caption {
   margin: 0;
-  font-size: 2rem;
+  max-width: 22ch;
+  font-size: clamp(1.1rem, 1.7vw, 1.55rem);
+  line-height: 1.35;
+  color: #34516a;
 }
 
-.login-card__text {
-  margin: 0.65rem 0 1.4rem;
-  color: rgba(255, 255, 255, 0.86);
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-panel__card {
+  width: 100%;
+  max-width: 700px;
+  padding: clamp(1.4rem, 3vw, 2.8rem);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(111, 145, 153, 0.14);
+  box-shadow: 0 28px 70px rgba(19, 45, 72, 0.12);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.login-panel__card h2 {
+  margin: 0 0 1.8rem;
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: #0c2330;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.35rem;
 }
 
-.form-error {
+.login-form__error {
   margin: 0;
-  padding: 0.7rem 0.85rem;
-  border-radius: 8px;
-  background: rgba(235, 85, 69, 0.18);
-  border: 1px solid rgba(235, 85, 69, 0.32);
-  color: #fff;
-  font-size: 0.92rem;
-  line-height: 1.35;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(235, 85, 69, 0.12);
+  color: #b8392d;
+  border: 1px solid rgba(235, 85, 69, 0.18);
 }
 
-.section-block {
-  margin-top: 1rem;
+.login-panel__support {
+  margin-top: 1.15rem;
 }
 
-.section-heading {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.section-heading--left {
-  text-align: left;
-}
-
-.section-heading h2 {
-  margin: 0.8rem 0 0.6rem;
-  font-size: 2.4rem;
-  color: var(--text);
-}
-
-.section-heading p {
-  margin: 0 auto;
-  max-width: 720px;
-  color: var(--text-soft);
-}
-
-.services-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.4rem;
-}
-
-.service-card {
-  background: rgba(255, 255, 255, 0.76);
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.service-card__visual {
-  height: 150px;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  overflow: hidden;
-}
-
-.service-card__visual img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.service-card__visual--one {
-  background: linear-gradient(135deg, #f4efe8, #c7dce7);
-}
-
-.service-card__visual--two {
-  background: linear-gradient(135deg, #e7f2f8, #bfd7e5);
-}
-
-.service-card__visual--three {
-  background: linear-gradient(135deg, #d7edf4, #cfd9df);
-}
-
-.service-card__visual--four {
-  background: linear-gradient(135deg, #dae9ef, #b8d0d9);
-}
-
-.service-card h3 {
-  margin: 0 0 0.45rem;
-  font-size: 1.2rem;
-}
-
-.service-card p {
+.login-panel__support p {
   margin: 0;
   color: var(--text-soft);
 }
 
-.section-block--about {
-  background: rgba(95, 135, 151, 0.18);
-}
-
-.about-grid {
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 1.6rem;
-}
-
-.info-panel,
-.vision-strip__copy,
-.founder-card {
-  background: rgba(255, 255, 255, 0.82);
-  border-radius: 8px;
-}
-
-.info-panel {
-  padding: 1.6rem;
-}
-
-.info-panel h3,
-.vision-strip__copy h3,
-.founder-card h3 {
-  margin: 0 0 0.75rem;
-  font-size: 1.8rem;
-}
-
-.calendar-panel {
-  display: flex;
-  justify-content: center;
-  align-items: start;
-}
-
-.calendar-panel__card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 1rem;
-  min-width: 220px;
-  box-shadow: var(--shadow);
-}
-
-.calendar-panel__header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-  color: var(--text-soft);
-}
-
-.calendar-panel__grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.45rem;
-}
-
-.calendar-panel__grid span {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  min-height: 30px;
-  font-size: 0.88rem;
-  border-radius: 6px;
-}
-
-.calendar-panel__grid .active {
-  background: var(--text);
-  color: #fff;
-}
-
-.vision-strip {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 1.25rem;
-  align-items: center;
-}
-
-.vision-strip__art {
-  min-height: 160px;
-  border-radius: 30px;
-  background: linear-gradient(135deg, #e6f1f5, #bed6df);
-}
-
-.vision-strip__copy {
-  padding: 1.6rem;
-}
-
-.founder-card {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 1.5rem;
-  padding: 1.7rem;
-}
-
-.founder-card__copy p {
-  margin: 0;
-}
-
-.founder-card__profile {
-  background: linear-gradient(180deg, #e9f4f8, #d9eef8);
-  border-radius: 8px;
-  padding: 1rem;
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 0.35rem;
-}
-
-.founder-avatar {
-  width: 180px;
-  height: 180px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #5f8797, #87b0c0);
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 2rem;
+.login-panel__support-link {
+  display: inline-flex;
+  margin-top: 0.45rem;
+  color: #1556cf;
   font-weight: 700;
-    overflow: hidden;
-
 }
 
-
-.founder-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.section-block--contact {
-  padding-bottom: 2rem;
-}
-
-.contact-grid {
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: 2rem;
-  align-items: start;
-}
-
-.contact-copy h3 {
-  margin: 0 0 0.8rem;
-  font-size: 1.5rem;
-}
-
-.contact-copy p {
-  margin: 0 0 0.35rem;
-}
-
-.contact-form {
-  background: rgba(173, 216, 230, 0.45);
-  border: 1px solid rgba(95, 135, 151, 0.35);
-  border-radius: 8px;
-  padding: 1.4rem;
+.login-panel__divider {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 1rem;
+  margin: 1.6rem 0 1.2rem;
+  color: var(--text-muted);
 }
 
-.contact-form__row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+.login-panel__divider span {
+  flex: 1;
+  height: 1px;
+  background: rgba(111, 145, 153, 0.22);
 }
 
-.contact-form__success {
-  margin: 0;
+.login-panel__secondary-button {
+  width: 100%;
+  min-height: 3.8rem;
+  border-radius: 16px;
+  border: 2px solid #1f73df;
+  background: #fff;
+  color: #1f73df;
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.login-panel__back-link {
+  margin-top: 1rem;
+  align-self: center;
+  border: none;
+  background: transparent;
   color: var(--primary-dark);
-  font-weight: 600;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-@media (max-width: 980px) {
-  .hero-title {
-    max-width: none;
-    font-size: 2.5rem;
+.login-panel :deep(.base-input) {
+  gap: 0.65rem;
+}
+
+.login-panel :deep(.base-input__label) {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #435260;
+}
+
+.login-panel :deep(.base-input__control) {
+  min-height: 3.7rem;
+  border-radius: 16px;
+  border: 2px solid transparent;
+  background: #eaf2fd;
+  box-shadow: none;
+  padding: 1rem 1.1rem;
+  font-size: 1rem;
+}
+
+.login-panel :deep(.base-input__control::placeholder) {
+  color: #6d7f90;
+}
+
+.login-panel :deep(.base-input__control:focus) {
+  border-color: #8ab9f4;
+  box-shadow: 0 0 0 2px rgba(138, 185, 244, 0.14);
+  transform: none;
+}
+
+.login-panel :deep(.base-button) {
+  min-height: 3.75rem;
+  border-radius: 16px;
+  box-shadow: none;
+  font-size: 1.02rem;
+}
+
+.login-panel :deep(.base-button--primary) {
+  background: linear-gradient(135deg, #1f73df 0%, #1663cb 100%);
+}
+
+.login-panel :deep(.base-button--primary:hover:not(:disabled)) {
+  background: linear-gradient(135deg, #1663cb 0%, #1f73df 100%);
+}
+
+@media (max-width: 1120px) {
+  .login-layout {
+    grid-template-columns: minmax(0, 0.96fr) minmax(380px, 0.94fr);
   }
 
-  .services-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .about-grid,
-  .contact-grid,
-  .vision-strip,
-  .founder-card,
-  .contact-form__row {
-    grid-template-columns: 1fr;
+  .login-showcase__figure img {
+    max-height: 42vh;
   }
 }
 
-@media (max-width: 760px) {
-  .hero-section,
-  .services-grid {
+@media (max-width: 900px) {
+  .login-layout {
+    min-height: auto;
     grid-template-columns: 1fr;
+    gap: 1rem;
   }
 
-  .hero-copy {
-    padding-inline: 1.25rem;
+  .login-showcase {
+    padding-bottom: 0.25rem;
   }
 
-  .hero-copy {
-    padding-top: 2rem;
+  .login-showcase__figure img {
+    max-height: 280px;
+  }
+
+  .login-panel__card {
+    min-height: auto;
   }
 }
 
-@media (max-width: 480px) {
-  .hero-copy {
-    padding: 2rem 1.25rem 1.5rem;
-  }
-
-  .hero-title {
-    font-size: 2.15rem;
-    line-height: 1.05;
-  }
-
-  .hero-highlight-row {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    width: 100%;
-  }
-
-  .hero-highlight {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .hero-highlight-avatar {
-    width: min(140px, 100%);
-    min-width: 0;
-  }
-
-  .hero-pills {
-    width: 100%;
+@media (max-width: 560px) {
+  .login-layout {
     padding: 0.75rem;
-    border-radius: 28px;
   }
 
-  .hero-pills span {
-    text-align: center;
+  .login-showcase__brand-copy strong {
+    font-size: 1.85rem;
   }
 
-  .login-card {
-    margin: 1rem;
-    width: auto;
+  .login-showcase__content h1 {
+    font-size: clamp(1.7rem, 8vw, 2.4rem);
   }
 
-  .section-heading h2 {
-    font-size: 2rem;
-  }
-}
-
-@media (max-width: 360px) {
-  .hero-copy {
-    padding: 1.6rem 0.9rem 1.25rem;
-    gap: 1.1rem;
+  .login-showcase__caption {
+    font-size: 1rem;
   }
 
-  .titleDiv,
-  .hero-highlight-row,
-  .hero-pills,
-  .login-card {
-    width: 100%;
+  .login-panel__card {
+    padding: 1.2rem;
+    border-radius: 20px;
   }
 
-  .titleDiv,
-  .sobreNosotrosTitle {
-    padding: 0.9rem;
-  }
-
-  .hero-title {
-    font-size: 1.8rem;
-  }
-
-  .hero-highlight {
-    padding: 0 0.9rem;
-  }
-
-  .hero-highlight p {
-    font-size: clamp(1.9rem, 10vw, 2.4rem);
-    line-height: 1.08;
-    overflow-wrap: anywhere;
-  }
-
-  .hero-pills {
-    padding: 0.65rem;
-    border-radius: 22px;
-  }
-
-  .hero-pills span {
-    width: 100%;
-  }
-
-  .login-card {
-    margin: 0.75rem;
-    padding: 1.35rem 1rem;
-  }
-
-  .section-heading h2,
-  .sobreNosotrosTitle h2 {
-    font-size: 1.75rem;
-  }
-
-  .info-panel,
-  .vision-strip__copy,
-  .founder-card,
-  .contact-form {
-    padding: 1rem;
-  }
-
-  .calendar-panel__card {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .founder-avatar {
-    width: min(160px, 100%);
-    height: auto;
-    aspect-ratio: 1;
+  .login-panel__card h2 {
+    font-size: clamp(1.8rem, 8vw, 2.4rem);
   }
 }
-
-@media (max-width: 320px) {
-  .hero-copy {
-    padding-inline: 0.75rem;
-  }
-
-  .hero-title {
-    font-size: 1.6rem;
-  }
-
-  .hero-highlight p {
-    font-size: clamp(1.7rem, 9vw, 2.1rem);
-  }
-
-  .section-heading h2,
-  .sobreNosotrosTitle h2 {
-    font-size: 1.55rem;
-  }
-
-  .section-label::before {
-    width: 2rem;
-  }
-}
-
-.textinfo {
-  text-align: justify;
-  text-justify: inter-word
-
-}
-
-.sobreNosotrosTitle{
-  background-color: #608896;
-  padding: 2rem;
-  border-radius: 20px;
-  margin-top: 15px;
-}
-.sobreNosotrosTitle p{
-  color: white;
-
-}
-
-.sobreNosotrosTitle h2{
-  color: white;
-}
-
-.titleDiv{
-  background-color: rgba(125, 124, 124, 0.363);
-  border-radius: 30px;
-  padding: 1rem;
-}
-
-
-.hero-highlight p{
-  font-size: 3rem;
-  font-weight: 2rem;
-  color: #49454F;
-}
-
 </style>

@@ -1,15 +1,11 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import AppointmentFilters from "../components/appointments/AppointmentFilters.vue";
-import AppointmentForm from "../components/appointments/AppointmentForm.vue";
-import AppointmentTable from "../components/appointments/AppointmentTable.vue";
 import BaseButton from "../components/base/BaseButton.vue";
-import BaseModal from "../components/base/BaseModal.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAppointments } from "../composables/useAppointments.js";
-import { createPatient } from "../services/patientApi.js";
+import { getPlanDefinition } from "../shared/plans.js";
 import { useAuthStore } from "../stores/authStore.js";
 
 const router = useRouter();
@@ -17,192 +13,189 @@ const authStore = useAuthStore();
 const {
     appointments,
     loading,
-    saving,
     error,
     totalAppointments,
     pendingAppointments,
     confirmedAppointments,
-    fetchAppointments,
-    createAppointment,
-    updateAppointment,
-    deleteAppointment
+    fetchAppointments
 } = useAppointments();
 
-const modalOpen = ref(false);
-const modalMode = ref("create");
-const modalTitle = computed(() =>
-    modalMode.value === "edit" ? "Editar reserva" : "Crear reserva"
-);
-const currentAppointment = ref({});
-const filters = ref({
-    search: "",
-    status: "todos"
-});
-const feedback = ref("");
-const modalError = ref("");
-
 const dashboardLinks = [
-    { label: "Inicio", href: "#dashboard-top" },
-    { label: "Dashboard", href: "#dashboard-top" },
-    { label: "Reservas", href: "#reservas-panel" }
+    { label: "Dashboard", href: "/dashboard" },
+    { label: "Reservas", href: "/appointments" },
+    { label: "Pacientes", href: "/patients" }
 ];
 
-const filteredAppointments = computed(() => {
-    const search = filters.value.search.trim().toLowerCase();
-
-    return appointments.value.filter((appointment) => {
-        const matchesStatus =
-            filters.value.status === "todos" ||
-            appointment.estado === filters.value.status;
-
-        const haystack = [
-            appointment.descripcion,
-            appointment.tipoConsulta,
-            appointment.pacienteNombre,
-            appointment.pacienteCorreo,
-            `sala ${appointment.salaId}`,
-            `paciente ${appointment.pacienteId}`
-        ]
-            .join(" ")
-            .toLowerCase();
-
-        const matchesSearch = !search || haystack.includes(search);
-
-        return matchesStatus && matchesSearch;
-    });
+const fullMomentFormatter = new Intl.DateTimeFormat("es-CR", {
+    dateStyle: "medium",
+    timeStyle: "short"
 });
 
-function openCreateModal() {
-    modalMode.value = "create";
-    modalError.value = "";
-    currentAppointment.value = {
-        estado: "pendiente",
-        usuarioId: authStore.user?.id ?? 1,
-        salaId: 1
-    };
-    modalOpen.value = true;
+const shortDateFormatter = new Intl.DateTimeFormat("es-CR", {
+    day: "numeric",
+    month: "short"
+});
+
+const workspaceName = computed(() => authStore.workspace?.nombre ?? "Workspace AGENDO");
+const clinicName = computed(
+    () => authStore.workspace?.clinicName ?? "Clinica principal"
+);
+const membershipRoleLabel = computed(() => {
+    const role = String(authStore.membershipRole ?? "").toLowerCase();
+
+    if (role === "owner") {
+        return "Owner";
+    }
+
+    if (role === "admin") {
+        return "Administrador";
+    }
+
+    return "Miembro";
+});
+const planDefinition = computed(
+    () => getPlanDefinition(authStore.subscription?.planCode) ?? null
+);
+
+function toAppointmentDate(appointment) {
+    const fecha = String(appointment?.fecha ?? "").trim();
+    const hora = String(appointment?.horaInicio ?? "00:00").trim().slice(0, 5);
+
+    if (!fecha) {
+        return null;
+    }
+
+    const value = new Date(`${fecha}T${hora || "00:00"}`);
+    return Number.isNaN(value.getTime()) ? null : value;
 }
 
-function openEditModal(appointment) {
-    modalMode.value = "edit";
-    modalError.value = "";
-    currentAppointment.value = {
-        ...appointment
-    };
-    modalOpen.value = true;
+function formatAppointmentMoment(appointment) {
+    const appointmentDate = toAppointmentDate(appointment);
+
+    if (!appointmentDate) {
+        return "Fecha no disponible";
+    }
+
+    return fullMomentFormatter.format(appointmentDate);
 }
 
-function closeModal() {
-    modalOpen.value = false;
-    modalError.value = "";
-    currentAppointment.value = {};
+function formatDate(value) {
+    if (!value) {
+        return "Sin fecha";
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+        ? "Sin fecha"
+        : shortDateFormatter.format(date);
 }
 
-async function handleSaveAppointment(payload) {
-    let result;
-    modalError.value = "";
-    let pacienteCreado = null;
+const todayAppointments = computed(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const day = today.getDate();
 
-    let pacienteId = Number(payload?.paciente?.pacienteId);
+    return appointments.value.filter((appointment) => {
+        const appointmentDate = toAppointmentDate(appointment);
 
-    if (payload?.paciente?.mode === "new") {
-        try {
-            const patientResponse = await createPatient({
-                nombre: payload.paciente.nombre,
-                telefono: payload.paciente.telefono,
-                correo: payload.paciente.correo,
-                fechaNacimiento: payload.paciente.fechaNacimiento,
-                observaciones: payload.paciente.observaciones,
-                tipoProcedimiento: payload.paciente.tipoProcedimiento ?? payload.tipoConsulta
-            });
-
-            pacienteCreado = patientResponse.data ?? null;
-            pacienteId = Number(patientResponse.data?.id);
-        } catch (error) {
-            modalError.value =
-                error.response?.msg || error.message || "No fue posible crear el paciente.";
-            return;
+        if (!appointmentDate) {
+            return false;
         }
+
+        return (
+            appointmentDate.getFullYear() === year &&
+            appointmentDate.getMonth() === month &&
+            appointmentDate.getDate() === day
+        );
+    }).length;
+});
+
+const nextSevenDaysAppointments = computed(() => {
+    const now = new Date();
+    const limit = new Date(now);
+    limit.setDate(limit.getDate() + 7);
+
+    return appointments.value.filter((appointment) => {
+        const appointmentDate = toAppointmentDate(appointment);
+
+        return Boolean(
+            appointmentDate &&
+            appointmentDate.getTime() >= now.getTime() &&
+            appointmentDate.getTime() <= limit.getTime()
+        );
+    }).length;
+});
+
+const upcomingAppointments = computed(() =>
+    [...appointments.value]
+        .filter((appointment) => {
+            const appointmentDate = toAppointmentDate(appointment);
+            return Boolean(appointmentDate && appointmentDate.getTime() >= Date.now());
+        })
+        .sort((left, right) => {
+            const leftDate = toAppointmentDate(left)?.getTime() ?? 0;
+            const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
+            return leftDate - rightDate;
+        })
+        .slice(0, 5)
+);
+
+const recentAppointments = computed(() =>
+    [...appointments.value]
+        .sort((left, right) => {
+            const leftDate = toAppointmentDate(left)?.getTime() ?? 0;
+            const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
+            return rightDate - leftDate;
+        })
+        .slice(0, 5)
+);
+
+const nextAppointment = computed(() => upcomingAppointments.value[0] ?? null);
+
+const statCards = computed(() => [
+    {
+        label: "Reservas totales",
+        value: totalAppointments.value,
+        detail: "Panorama general del workspace"
+    },
+    {
+        label: "Pendientes",
+        value: pendingAppointments.value,
+        detail: "Solicitudes por confirmar"
+    },
+    {
+        label: "Confirmadas",
+        value: confirmedAppointments.value,
+        detail: "Bloques ya asegurados"
+    },
+    {
+        label: "Esta semana",
+        value: nextSevenDaysAppointments.value,
+        detail: `${todayAppointments.value} programadas para hoy`
     }
-
-    const appointmentPayload = {
-        fecha: payload.fecha,
-        horaInicio: payload.horaInicio,
-        horaFin: payload.horaFin,
-        descripcion: payload.descripcion,
-        estado: payload.estado,
-        tipoConsulta: payload.tipoConsulta,
-        usuarioId: Number(payload.usuarioId || authStore.user?.id || 1),
-        pacienteId,
-        salaId: Number(payload.salaId)
-    };
-
-    if (modalMode.value === "edit" && currentAppointment.value.id) {
-        result = await updateAppointment(currentAppointment.value.id, appointmentPayload);
-    } else {
-        result = await createAppointment(appointmentPayload);
-    }
-
-    if (result.ok) {
-        feedback.value = result.msg;
-        closeModal();
-        return;
-    }
-
-    if (pacienteCreado) {
-        currentAppointment.value = {
-            ...currentAppointment.value,
-            ...appointmentPayload,
-            pacienteId,
-            pacienteNombre: pacienteCreado.nombre,
-            pacienteTelefono: pacienteCreado.telefono,
-            pacienteCorreo: pacienteCreado.correo
-        };
-    }
-
-    modalError.value = pacienteCreado
-        ? `${result.msg} El paciente fue creado y podras seleccionarlo en un nuevo intento.`
-        : result.msg;
-}
-
-async function handleDeleteAppointment(appointment) {
-    const accepted = window.confirm(
-        `Se eliminara la reserva ${appointment.id}. Deseas continuar?`
-    );
-
-    if (!accepted) {
-        return;
-    }
-
-    const result = await deleteAppointment(appointment.id);
-    feedback.value = result.msg;
-}
-
-function clearFilters() {
-    filters.value = {
-        search: "",
-        status: "todos"
-    };
-}
-
-function applyStatusFilter(status) {
-    filters.value.status = status;
-}
+]);
 
 function logout() {
     authStore.logout();
-    router.push("/");
+    router.push("/login");
 }
 
-onMounted(async () => {
-    authStore.hydrate();
+async function bootstrapDashboard() {
+    if (!authStore.isHydrated) {
+        await authStore.hydrate();
+    }
 
     if (!authStore.isAuthenticated) {
-        router.replace("/");
+        router.replace("/login");
         return;
     }
 
     await fetchAppointments();
+}
+
+onMounted(() => {
+    bootstrapDashboard();
 });
 </script>
 
@@ -211,217 +204,383 @@ onMounted(async () => {
     <div class="dashboard-shell page-shell">
       <AppNavbar
         :links="dashboardLinks"
+        brand-href="/dashboard"
         action-label="Cerrar Sesion"
         :show-profile-icon="true"
         @action="logout"
       />
 
-      <main id="dashboard-top" class="dashboard-main">
-        <aside class="dashboard-sidebar">
-          <div class="dashboard-logo-card">
-            <div class="dashboard-logo-card__icon">AG</div>
+      <main class="dashboard-main section-shell">
+        <section class="dashboard-hero">
+          <div class="dashboard-hero__copy">
+            <span class="dashboard-eyebrow">Centro de mando</span>
+            <h1>{{ workspaceName }}</h1>
+            <p>
+              Administra salas, pacientes y reservas con una vista ejecutiva pensada para
+              tomar decisiones rapidas.
+            </p>
+
+            <div class="dashboard-hero__meta">
+              <span>{{ clinicName }}</span>
+              <span>{{ membershipRoleLabel }}</span>
+              <span>{{ planDefinition?.name ?? "Plan sin definir" }}</span>
+            </div>
+
+            <div class="dashboard-hero__actions">
+              <BaseButton @click="router.push('/appointments')">
+                Abrir modulo de reservas
+              </BaseButton>
+              <BaseButton variant="ghost" @click="router.push('/patients')">
+                Gestionar pacientes
+              </BaseButton>
+            </div>
           </div>
 
-          <div class="dashboard-actions">
-            <BaseButton block @click="openCreateModal">              Agregar Reserva
-            </BaseButton>
-            <BaseButton block variant="secondary" @click="fetchAppointments">
-              Recargar Reservas
-            </BaseButton>
-          </div>
-        </aside>
+          <div class="dashboard-hero__side">
+            <article class="dashboard-highlight-card">
+              <p class="dashboard-panel__eyebrow">Siguiente reserva</p>
 
-        <section class="dashboard-content">
-          <div class="dashboard-heading">
-            <h1>Dashboard - Mis Reservas</h1>
-            <p>Gestiona reservas, estados y disponibilidad desde un solo panel.</p>
-          </div>
+              <template v-if="nextAppointment">
+                <strong>{{ nextAppointment.pacienteNombre || `Paciente #${nextAppointment.pacienteId}` }}</strong>
+                <p>{{ formatAppointmentMoment(nextAppointment) }}</p>
+                <div class="dashboard-highlight-card__meta">
+                  <span>{{ `Sala #${nextAppointment.salaId}` }}</span>
+                  <span>{{ nextAppointment.tipoConsulta }}</span>
+                  <span class="status-badge" :class="`status-badge--${nextAppointment.estado}`">
+                    {{ nextAppointment.estado }}
+                  </span>
+                </div>
+              </template>
 
-          <div class="dashboard-stats">
-            <article class="stat-card">
-              <span>Total</span>
-              <strong>{{ totalAppointments }}</strong>
+              <template v-else>
+                <strong>No hay reservas proximas</strong>
+                <p>Usa el modulo de reservas para programar la siguiente atencion.</p>
+              </template>
             </article>
-            <article class="stat-card">
-              <span>Pendientes</span>
-              <strong>{{ pendingAppointments }}</strong>
-            </article>
-            <article class="stat-card">
-              <span>Confirmadas</span>
-              <strong>{{ confirmedAppointments }}</strong>
-            </article>
-          </div>
 
-          <div id="reservas-panel" class="dashboard-panel">
-            <div class="dashboard-panel__header">
-              <div>
-                <h2>Panel de reservas</h2>
-                <p>Busca un paciente existente o crea uno nuevo antes de guardar la reserva.</p>
+            <article class="dashboard-plan-card">
+              <p class="dashboard-panel__eyebrow">Plan activo</p>
+              <strong>{{ planDefinition?.name ?? "Sin plan disponible" }}</strong>
+              <p class="dashboard-plan-card__status">
+                {{ authStore.subscription?.commercialStatus ?? "Sin estado comercial" }}
+              </p>
+              <div class="dashboard-plan-card__limits">
+                <span>{{ authStore.subscription?.maxUsers ?? "-" }} usuarios</span>
+                <span>{{ authStore.subscription?.maxRooms ?? "-" }} salas</span>
+                <span>{{ authStore.subscription?.maxReservationsPerMonth ?? "-" }} reservas/mes</span>
               </div>
-              <BaseButton size="sm" @click="openCreateModal">
-                Nueva Reserva
+              <p class="dashboard-plan-card__date">
+                Trial o periodo actual: {{ formatDate(authStore.subscription?.trialEndsAt || authStore.subscription?.currentPeriodEndsAt) }}
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="dashboard-stats">
+          <article
+            v-for="card in statCards"
+            :key="card.label"
+            class="dashboard-stat-card"
+          >
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+            <small>{{ card.detail }}</small>
+          </article>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="dashboard-panel dashboard-panel--wide">
+            <div class="dashboard-panel__heading">
+              <div>
+                <p class="dashboard-panel__eyebrow">Agenda</p>
+                <h2>Proximas reservas</h2>
+              </div>
+              <BaseButton size="sm" variant="ghost" @click="fetchAppointments">
+                Actualizar
               </BaseButton>
             </div>
 
-            <AppointmentFilters
-              :search="filters.search"
-              :status="filters.status"
-              @update:search="filters.search = $event"
-              @update:status="filters.status = $event"
-              @clear="clearFilters"
-            />
+            <p v-if="loading" class="dashboard-state">
+              Cargando agenda...
+            </p>
+            <p v-else-if="error" class="dashboard-state dashboard-state--error">
+              {{ error }}
+            </p>
+            <ul v-else-if="upcomingAppointments.length" class="dashboard-appointment-list">
+              <li
+                v-for="appointment in upcomingAppointments"
+                :key="appointment.id"
+                class="dashboard-appointment-item"
+              >
+                <div>
+                  <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
+                  <p>{{ appointment.descripcion || "Reserva sin descripcion adicional." }}</p>
+                </div>
+                <div class="dashboard-appointment-item__meta">
+                  <span>{{ formatAppointmentMoment(appointment) }}</span>
+                  <span>{{ `Sala #${appointment.salaId}` }}</span>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="dashboard-state">
+              No hay reservas futuras registradas todavia.
+            </p>
+          </article>
 
-            <p v-if="feedback" class="dashboard-feedback">{{ feedback }}</p>
-            <p v-if="error && !modalOpen" class="dashboard-error">{{ error }}</p>
+          <article class="dashboard-panel">
+            <div class="dashboard-panel__heading">
+              <div>
+                <p class="dashboard-panel__eyebrow">Accesos</p>
+                <h2>Atajos utiles</h2>
+              </div>
+            </div>
 
-            <AppointmentTable
-              :appointments="filteredAppointments"
-              :loading="loading"
-              @edit="openEditModal"
-              @delete="handleDeleteAppointment"
-            />
-          </div>
+            <div class="dashboard-shortcuts">
+              <RouterLink class="shortcut-card" to="/appointments">
+                <strong>Reservas</strong>
+                <span>CRUD completo, filtros y agenda operativa.</span>
+              </RouterLink>
+
+              <RouterLink class="shortcut-card" to="/patients">
+                <strong>Pacientes</strong>
+                <span>Busqueda rapida y alta de nuevos registros.</span>
+              </RouterLink>
+
+              <button
+                type="button"
+                class="shortcut-card shortcut-card--button"
+                @click="fetchAppointments"
+              >
+                <strong>Refrescar datos</strong>
+                <span>Vuelve a consultar reservas del workspace actual.</span>
+              </button>
+            </div>
+          </article>
+
+          <article class="dashboard-panel dashboard-panel--wide">
+            <div class="dashboard-panel__heading">
+              <div>
+                <p class="dashboard-panel__eyebrow">Actividad</p>
+                <h2>Ultimos movimientos</h2>
+              </div>
+            </div>
+
+            <ul v-if="recentAppointments.length" class="dashboard-history-list">
+              <li
+                v-for="appointment in recentAppointments"
+                :key="`recent-${appointment.id}`"
+                class="dashboard-history-item"
+              >
+                <div class="dashboard-history-item__date">
+                  <strong>{{ shortDateFormatter.format(toAppointmentDate(appointment) || new Date()) }}</strong>
+                </div>
+                <div>
+                  <strong>{{ appointment.tipoConsulta }}</strong>
+                  <p>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</p>
+                </div>
+                <span class="status-badge" :class="`status-badge--${appointment.estado}`">
+                  {{ appointment.estado }}
+                </span>
+              </li>
+            </ul>
+            <p v-else class="dashboard-state">
+              Aun no hay actividad para mostrar.
+            </p>
+          </article>
+
+          <article class="dashboard-panel">
+            <div class="dashboard-panel__heading">
+              <div>
+                <p class="dashboard-panel__eyebrow">Contexto</p>
+                <h2>Sesion actual</h2>
+              </div>
+            </div>
+
+            <div class="dashboard-session">
+              <div>
+                <span>Usuario</span>
+                <strong>{{ authStore.user?.nombre ?? "Sin usuario" }}</strong>
+              </div>
+              <div>
+                <span>Correo</span>
+                <strong>{{ authStore.user?.correo ?? "Sin correo" }}</strong>
+              </div>
+              <div>
+                <span>Workspace slug</span>
+                <strong>{{ authStore.workspace?.slug ?? "sin-slug" }}</strong>
+              </div>
+            </div>
+          </article>
         </section>
       </main>
 
       <AppFooter />
     </div>
-
-    <BaseModal
-      :open="modalOpen"
-      :title="modalTitle"
-      description="Completa la informacion para guardar la reserva."
-      @close="closeModal"
-    >
-      <AppointmentForm
-        :initial-value="currentAppointment"
-        :mode="modalMode"
-        :submitting="saving"
-        :error-message="modalError"
-        :current-user-id="authStore.user?.id ?? 1"
-        @submit="handleSaveAppointment"
-        @cancel="closeModal"
-      />
-    </BaseModal>
   </div>
 </template>
 
 <style scoped>
-.dashboard-page {
-}
-
-.dashboard-shell {
-}
-
 .dashboard-main {
-  display: grid;
-  grid-template-columns: 220px 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
-  padding: 2rem;
 }
 
-.dashboard-sidebar {
+.dashboard-hero,
+.dashboard-stat-card,
+.dashboard-panel {
+  border: 1px solid rgba(111, 145, 153, 0.18);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+  gap: 1.25rem;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top left, rgba(151, 214, 214, 0.26), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(244, 250, 251, 0.88));
+}
+
+.dashboard-hero__copy {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.dashboard-logo-card,
-.dashboard-profile-card,
-.dashboard-status-panel,
-.dashboard-panel,
-.stat-card {
-  background: rgba(255, 255, 255, 0.82);
-  border-radius: 8px;
-}
-
-.dashboard-logo-card {
-  min-height: 120px;
-  display: grid;
-  place-items: center;
-}
-
-.dashboard-logo-card__icon {
-  width: 88px;
-  height: 88px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, #d9eef8, #f6fbff);
-  border: 2px solid rgba(95, 135, 151, 0.22);
-  display: grid;
-  place-items: center;
+.dashboard-eyebrow,
+.dashboard-panel__eyebrow {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(47, 122, 134, 0.1);
   color: var(--primary-dark);
-  font-size: 1.55rem;
+  font-size: 0.82rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.dashboard-profile-card {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+.dashboard-hero__copy h1,
+.dashboard-panel__heading h2 {
+  margin: 0;
 }
 
-.dashboard-profile-card small,
-.dashboard-profile-card span {
+.dashboard-hero__copy h1 {
+  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  line-height: 0.98;
+  max-width: 11ch;
+}
+
+.dashboard-hero__copy p {
+  margin: 0;
+  max-width: 56ch;
   color: var(--text-soft);
 }
 
-.dashboard-actions {
+.dashboard-hero__meta {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-.dashboard-status-panel {
-  padding: 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.dashboard-status-panel button {
-  border: 1px solid #bfd4dc;
+.dashboard-hero__meta span {
+  padding: 0.65rem 0.9rem;
   border-radius: 999px;
-  background: #f4f8fa;
-  color: var(--text);
-  padding: 0.6rem 0.8rem;
-}
-
-.dashboard-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.3rem;
-}
-
-.dashboard-heading h1 {
-  margin: 0;
-  font-size: 2.2rem;
-}
-
-.dashboard-heading p {
-  margin: 0.35rem 0 0;
+  background: rgba(245, 249, 250, 0.92);
   color: var(--text-soft);
+  border: 1px solid rgba(111, 145, 153, 0.16);
+}
+
+.dashboard-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.dashboard-hero__side {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-highlight-card,
+.dashboard-plan-card {
+  border-radius: 22px;
+  padding: 1.2rem;
+  background: rgba(247, 251, 252, 0.9);
+  border: 1px solid rgba(111, 145, 153, 0.16);
+}
+
+.dashboard-highlight-card strong,
+.dashboard-plan-card strong {
+  display: block;
+  font-size: 1.2rem;
+  color: var(--primary-dark);
+}
+
+.dashboard-highlight-card p,
+.dashboard-plan-card p {
+  margin: 0.5rem 0 0;
+  color: var(--text-soft);
+}
+
+.dashboard-highlight-card__meta,
+.dashboard-plan-card__limits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.dashboard-highlight-card__meta span,
+.dashboard-plan-card__limits span {
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(111, 145, 153, 0.14);
+  color: var(--text-soft);
+}
+
+.dashboard-plan-card__status {
+  text-transform: capitalize;
+}
+
+.dashboard-plan-card__date {
+  font-size: 0.92rem;
 }
 
 .dashboard-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
 }
 
-.stat-card {
-  padding: 1rem 1.2rem;
+.dashboard-stat-card {
+  padding: 1.15rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.stat-card span {
-  display: block;
+.dashboard-stat-card span,
+.dashboard-stat-card small {
   color: var(--text-soft);
-  margin-bottom: 0.4rem;
 }
 
-.stat-card strong {
+.dashboard-stat-card strong {
   font-size: 2rem;
   color: var(--primary-dark);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.9fr);
+  gap: 1rem;
 }
 
 .dashboard-panel {
@@ -431,54 +590,188 @@ onMounted(async () => {
   gap: 1rem;
 }
 
-.dashboard-panel__header {
+.dashboard-panel--wide {
+  min-width: 0;
+}
+
+.dashboard-panel__heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.dashboard-panel__header h2 {
+.dashboard-state {
   margin: 0;
-  font-size: 1.5rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(247, 251, 252, 0.9);
+  color: var(--text-soft);
 }
 
-.dashboard-panel__header p {
+.dashboard-state--error {
+  background: rgba(235, 85, 69, 0.12);
+  color: #b8392d;
+}
+
+.dashboard-appointment-list,
+.dashboard-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.dashboard-appointment-item,
+.dashboard-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(247, 251, 252, 0.88);
+  border: 1px solid rgba(111, 145, 153, 0.14);
+}
+
+.dashboard-appointment-item strong,
+.dashboard-history-item strong {
+  color: var(--primary-dark);
+}
+
+.dashboard-appointment-item p,
+.dashboard-history-item p {
   margin: 0.3rem 0 0;
   color: var(--text-soft);
 }
 
-.dashboard-feedback,
-.dashboard-error {
-  margin: 0;
-  padding: 0.9rem 1rem;
-  border-radius: 8px;
+.dashboard-appointment-item__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: right;
+  color: var(--text-soft);
+  font-size: 0.92rem;
 }
 
-.dashboard-feedback {
-  background: rgba(95, 135, 151, 0.14);
+.dashboard-shortcuts {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.shortcut-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 248, 249, 0.86));
+  border: 1px solid rgba(111, 145, 153, 0.16);
+  color: var(--text);
+  text-align: left;
+}
+
+.shortcut-card strong {
   color: var(--primary-dark);
 }
 
-.dashboard-error {
+.shortcut-card span {
+  color: var(--text-soft);
+}
+
+.shortcut-card--button {
+  cursor: pointer;
+  font: inherit;
+}
+
+.dashboard-history-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.dashboard-history-item__date {
+  min-width: 80px;
+  text-align: center;
+  padding: 0.75rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(47, 122, 134, 0.08);
+}
+
+.dashboard-session {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dashboard-session div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(247, 251, 252, 0.88);
+  border: 1px solid rgba(111, 145, 153, 0.14);
+}
+
+.dashboard-session span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-badge--pendiente {
+  background: rgba(242, 159, 56, 0.16);
+  color: #9b6112;
+}
+
+.status-badge--confirmada {
+  background: rgba(47, 122, 134, 0.14);
+  color: var(--primary-dark);
+}
+
+.status-badge--cancelada {
   background: rgba(235, 85, 69, 0.14);
   color: #b8392d;
 }
 
 @media (max-width: 980px) {
-  .dashboard-main,
+  .dashboard-hero,
+  .dashboard-grid,
   .dashboard-stats {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .dashboard-main {
-    padding: 1.25rem;
+  .dashboard-hero,
+  .dashboard-panel,
+  .dashboard-stat-card {
+    border-radius: 22px;
   }
 
-  .dashboard-panel__header {
-    flex-direction: column;
+  .dashboard-panel__heading,
+  .dashboard-appointment-item,
+  .dashboard-history-item {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-appointment-item__meta {
+    text-align: left;
+  }
+
+  .dashboard-history-item__date {
+    width: fit-content;
   }
 }
 </style>
