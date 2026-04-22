@@ -107,19 +107,34 @@ select
     'Agendo Legacy',
     'agendo-legacy',
     'activo'
+where (
+    exists (select 1 from public.usuarios)
+    or exists (select 1 from public.pacientes)
+    or exists (select 1 from public.reservas)
+)
+  and not exists (select 1 from public.clinicas)
+  and not exists (
+      select 1
+      from public.workspaces
+      where slug = 'agendo-legacy'
+  );
+
+insert into public.workspaces (nombre, slug, estado)
+select
+    coalesce(nullif(trim(c.nombre), ''), 'Clinica Legacy ' || c.id),
+    'legacy-clinic-' || c.id,
+    'activo'
+from public.clinicas c
 where not exists (
     select 1
-    from public.workspaces
-    where slug = 'agendo-legacy'
+    from public.workspaces w
+    where w.slug = 'legacy-clinic-' || c.id
 );
 
-update public.clinicas
-set workspace_id = (
-    select id
-    from public.workspaces
-    where slug = 'agendo-legacy'
-)
-where workspace_id is null;
+update public.clinicas c
+set workspace_id = w.id
+from public.workspaces w
+where w.slug = 'legacy-clinic-' || c.id;
 
 update public.salas s
 set workspace_id = c.workspace_id
@@ -127,19 +142,48 @@ from public.clinicas c
 where s.clinica_id = c.id
   and s.workspace_id is null;
 
+update public.reservas r
+set workspace_id = s.workspace_id
+from public.salas s
+where r.sala_id = s.id
+  and r.workspace_id is null;
+
+update public.pacientes p
+set workspace_id = resumen.workspace_id
+from (
+    select
+        r.paciente_id,
+        min(r.workspace_id) as workspace_id
+    from public.reservas r
+    where r.workspace_id is not null
+    group by r.paciente_id
+) resumen
+where p.id = resumen.paciente_id
+  and p.workspace_id is null;
+
+update public.pacientes p
+set workspace_id = fallback.workspace_id
+from (
+    select c.workspace_id
+    from public.clinicas c
+    where c.workspace_id is not null
+    order by c.id asc
+    limit 1
+) fallback
+where p.workspace_id is null;
+
 update public.pacientes
 set workspace_id = (
     select id
     from public.workspaces
     where slug = 'agendo-legacy'
 )
-where workspace_id is null;
-
-update public.reservas r
-set workspace_id = s.workspace_id
-from public.salas s
-where r.sala_id = s.id
-  and r.workspace_id is null;
+where workspace_id is null
+  and exists (
+      select 1
+      from public.workspaces
+      where slug = 'agendo-legacy'
+  );
 
 do $$
 begin
@@ -237,7 +281,10 @@ select
     'activo'
 from public.workspaces w
 cross join public.usuarios u
-where w.slug = 'agendo-legacy'
+where (
+      w.slug = 'agendo-legacy'
+      or w.slug like 'legacy-clinic-%'
+  )
   and not exists (
       select 1
       from public.workspace_members wm
@@ -267,7 +314,10 @@ select
     3,
     500
 from public.workspaces w
-where w.slug = 'agendo-legacy'
+where (
+      w.slug = 'agendo-legacy'
+      or w.slug like 'legacy-clinic-%'
+  )
   and not exists (
       select 1
       from public.subscriptions s

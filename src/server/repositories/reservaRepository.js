@@ -43,10 +43,14 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
         `
             SELECT
                 r.*,
+                s.nombre AS sala_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
                 p.correo AS paciente_correo
             FROM reservas r
+            LEFT JOIN salas s
+                ON s.id = r.sala_id
+               AND s.workspace_id = r.workspace_id
             LEFT JOIN pacientes p
                 ON p.id = r.paciente_id
                AND p.workspace_id = r.workspace_id
@@ -89,10 +93,14 @@ export async function listarReservas(workspaceId, executor = pool) {
         `
             SELECT
                 r.*,
+                s.nombre AS sala_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
                 p.correo AS paciente_correo
             FROM reservas r
+            LEFT JOIN salas s
+                ON s.id = r.sala_id
+               AND s.workspace_id = r.workspace_id
             LEFT JOIN pacientes p
                 ON p.id = r.paciente_id
                AND p.workspace_id = r.workspace_id

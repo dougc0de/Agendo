@@ -16,6 +16,7 @@ const authStore = useAuthStore();
 
 const navLinks = [
     { label: "Dashboard", href: "/dashboard" },
+    { label: "Sucursales", href: "/branches" },
     { label: "Reservas", href: "/appointments" },
     { label: "Pacientes", href: "/patients" }
 ];
@@ -431,7 +432,12 @@ onMounted(() => {
   }
 
   .patients-hero__actions {
+    width: 100%;
     justify-content: stretch;
+  }
+
+  .patients-hero__actions :deep(.base-button) {
+    width: 100%;
   }
 }
 </style>

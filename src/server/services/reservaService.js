@@ -104,6 +104,7 @@ function formatearReservaSalida(filaReserva) {
         pacienteTelefono: filaReserva.paciente_telefono ?? null,
         pacienteCorreo: filaReserva.paciente_correo ?? null,
         salaId: filaReserva.sala_id,
+        salaNombre: filaReserva.sala_nombre ?? null,
         createdAt: filaReserva.created_at,
         updatedAt: filaReserva.updated_at
     };

@@ -8,8 +8,12 @@ import BaseButton from "../components/base/BaseButton.vue";
 import BaseModal from "../components/base/BaseModal.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
+import RoomForm from "../components/rooms/RoomForm.vue";
 import { useAppointments } from "../composables/useAppointments.js";
+import { getBranches } from "../services/branchApi.js";
 import { createPatient } from "../services/patientApi.js";
+import { createRoom, getRooms } from "../services/roomApi.js";
+import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 
 const router = useRouter();
@@ -30,15 +34,23 @@ const {
 
 const navLinks = [
     { label: "Dashboard", href: "/dashboard" },
+    { label: "Sucursales", href: "/branches" },
     { label: "Reservas", href: "/appointments" },
     { label: "Pacientes", href: "/patients" }
 ];
 
 const modalOpen = ref(false);
+const roomModalOpen = ref(false);
 const modalMode = ref("create");
 const currentAppointment = ref({});
+const rooms = ref([]);
+const branches = ref([]);
 const feedback = ref("");
 const modalError = ref("");
+const roomModalError = ref("");
+const roomSaving = ref(false);
+const pageError = ref("");
+const shouldOpenReservationAfterRoomCreate = ref(false);
 const filters = ref({
     search: "",
     status: "todos"
@@ -75,6 +87,45 @@ const modalTitle = computed(() =>
     modalMode.value === "edit" ? "Editar reserva" : "Nueva reserva"
 );
 
+const isAdminUser = computed(() =>
+    isAdministrativeUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+
+const activeBranchOptions = computed(() =>
+    branches.value.filter((branch) => branch.estado === "activa")
+);
+
+const roomModalDescription = computed(() => {
+    const maxRooms = Number(authStore.subscription?.maxRooms ?? 0);
+
+    if (maxRooms > 0) {
+        return `Crea una sala activa para usarla en reservas. Tu plan actual permite hasta ${maxRooms} salas.`;
+    }
+
+    return "Crea una sala activa para usarla en reservas.";
+});
+
+function isReservableRoom(room) {
+    return room?.estado === "activa" && room?.disponibilidad === "disponible";
+}
+
+const reservableRooms = computed(() => rooms.value.filter((room) => isReservableRoom(room)));
+
+const appointmentRoomOptions = computed(() => {
+    const currentRoomId = Number(currentAppointment.value?.salaId ?? 0) || null;
+
+    return rooms.value.filter((room) => {
+        if (isReservableRoom(room)) {
+            return true;
+        }
+
+        return currentRoomId !== null && Number(room.id) === currentRoomId;
+    });
+});
+
 const filteredAppointments = computed(() => {
     const searchValue = String(filters.value.search ?? "").trim().toLowerCase();
 
@@ -86,6 +137,7 @@ const filteredAppointments = computed(() => {
         const haystack = [
             appointment.descripcion,
             appointment.tipoConsulta,
+            appointment.salaNombre,
             appointment.pacienteNombre,
             appointment.pacienteCorreo,
             appointment.fecha,
@@ -136,17 +188,34 @@ const statCards = computed(() => [
 ]);
 
 function openCreateModal() {
+    pageError.value = "";
     modalMode.value = "create";
     modalError.value = "";
+
+    if (!reservableRooms.value.length) {
+        if (isAdminUser.value) {
+            shouldOpenReservationAfterRoomCreate.value = true;
+            openCreateRoomModal(
+                "Primero crea una sala para poder agendar una reserva en este workspace."
+            );
+        } else {
+            pageError.value =
+                "Aun no hay salas disponibles. Solicita a un administrador que cree una sala antes de reservar.";
+        }
+
+        return;
+    }
+
     currentAppointment.value = {
         estado: "pendiente",
         usuarioId: authStore.user?.id ?? null,
-        salaId: 1
+        salaId: reservableRooms.value[0]?.id ?? null
     };
     modalOpen.value = true;
 }
 
 function openEditModal(appointment) {
+    pageError.value = "";
     modalMode.value = "edit";
     modalError.value = "";
     currentAppointment.value = {
@@ -161,7 +230,55 @@ function closeModal() {
     currentAppointment.value = {};
 }
 
+function openCreateRoomModal(message = "") {
+    if (!isAdminUser.value) {
+        pageError.value = "Solo un administrador puede crear salas.";
+        return;
+    }
+
+    roomModalError.value = message;
+    roomModalOpen.value = true;
+}
+
+function closeRoomModal() {
+    roomModalOpen.value = false;
+    roomModalError.value = "";
+    shouldOpenReservationAfterRoomCreate.value = false;
+}
+
+async function fetchRooms() {
+    try {
+        const response = await getRooms();
+        rooms.value = response.data ?? [];
+    } catch (requestError) {
+        rooms.value = [];
+        pageError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible cargar las salas.";
+    }
+}
+
+async function fetchBranches() {
+    if (!isAdminUser.value) {
+        branches.value = [];
+        return;
+    }
+
+    try {
+        const response = await getBranches();
+        branches.value = response.data ?? [];
+    } catch (requestError) {
+        branches.value = [];
+        pageError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible cargar las sucursales.";
+    }
+}
+
 async function handleSaveAppointment(payload) {
+    pageError.value = "";
     modalError.value = "";
     let patientId = Number(payload?.paciente?.pacienteId);
     let createdPatient = null;
@@ -227,6 +344,43 @@ async function handleSaveAppointment(payload) {
         : result.msg;
 }
 
+async function handleCreateRoom(payload) {
+    roomSaving.value = true;
+    roomModalError.value = "";
+
+    try {
+        const response = await createRoom(payload);
+        const createdRoom = response.data ?? null;
+        const shouldResumeReservation = shouldOpenReservationAfterRoomCreate.value;
+
+        roomModalOpen.value = false;
+        roomModalError.value = "";
+        shouldOpenReservationAfterRoomCreate.value = false;
+        pageError.value = "";
+        feedback.value = response.msg;
+
+        await Promise.all([fetchRooms(), fetchBranches()]);
+
+        if (shouldResumeReservation) {
+            modalMode.value = "create";
+            modalError.value = "";
+            currentAppointment.value = {
+                estado: "pendiente",
+                usuarioId: authStore.user?.id ?? null,
+                salaId: createdRoom?.id ?? reservableRooms.value[0]?.id ?? null
+            };
+            modalOpen.value = true;
+        }
+    } catch (requestError) {
+        roomModalError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible crear la sala.";
+    } finally {
+        roomSaving.value = false;
+    }
+}
+
 async function handleDeleteAppointment(appointment) {
     const accepted = window.confirm(
         `Se eliminara la reserva ${appointment.id}. Deseas continuar?`
@@ -253,6 +407,8 @@ function logout() {
 }
 
 async function bootstrapAppointments() {
+    pageError.value = "";
+
     if (!authStore.isHydrated) {
         await authStore.hydrate();
     }
@@ -262,7 +418,7 @@ async function bootstrapAppointments() {
         return;
     }
 
-    await fetchAppointments();
+    await Promise.all([fetchAppointments(), fetchRooms(), fetchBranches()]);
 }
 
 onMounted(() => {
@@ -295,6 +451,13 @@ onMounted(() => {
           <div class="appointments-hero__actions">
             <BaseButton @click="openCreateModal">
               Agendar reserva
+            </BaseButton>
+            <BaseButton
+              v-if="isAdminUser"
+              variant="ghost"
+              @click="openCreateRoomModal()"
+            >
+              Crear sala
             </BaseButton>
             <BaseButton variant="ghost" @click="fetchAppointments">
               Actualizar datos
@@ -341,6 +504,12 @@ onMounted(() => {
               />
 
               <p v-if="feedback" class="appointments-feedback">{{ feedback }}</p>
+              <p
+                v-if="pageError && !modalOpen && !roomModalOpen"
+                class="appointments-error"
+              >
+                {{ pageError }}
+              </p>
               <p v-if="error && !modalOpen" class="appointments-error">{{ error }}</p>
 
               <AppointmentTable
@@ -359,7 +528,7 @@ onMounted(() => {
                 <h3>{{ nextVisibleAppointment.pacienteNombre || `Paciente #${nextVisibleAppointment.pacienteId}` }}</h3>
                 <p>{{ formatAppointmentMoment(nextVisibleAppointment) }}</p>
                 <div class="appointments-side__meta">
-                  <span>{{ `Sala #${nextVisibleAppointment.salaId}` }}</span>
+                  <span>{{ nextVisibleAppointment.salaNombre || `Sala #${nextVisibleAppointment.salaId}` }}</span>
                   <span>{{ nextVisibleAppointment.tipoConsulta }}</span>
                   <span>{{ nextVisibleAppointment.estado }}</span>
                 </div>
@@ -375,7 +544,9 @@ onMounted(() => {
               <ul class="appointments-side__list">
                 <li>Busca al paciente primero si ya existe en el workspace.</li>
                 <li>Crea el paciente dentro del modal solo cuando haga falta.</li>
-                <li>Recarga datos despues de cambios importantes del equipo.</li>
+                <li>La sala se elige desde un dropdown, ya no con IDs manuales.</li>
+                <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro del workspace.</li>
+                <li v-else>Si no hay salas disponibles, solicita apoyo a un administrador.</li>
               </ul>
             </article>
           </aside>
@@ -397,8 +568,24 @@ onMounted(() => {
         :mode="modalMode"
         :error-message="modalError"
         :current-user-id="authStore.user?.id ?? 0"
+        :rooms="appointmentRoomOptions"
         @submit="handleSaveAppointment"
         @cancel="closeModal"
+      />
+    </BaseModal>
+
+    <BaseModal
+      :open="roomModalOpen"
+      title="Crear sala"
+      :description="roomModalDescription"
+      @close="closeRoomModal"
+    >
+      <RoomForm
+        :branch-options="activeBranchOptions"
+        :submitting="roomSaving"
+        :error-message="roomModalError"
+        @submit="handleCreateRoom"
+        @cancel="closeRoomModal"
       />
     </BaseModal>
   </div>
@@ -574,7 +761,12 @@ onMounted(() => {
   }
 
   .appointments-hero__actions {
+    width: 100%;
     justify-content: stretch;
+  }
+
+  .appointments-hero__actions :deep(.base-button) {
+    width: 100%;
   }
 }
 </style>

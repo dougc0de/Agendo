@@ -43,7 +43,7 @@ function appointmentTimeRange(appointment) {
       </thead>
       <tbody>
         <tr v-for="appointment in props.appointments" :key="appointment.id">
-          <td>{{ `Sala #${appointment.salaId}` }}</td>
+          <td>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</td>
           <td>{{ appointment.fecha }}</td>
           <td>{{ appointmentTimeRange(appointment) }}</td>
           <td>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</td>

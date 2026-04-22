@@ -35,10 +35,10 @@
   --transition-slow: 0.5s ease;
   --border-radius: 14px;
   --border-radius-large: 26px;
-  --shell-max-width: 1220px;
-  --page-padding-desktop: 1.5rem;
+  --shell-max-width: 100%;
+  --page-padding-desktop: 2rem;
   --page-padding-mobile: 1rem;
-  --section-padding-desktop: 3rem 2rem;
+  --section-padding-desktop: 2.75rem 2rem;
   --section-padding-mobile: 2rem 1.25rem;
   --section-padding-narrow: 1.5rem 0.9rem;
 }
@@ -62,6 +62,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: clip;
   background: var(--page-bg);
   color: var(--text);
   transition: background var(--transition-normal);
@@ -162,6 +163,7 @@ video {
 }
 
 .page-view {
+  width: 100%;
   min-height: 100vh;
   background: var(--page-bg);
 }
@@ -169,10 +171,12 @@ video {
 .page-shell {
   width: 100%;
   min-height: 100vh;
+  overflow-x: clip;
   background: var(--page-bg);
 }
 
 .section-shell {
+  width: 100%;
   padding: var(--section-padding-desktop);
 }
 

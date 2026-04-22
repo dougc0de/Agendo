@@ -6,6 +6,7 @@ import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAppointments } from "../composables/useAppointments.js";
 import { getPlanDefinition } from "../shared/plans.js";
+import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 
 const router = useRouter();
@@ -22,6 +23,7 @@ const {
 
 const dashboardLinks = [
     { label: "Dashboard", href: "/dashboard" },
+    { label: "Sucursales", href: "/branches" },
     { label: "Reservas", href: "/appointments" },
     { label: "Pacientes", href: "/patients" }
 ];
@@ -37,24 +39,14 @@ const shortDateFormatter = new Intl.DateTimeFormat("es-CR", {
 });
 
 const workspaceName = computed(() => authStore.workspace?.nombre ?? "Workspace AGENDO");
-const clinicName = computed(
-    () => authStore.workspace?.clinicName ?? "Clinica principal"
-);
-const membershipRoleLabel = computed(() => {
-    const role = String(authStore.membershipRole ?? "").toLowerCase();
-
-    if (role === "owner") {
-        return "Owner";
-    }
-
-    if (role === "admin") {
-        return "Administrador";
-    }
-
-    return "Miembro";
-});
 const planDefinition = computed(
     () => getPlanDefinition(authStore.subscription?.planCode) ?? null
+);
+const isAdminUser = computed(() =>
+    isAdministrativeUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
 );
 
 function toAppointmentDate(appointment) {
@@ -220,12 +212,6 @@ onMounted(() => {
               tomar decisiones rapidas.
             </p>
 
-            <div class="dashboard-hero__meta">
-              <span>{{ clinicName }}</span>
-              <span>{{ membershipRoleLabel }}</span>
-              <span>{{ planDefinition?.name ?? "Plan sin definir" }}</span>
-            </div>
-
             <div class="dashboard-hero__actions">
               <BaseButton @click="router.push('/appointments')">
                 Abrir modulo de reservas
@@ -244,7 +230,7 @@ onMounted(() => {
                 <strong>{{ nextAppointment.pacienteNombre || `Paciente #${nextAppointment.pacienteId}` }}</strong>
                 <p>{{ formatAppointmentMoment(nextAppointment) }}</p>
                 <div class="dashboard-highlight-card__meta">
-                  <span>{{ `Sala #${nextAppointment.salaId}` }}</span>
+                  <span>{{ nextAppointment.salaNombre || `Sala #${nextAppointment.salaId}` }}</span>
                   <span>{{ nextAppointment.tipoConsulta }}</span>
                   <span class="status-badge" :class="`status-badge--${nextAppointment.estado}`">
                     {{ nextAppointment.estado }}
@@ -258,7 +244,7 @@ onMounted(() => {
               </template>
             </article>
 
-            <article class="dashboard-plan-card">
+            <article v-if="isAdminUser" class="dashboard-plan-card">
               <p class="dashboard-panel__eyebrow">Plan activo</p>
               <strong>{{ planDefinition?.name ?? "Sin plan disponible" }}</strong>
               <p class="dashboard-plan-card__status">
@@ -318,43 +304,13 @@ onMounted(() => {
                 </div>
                 <div class="dashboard-appointment-item__meta">
                   <span>{{ formatAppointmentMoment(appointment) }}</span>
-                  <span>{{ `Sala #${appointment.salaId}` }}</span>
+                  <span>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</span>
                 </div>
               </li>
             </ul>
             <p v-else class="dashboard-state">
               No hay reservas futuras registradas todavia.
             </p>
-          </article>
-
-          <article class="dashboard-panel">
-            <div class="dashboard-panel__heading">
-              <div>
-                <p class="dashboard-panel__eyebrow">Accesos</p>
-                <h2>Atajos utiles</h2>
-              </div>
-            </div>
-
-            <div class="dashboard-shortcuts">
-              <RouterLink class="shortcut-card" to="/appointments">
-                <strong>Reservas</strong>
-                <span>CRUD completo, filtros y agenda operativa.</span>
-              </RouterLink>
-
-              <RouterLink class="shortcut-card" to="/patients">
-                <strong>Pacientes</strong>
-                <span>Busqueda rapida y alta de nuevos registros.</span>
-              </RouterLink>
-
-              <button
-                type="button"
-                class="shortcut-card shortcut-card--button"
-                @click="fetchAppointments"
-              >
-                <strong>Refrescar datos</strong>
-                <span>Vuelve a consultar reservas del workspace actual.</span>
-              </button>
-            </div>
           </article>
 
           <article class="dashboard-panel dashboard-panel--wide">
@@ -386,30 +342,6 @@ onMounted(() => {
             <p v-else class="dashboard-state">
               Aun no hay actividad para mostrar.
             </p>
-          </article>
-
-          <article class="dashboard-panel">
-            <div class="dashboard-panel__heading">
-              <div>
-                <p class="dashboard-panel__eyebrow">Contexto</p>
-                <h2>Sesion actual</h2>
-              </div>
-            </div>
-
-            <div class="dashboard-session">
-              <div>
-                <span>Usuario</span>
-                <strong>{{ authStore.user?.nombre ?? "Sin usuario" }}</strong>
-              </div>
-              <div>
-                <span>Correo</span>
-                <strong>{{ authStore.user?.correo ?? "Sin correo" }}</strong>
-              </div>
-              <div>
-                <span>Workspace slug</span>
-                <strong>{{ authStore.workspace?.slug ?? "sin-slug" }}</strong>
-              </div>
-            </div>
           </article>
         </section>
       </main>
@@ -481,20 +413,6 @@ onMounted(() => {
   margin: 0;
   max-width: 56ch;
   color: var(--text-soft);
-}
-
-.dashboard-hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.dashboard-hero__meta span {
-  padding: 0.65rem 0.9rem;
-  border-radius: 999px;
-  background: rgba(245, 249, 250, 0.92);
-  color: var(--text-soft);
-  border: 1px solid rgba(111, 145, 153, 0.16);
 }
 
 .dashboard-hero__actions {
@@ -656,37 +574,6 @@ onMounted(() => {
   font-size: 0.92rem;
 }
 
-.dashboard-shortcuts {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.shortcut-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1rem;
-  border-radius: 18px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 248, 249, 0.86));
-  border: 1px solid rgba(111, 145, 153, 0.16);
-  color: var(--text);
-  text-align: left;
-}
-
-.shortcut-card strong {
-  color: var(--primary-dark);
-}
-
-.shortcut-card span {
-  color: var(--text-soft);
-}
-
-.shortcut-card--button {
-  cursor: pointer;
-  font: inherit;
-}
-
 .dashboard-history-item {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
@@ -697,26 +584,6 @@ onMounted(() => {
   padding: 0.75rem 0.9rem;
   border-radius: 16px;
   background: rgba(47, 122, 134, 0.08);
-}
-
-.dashboard-session {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.dashboard-session div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.95rem 1rem;
-  border-radius: 18px;
-  background: rgba(247, 251, 252, 0.88);
-  border: 1px solid rgba(111, 145, 153, 0.14);
-}
-
-.dashboard-session span {
-  color: var(--text-soft);
-  font-size: 0.9rem;
 }
 
 .status-badge {
@@ -758,6 +625,14 @@ onMounted(() => {
   .dashboard-panel,
   .dashboard-stat-card {
     border-radius: 22px;
+  }
+
+  .dashboard-hero__actions {
+    width: 100%;
+  }
+
+  .dashboard-hero__actions :deep(.base-button) {
+    width: 100%;
   }
 
   .dashboard-panel__heading,

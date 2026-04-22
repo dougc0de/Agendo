@@ -10,6 +10,7 @@ import {
     crearWorkspace,
     buscarWorkspacePorSlug
 } from "../repositories/workspaceRepository.js";
+import { crearSucursal } from "../repositories/sucursalRepository.js";
 import {
     crearWorkspaceMember,
     buscarSesionActivaPorUsuarioId
@@ -94,6 +95,7 @@ function createAuthToken(sessionRow) {
     return jwt.sign(
         {
             userId: sessionRow.user_id,
+            userRole: sessionRow.user_rol,
             correo: sessionRow.user_correo,
             workspaceId: sessionRow.workspace_id,
             membershipRole: sessionRow.membership_role,
@@ -291,12 +293,25 @@ export async function signupWorkspaceOwner(payload) {
                 client
             );
 
+            const sucursalPrincipal = await crearSucursal(
+                {
+                    workspaceId: workspace.id,
+                    nombre: "Sucursal principal",
+                    codigo: "principal",
+                    direccion: clinic.direccion,
+                    telefono: clinic.telefono,
+                    estado: "activa"
+                },
+                client
+            );
+
             await crearWorkspaceMember(
                 {
                     workspaceId: workspace.id,
                     usuarioId: user.id,
                     role: "owner",
-                    estado: "activo"
+                    estado: "activo",
+                    sucursalId: sucursalPrincipal.id
                 },
                 client
             );

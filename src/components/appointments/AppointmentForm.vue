@@ -24,6 +24,10 @@ const props = defineProps({
     currentUserId: {
         type: Number,
         default: 0
+    },
+    rooms: {
+        type: Array,
+        default: () => []
     }
 });
 
@@ -38,7 +42,7 @@ function createDefaultForm() {
         estado: "pendiente",
         tipoConsulta: "",
         usuarioId: Number(props.currentUserId) || null,
-        salaId: 1
+        salaId: null
     };
 }
 
@@ -76,6 +80,7 @@ const patientResults = ref([]);
 const patientSearching = ref(false);
 const patientSearchError = ref("");
 const patientValidationError = ref("");
+const formValidationError = ref("");
 const selectedPatient = ref(null);
 
 let patientSearchTimeout = null;
@@ -86,6 +91,15 @@ function clearPatientSearchTimer() {
         window.clearTimeout(patientSearchTimeout);
         patientSearchTimeout = null;
     }
+}
+
+function resolveDefaultRoomId() {
+    return Number(props.rooms[0]?.id ?? 0) || null;
+}
+
+function hasValidRoomId(value) {
+    const roomId = Number(value);
+    return Number.isInteger(roomId) && roomId > 0;
 }
 
 function resetPatientState() {
@@ -109,6 +123,11 @@ function syncForm() {
         form.usuarioId = Number(props.currentUserId) || null;
     }
 
+    if (!hasValidRoomId(form.salaId)) {
+        form.salaId = resolveDefaultRoomId();
+    }
+
+    formValidationError.value = "";
     resetPatientState();
 }
 
@@ -130,6 +149,16 @@ watch(
             newPatient.tipoProcedimiento = value ?? "";
         }
     }
+);
+
+watch(
+    () => props.rooms,
+    () => {
+        if (!hasValidRoomId(form.salaId)) {
+            form.salaId = resolveDefaultRoomId();
+        }
+    },
+    { deep: true, immediate: true }
 );
 
 watch(patientSearch, (value) => {
@@ -279,7 +308,21 @@ function buildPatientPayload() {
 }
 
 function handleSubmit() {
+    formValidationError.value = "";
     patientValidationError.value = "";
+
+    if (!props.rooms.length) {
+        formValidationError.value =
+            "Aun no hay salas disponibles para reservar en este workspace.";
+        return;
+    }
+
+    if (!hasValidRoomId(form.salaId)) {
+        formValidationError.value =
+            "Selecciona una sala disponible antes de guardar la reserva.";
+        return;
+    }
+
     const paciente = buildPatientPayload();
 
     if (!paciente) {
@@ -303,14 +346,28 @@ function handleSubmit() {
 <template>
   <form class="appointment-form" @submit.prevent="handleSubmit">
     <div class="appointment-form__grid">
-      <BaseInput
-        :model-value="form.salaId"
-        label="ID de sala"
-        type="number"
-        min="1"
-        :required="true"
-        @update:model-value="form.salaId = $event"
-      />
+      <label class="appointment-form__field appointment-form__field--compact">
+        <span class="appointment-form__label">
+          Sala
+          <span class="appointment-form__required">*</span>
+        </span>
+        <select
+          v-model="form.salaId"
+          class="appointment-form__select"
+          :disabled="!props.rooms.length"
+        >
+          <option :value="null" disabled>
+            {{ props.rooms.length ? "Selecciona una sala" : "No hay salas disponibles" }}
+          </option>
+          <option
+            v-for="room in props.rooms"
+            :key="room.id"
+            :value="room.id"
+          >
+            {{ room.nombre }} · {{ room.tipo }} · {{ room.sucursalNombre || "Sucursal sin nombre" }}
+          </option>
+        </select>
+      </label>
       <BaseInput
         :model-value="form.fecha"
         label="Fecha"
@@ -355,6 +412,10 @@ function handleSubmit() {
         </select>
       </label>
     </div>
+
+    <p v-if="!props.rooms.length" class="appointment-form__helper">
+      No hay salas listas para reservar todavia. Un administrador debe crear al menos una.
+    </p>
 
     <section class="appointment-form__patient-panel">
       <div class="appointment-form__patient-header">
@@ -542,6 +603,10 @@ function handleSubmit() {
         </p>
       </div>
     </div>
+
+    <p v-if="formValidationError" class="appointment-form__error">
+      {{ formValidationError }}
+    </p>
 
     <p v-if="props.errorMessage" class="appointment-form__error">
       {{ props.errorMessage }}

@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import pacienteRoutes from "./routes/pacienteRoutes.js";
 import reservaRoutes from "./routes/reservaRoutes.js";
+import salaRoutes from "./routes/salaRoutes.js";
+import sucursalRoutes from "./routes/sucursalRoutes.js";
 
 
 dotenv.config();
@@ -24,8 +26,9 @@ app.get("/", (req, res) => {
 app.use("/auth", authRoutes);
 app.use("/pacientes", pacienteRoutes);
 app.use("/reservas", reservaRoutes);
+app.use("/salas", salaRoutes);
+app.use("/sucursales", sucursalRoutes);
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
-

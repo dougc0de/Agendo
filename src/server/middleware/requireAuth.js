@@ -40,6 +40,7 @@ export function requireAuth(req, res, next) {
 
         req.auth = {
             userId,
+            userRole: decoded.userRole ?? null,
             correo: decoded.correo ?? null,
             workspaceId,
             membershipRole: decoded.membershipRole ?? null,

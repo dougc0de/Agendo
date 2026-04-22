@@ -4,15 +4,16 @@ export async function crearWorkspaceMember(datosWorkspaceMember, executor = pool
     const { rows } = await executor.query(
         `
             INSERT INTO workspace_members
-                (workspace_id, usuario_id, role, estado)
-            VALUES ($1, $2, $3, $4)
+                (workspace_id, usuario_id, role, estado, sucursal_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
         `,
         [
             datosWorkspaceMember.workspaceId,
             datosWorkspaceMember.usuarioId,
             datosWorkspaceMember.role,
-            datosWorkspaceMember.estado ?? "activo"
+            datosWorkspaceMember.estado ?? "activo",
+            datosWorkspaceMember.sucursalId ?? null
         ]
     );
 

@@ -100,10 +100,11 @@ async function submitSignup(payload) {
 }
 
 .signup-main {
+  width: 100%;
   display: grid;
-  grid-template-columns: 1fr minmax(360px, 560px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 560px);
   gap: 1.5rem;
-  padding: 2rem;
+  padding: 2rem max(1.25rem, 3vw);
   min-height: calc(100vh - 160px);
   background-image:
     linear-gradient(rgba(217, 238, 248, 0.86), rgba(217, 238, 248, 0.92)),
@@ -171,6 +172,7 @@ async function submitSignup(payload) {
 }
 
 .signup-card {
+  width: 100%;
   align-self: center;
   box-shadow: var(--shadow);
 }

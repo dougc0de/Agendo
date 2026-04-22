@@ -4,6 +4,7 @@ import LoginView from "../views/LoginView.vue";
 import DashboardView from "../views/DashboardView.vue";
 import AppointmentsView from "../views/AppointmentsView.vue";
 import PatientsView from "../views/PatientsView.vue";
+import BranchesView from "../views/BranchesView.vue";
 import SignupView from "../views/SignupView.vue";
 
 function hasSession() {
@@ -27,6 +28,12 @@ const router = createRouter({
             path: "/dashboard",
             name: "dashboard",
             component: DashboardView,
+            meta: { requiresAuth: true }
+        },
+        {
+            path: "/branches",
+            name: "branches",
+            component: BranchesView,
             meta: { requiresAuth: true }
         },
         {
