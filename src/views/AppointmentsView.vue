@@ -164,26 +164,26 @@ const nextVisibleAppointment = computed(() =>
         })[0] ?? null
 );
 
+const canceledAppointments = computed(
+    () => appointments.value.filter((appointment) => appointment.estado === "cancelada").length
+);
+
 const statCards = computed(() => [
     {
         label: "Total",
-        value: totalAppointments.value,
-        detail: "Todas las reservas del workspace"
+        value: totalAppointments.value
     },
     {
         label: "Pendientes",
-        value: pendingAppointments.value,
-        detail: "Requieren seguimiento"
+        value: pendingAppointments.value
     },
     {
         label: "Confirmadas",
-        value: confirmedAppointments.value,
-        detail: "Bloques cerrados"
+        value: confirmedAppointments.value
     },
     {
-        label: "Visibles",
-        value: filteredAppointments.value.length,
-        detail: "Resultado actual de tus filtros"
+        label: "Canceladas",
+        value: canceledAppointments.value
     }
 ]);
 
@@ -196,7 +196,7 @@ function openCreateModal() {
         if (isAdminUser.value) {
             shouldOpenReservationAfterRoomCreate.value = true;
             openCreateRoomModal(
-                "Primero crea una sala para poder agendar una reserva en este workspace."
+                "Primero crea una sala para poder agendar una reserva en esta cuenta."
             );
         } else {
             pageError.value =
@@ -432,13 +432,13 @@ onMounted(() => {
       <AppNavbar
         :links="navLinks"
         brand-href="/dashboard"
-        action-label="Nueva Reserva"
+        action-label="Cerrar Sesion"
         :show-profile-icon="true"
-        @action="openCreateModal"
+        @action="logout"
       />
 
       <main class="appointments-main section-shell">
-        <section class="appointments-hero">
+        <section v-reveal class="appointments-hero">
           <div>
             <span class="appointments-eyebrow">Operacion diaria</span>
             <h1>Reservas y disponibilidad</h1>
@@ -462,37 +462,30 @@ onMounted(() => {
             <BaseButton variant="ghost" @click="fetchAppointments">
               Actualizar datos
             </BaseButton>
-            <BaseButton variant="ghost" @click="logout">
-              Cerrar sesion
-            </BaseButton>
           </div>
         </section>
 
-        <section class="appointments-stats">
+        <section class="appointments-stats stats-strip">
           <article
             v-for="card in statCards"
             :key="card.label"
+            v-reveal="{ delay: 60 }"
             class="appointments-stat-card"
           >
             <span>{{ card.label }}</span>
             <strong>{{ card.value }}</strong>
-            <small>{{ card.detail }}</small>
           </article>
         </section>
 
         <section class="appointments-layout">
           <div class="appointments-content">
-            <article class="appointments-panel">
+            <article v-reveal class="appointments-panel">
               <div class="appointments-panel__header">
                 <div>
                   <span class="appointments-panel__eyebrow">Panel principal</span>
-                  <h2>Agenda del workspace</h2>
+                  <h2>Agenda de la cuenta</h2>
                   <p>Usa los filtros para localizar una reserva antes de editarla.</p>
                 </div>
-
-                <BaseButton size="sm" @click="openCreateModal">
-                  Nueva reserva
-                </BaseButton>
               </div>
 
               <AppointmentFilters
@@ -522,7 +515,7 @@ onMounted(() => {
           </div>
 
           <aside class="appointments-side">
-            <article class="appointments-side__card">
+            <article v-reveal="100" class="appointments-side__card">
               <span class="appointments-panel__eyebrow">Proxima visible</span>
               <template v-if="nextVisibleAppointment">
                 <h3>{{ nextVisibleAppointment.pacienteNombre || `Paciente #${nextVisibleAppointment.pacienteId}` }}</h3>
@@ -539,13 +532,13 @@ onMounted(() => {
               </template>
             </article>
 
-            <article class="appointments-side__card">
+            <article v-reveal="140" class="appointments-side__card">
               <span class="appointments-panel__eyebrow">Guia rapida</span>
               <ul class="appointments-side__list">
-                <li>Busca al paciente primero si ya existe en el workspace.</li>
+                <li>Busca al paciente primero si ya existe en la cuenta.</li>
                 <li>Crea el paciente dentro del modal solo cuando haga falta.</li>
                 <li>La sala se elige desde un dropdown, ya no con IDs manuales.</li>
-                <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro del workspace.</li>
+                <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro de la cuenta.</li>
                 <li v-else>Si no hay salas disponibles, solicita apoyo a un administrador.</li>
               </ul>
             </article>
@@ -603,8 +596,8 @@ onMounted(() => {
 .appointments-panel,
 .appointments-side__card {
   border-radius: 26px;
-  border: 1px solid rgba(111, 145, 153, 0.18);
-  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(47, 110, 240, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
 }
 
@@ -614,6 +607,10 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.45rem;
+  background:
+    radial-gradient(circle at top left, rgba(16, 135, 154, 0.12), transparent 42%),
+    radial-gradient(circle at top right, rgba(47, 110, 240, 0.09), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 249, 255, 0.92));
 }
 
 .appointments-eyebrow,
@@ -621,7 +618,7 @@ onMounted(() => {
   display: inline-flex;
   padding: 0.38rem 0.78rem;
   border-radius: 999px;
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -709,7 +706,7 @@ onMounted(() => {
 }
 
 .appointments-feedback {
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.08));
   color: var(--primary-dark);
 }
 
@@ -733,8 +730,8 @@ onMounted(() => {
 .appointments-side__meta span {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
-  background: rgba(247, 251, 252, 0.96);
-  border: 1px solid rgba(111, 145, 153, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
+  border: 1px solid rgba(47, 110, 240, 0.1);
   color: var(--text-soft);
 }
 
@@ -747,7 +744,6 @@ onMounted(() => {
 }
 
 @media (max-width: 980px) {
-  .appointments-stats,
   .appointments-layout {
     grid-template-columns: 1fr;
   }

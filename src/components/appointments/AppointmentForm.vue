@@ -313,7 +313,7 @@ function handleSubmit() {
 
     if (!props.rooms.length) {
         formValidationError.value =
-            "Aun no hay salas disponibles para reservar en este workspace.";
+            "Aun no hay salas disponibles para reservar en esta cuenta.";
         return;
     }
 

@@ -57,23 +57,19 @@ const summaryCards = computed(() => {
     return [
         {
             label: "Sucursales",
-            value: branches.value.length,
-            detail: "Total registradas en el workspace"
+            value: branches.value.length
         },
         {
             label: "Activas",
-            value: activeBranches.value.length,
-            detail: "Sedes listas para operar"
+            value: activeBranches.value.length
         },
         {
             label: "Salas asociadas",
-            value: totalRooms,
-            detail: "Conteo total agrupado por sucursal"
+            value: totalRooms
         },
         {
             label: "Usuarios asociados",
-            value: totalUsers,
-            detail: "Miembros asignados a una sede"
+            value: totalUsers
         }
     ];
 });
@@ -193,16 +189,16 @@ onMounted(() => {
       <AppNavbar
         :links="navLinks"
         brand-href="/dashboard"
-        action-label="Nueva Sucursal"
+        action-label="Cerrar Sesion"
         :show-profile-icon="true"
-        @action="openCreateModal"
+        @action="logout"
       />
 
       <main class="branches-main section-shell">
-        <section class="branches-hero">
+        <section v-reveal class="branches-hero">
           <div>
             <span class="branches-eyebrow">Organizacion territorial</span>
-            <h1>Sucursales del workspace</h1>
+            <h1>Sucursales de la cuenta</h1>
             <p>
               Organiza salas y equipo por sede, con una vista clara para crear, editar y
               controlar el estado operativo de cada sucursal.
@@ -216,35 +212,29 @@ onMounted(() => {
             <BaseButton variant="ghost" @click="fetchBranches">
               Actualizar
             </BaseButton>
-            <BaseButton variant="ghost" @click="logout">
-              Cerrar sesion
-            </BaseButton>
           </div>
         </section>
 
-        <section class="branches-stats">
+        <section class="branches-stats stats-strip">
           <article
             v-for="card in summaryCards"
             :key="card.label"
+            v-reveal="{ delay: 60 }"
             class="branches-stat-card"
           >
             <span>{{ card.label }}</span>
             <strong>{{ card.value }}</strong>
-            <small>{{ card.detail }}</small>
           </article>
         </section>
 
         <section class="branches-layout">
-          <article class="branches-panel">
+          <article v-reveal class="branches-panel">
             <div class="branches-panel__header">
               <div>
                 <span class="branches-panel__eyebrow">Mapa de sedes</span>
                 <h2>Operacion por sucursal</h2>
-                <p>La tabla resume salas, usuarios y estado de cada sede del workspace.</p>
+                <p>La tabla resume salas, usuarios y estado de cada sede de la cuenta.</p>
               </div>
-              <BaseButton size="sm" @click="openCreateModal">
-                Nueva sucursal
-              </BaseButton>
             </div>
 
             <p v-if="feedback" class="branches-feedback">{{ feedback }}</p>
@@ -260,9 +250,9 @@ onMounted(() => {
           </article>
 
           <aside class="branches-side">
-            <article class="branches-side__card">
-              <span class="branches-panel__eyebrow">Workspace</span>
-              <h3>{{ authStore.workspace?.nombre ?? "AGENDO" }}</h3>
+            <article v-reveal="100" class="branches-side__card">
+              <span class="branches-panel__eyebrow">Cuenta</span>
+              <h3>{{ authStore.workspace?.nombre ?? "Cuenta AGENDO" }}</h3>
               <p>{{ authStore.workspace?.clinicName ?? "Clinica principal" }}</p>
               <div class="branches-side__chips">
                 <span>{{ activeBranches.length }} activas</span>
@@ -270,7 +260,7 @@ onMounted(() => {
               </div>
             </article>
 
-            <article class="branches-side__card">
+            <article v-reveal="140" class="branches-side__card">
               <span class="branches-panel__eyebrow">Sucursal destacada</span>
               <template v-if="principalBranch">
                 <h3>{{ principalBranch.nombre }}</h3>
@@ -283,15 +273,15 @@ onMounted(() => {
               </template>
               <template v-else>
                 <h3>No hay sucursal principal visible</h3>
-                <p>Crea la primera sede o actualiza la migracion del workspace.</p>
+                <p>Crea la primera sede o actualiza la migracion de la cuenta.</p>
               </template>
             </article>
 
-            <article class="branches-side__card">
+            <article v-reveal="180" class="branches-side__card">
               <span class="branches-panel__eyebrow">Reglas</span>
               <ul class="branches-side__list">
                 <li>El codigo se normaliza en minusculas para mantenerlo consistente.</li>
-                <li>No se puede desactivar la unica sucursal activa del workspace.</li>
+                <li>No se puede desactivar la unica sucursal activa de la cuenta.</li>
                 <li>Una sucursal con salas activas debe reorganizarse antes de inactivarse.</li>
               </ul>
             </article>
@@ -305,7 +295,7 @@ onMounted(() => {
     <BaseModal
       :open="modalOpen"
       :title="modalTitle"
-      description="Crea o actualiza una sede operativa del workspace."
+      description="Crea o actualiza una sede operativa de la cuenta."
       @close="closeModal"
     >
       <BranchForm
@@ -332,8 +322,8 @@ onMounted(() => {
 .branches-panel,
 .branches-side__card {
   border-radius: 26px;
-  border: 1px solid rgba(111, 145, 153, 0.18);
-  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(47, 110, 240, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
 }
 
@@ -343,6 +333,10 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.45rem;
+  background:
+    radial-gradient(circle at top left, rgba(16, 135, 154, 0.12), transparent 42%),
+    radial-gradient(circle at top right, rgba(47, 110, 240, 0.09), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 249, 255, 0.92));
 }
 
 .branches-eyebrow,
@@ -350,7 +344,7 @@ onMounted(() => {
   display: inline-flex;
   padding: 0.38rem 0.78rem;
   border-radius: 999px;
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -434,7 +428,7 @@ onMounted(() => {
 }
 
 .branches-feedback {
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.08));
   color: var(--primary-dark);
 }
 
@@ -458,8 +452,8 @@ onMounted(() => {
 .branches-side__chips span {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
-  background: rgba(247, 251, 252, 0.96);
-  border: 1px solid rgba(111, 145, 153, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
+  border: 1px solid rgba(47, 110, 240, 0.1);
   color: var(--text-soft);
   text-transform: capitalize;
 }
@@ -473,7 +467,6 @@ onMounted(() => {
 }
 
 @media (max-width: 980px) {
-  .branches-stats,
   .branches-layout {
     grid-template-columns: 1fr;
   }

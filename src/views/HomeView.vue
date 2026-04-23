@@ -97,9 +97,9 @@ function submitContact() {
       />
 
       <main>
-        <section class="hero-section">
+        <section v-reveal class="hero-section">
           <div class="hero-grid section-shell">
-            <div class="hero-copy">
+            <div v-reveal class="hero-copy">
               <span class="hero-eyebrow">Gestion clinica con ritmo real</span>
               <h1>Administra salas y disponibilidad con una experiencia mas clara y profesional.</h1>
 
@@ -109,7 +109,7 @@ function submitContact() {
                   Iniciar Sesion
                 </BaseButton>
                 <BaseButton variant="ghost" @click="goToSignup">
-                  Crear workspace
+                  Crear Cuenta
                 </BaseButton>
               </div>
 
@@ -121,7 +121,7 @@ function submitContact() {
 
             </div>
 
-            <div class="hero-visual">
+            <div v-reveal="120" class="hero-visual">
               <div class="hero-visual__shape hero-visual__shape--one"></div>
               <div class="hero-visual__shape hero-visual__shape--two"></div>
 
@@ -147,7 +147,7 @@ function submitContact() {
           </div>
         </section>
 
-        <section id="servicios" class="section-block section-shell">
+        <section id="servicios" v-reveal class="section-block section-shell">
           <div class="section-heading">
             <span class="section-label">Servicios</span>
             <h2>Funciones clave para una operacion que se siente bajo control</h2>
@@ -161,6 +161,7 @@ function submitContact() {
             <article
               v-for="service in serviceItems"
               :key="service.title"
+              v-reveal="{ delay: 70 }"
               class="service-card"
             >
               <div class="service-card__visual" :class="service.visualClass">
@@ -174,7 +175,7 @@ function submitContact() {
 
         <Divisor />
 
-        <section id="sobre" class="section-block section-shell section-block--about">
+        <section id="sobre" v-reveal class="section-block section-shell section-block--about">
           <div class="section-heading section-heading--left">
             <span class="section-label">Sobre Nosotros</span>
             <div class="about-intro">
@@ -187,7 +188,7 @@ function submitContact() {
           </div>
 
           <div class="about-grid">
-            <article class="info-panel">
+            <article v-reveal class="info-panel">
               <h3>Nuestra mision</h3>
               <p class="textinfo">
                 AGENDO tiene como mision facilitar la gestion de salas dentro de entornos
@@ -198,7 +199,7 @@ function submitContact() {
               </p>
             </article>
 
-            <article class="calendar-panel">
+            <article v-reveal="100" class="calendar-panel">
               <div class="calendar-panel__card">
                 <div class="calendar-panel__header">
                   <span>Sep</span>
@@ -212,7 +213,7 @@ function submitContact() {
               </div>
             </article>
 
-            <article class="vision-strip">
+            <article v-reveal="140" class="vision-strip">
               <div class="vision-strip__art">
                 <img :src="calend" alt="Calendario operativo de AGENDO" />
               </div>
@@ -227,7 +228,7 @@ function submitContact() {
               </div>
             </article>
 
-            <article class="founder-card">
+            <article v-reveal="180" class="founder-card">
               <div class="founder-card__copy">
                 <h3>Quien esta detras</h3>
                 <p class="textinfo">
@@ -251,7 +252,7 @@ function submitContact() {
 
         <Divisor />
 
-        <section id="contacto" class="section-block section-shell section-block--contact">
+        <section id="contacto" v-reveal class="section-block section-shell section-block--contact">
           <div class="section-heading">
             <span class="section-label">Contacto</span>
             <h2>Necesita acceso o mas informacion?</h2>

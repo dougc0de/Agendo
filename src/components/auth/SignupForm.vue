@@ -92,7 +92,7 @@ function handleSubmit() {
     <section class="signup-form__section">
       <div class="signup-form__section-heading">
         <h3>Datos de la clinica</h3>
-        <p>Usaremos esta informacion para crear tu workspace inicial.</p>
+        <p>Usaremos esta informacion para crear tu cuenta inicial.</p>
       </div>
 
       <div class="signup-form__grid">

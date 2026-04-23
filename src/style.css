@@ -2,37 +2,42 @@
   font-family: "Aptos", "Segoe UI", "Trebuchet MS", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #16313c;
+  color: #123241;
   background:
-    radial-gradient(circle at top left, #eff8f8 0%, #f7fbfd 54%, #eef4f7 100%);
+    radial-gradient(circle at top left, #edf9fb 0%, #f7fbff 48%, #eef3ff 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   --page-bg:
-    radial-gradient(circle at top left, #eef8f8 0%, #f7fbfd 52%, #eef4f7 100%);
+    radial-gradient(circle at top left, rgba(16, 135, 154, 0.1), transparent 22%),
+    radial-gradient(circle at top right, rgba(47, 110, 240, 0.08), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(255, 141, 98, 0.08), transparent 20%),
+    linear-gradient(180deg, #f5fbff 0%, #eef7fb 54%, #f4f6ff 100%);
   --surface: #ffffff;
-  --surface-muted: #f4f8fa;
-  --primary: #2f7a86;
-  --primary-dark: #1f5a63;
-  --primary-light: #78aab3;
-  --secondary: #3f9b6d;
-  --secondary-dark: #28724d;
-  --accent: #f29f38;
-  --text: #16313c;
-  --text-soft: #58707a;
-  --text-muted: #88a0a9;
-  --border: #d7e5e8;
-  --border-light: #edf3f5;
+  --surface-muted: #f3f8fb;
+  --surface-elevated: rgba(255, 255, 255, 0.92);
+  --primary: #10879a;
+  --primary-dark: #0b5b69;
+  --primary-light: #87d3df;
+  --secondary: #2f6ef0;
+  --secondary-dark: #1e4fb7;
+  --accent: #ff8d62;
+  --accent-dark: #da6c43;
+  --text: #123241;
+  --text-soft: #5a7281;
+  --text-muted: #8ba0ad;
+  --border: #d8e7ec;
+  --border-light: #edf4f8;
   --danger: #cf5348;
-  --warning: #f29f38;
-  --success: #3f9b6d;
-  --shadow: 0 12px 30px rgba(16, 38, 44, 0.08);
-  --shadow-hover: 0 18px 42px rgba(16, 38, 44, 0.12);
-  --shadow-strong: 0 24px 60px rgba(16, 38, 44, 0.16);
-  --transition-fast: 0.2s ease;
-  --transition-normal: 0.3s ease;
-  --transition-slow: 0.5s ease;
+  --warning: #ff9b52;
+  --success: #31a07b;
+  --shadow: 0 14px 32px rgba(14, 39, 58, 0.08);
+  --shadow-hover: 0 22px 50px rgba(14, 39, 58, 0.14);
+  --shadow-strong: 0 28px 70px rgba(14, 39, 58, 0.18);
+  --transition-fast: 0.24s ease;
+  --transition-normal: 0.36s ease;
+  --transition-slow: 0.62s ease;
   --border-radius: 14px;
   --border-radius-large: 26px;
   --shell-max-width: 100%;
@@ -41,6 +46,7 @@
   --section-padding-desktop: 2.75rem 2rem;
   --section-padding-mobile: 2rem 1.25rem;
   --section-padding-narrow: 1.5rem 0.9rem;
+  --reveal-distance: 28px;
 }
 
 *,
@@ -95,6 +101,21 @@ button:hover,
   animation: slideUp var(--transition-slow) ease-out;
 }
 
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translate3d(0, var(--reveal-distance), 0);
+  transition:
+    opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -118,7 +139,7 @@ button:hover,
 }
 
 ::selection {
-  background: rgba(47, 122, 134, 0.18);
+  background: rgba(47, 110, 240, 0.16);
   color: var(--text);
 }
 
@@ -227,6 +248,14 @@ video {
   overflow-x: auto;
 }
 
+.stats-strip {
+  min-width: 0;
+}
+
+.stats-strip > * {
+  min-width: 0;
+}
+
 .min-w-0 {
   min-width: 0;
 }
@@ -241,6 +270,10 @@ video {
   .grid-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .stats-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
 
 @media (max-width: 760px) {
@@ -253,10 +286,47 @@ video {
   .grid-4 {
     grid-template-columns: 1fr;
   }
+
+  .stats-strip {
+    display: grid !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: minmax(220px, 84vw) !important;
+    grid-template-columns: none !important;
+    gap: 0.9rem;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-color: rgba(16, 135, 154, 0.34) transparent;
+    padding-bottom: 0.35rem;
+    scrollbar-width: thin;
+  }
+
+  .stats-strip > * {
+    scroll-snap-align: start;
+  }
 }
 
 @media (max-width: 480px) {
   .section-shell {
     padding: var(--section-padding-narrow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .reveal-on-scroll {
+    opacity: 1;
+    transform: none;
   }
 }

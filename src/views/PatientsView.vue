@@ -35,20 +35,15 @@ const creating = ref(false);
 const summaryCards = computed(() => [
     {
         label: "Resultados",
-        value: searchedOnce.value ? patients.value.length : "--",
-        detail: searchedOnce.value
-            ? "Pacientes devueltos por la busqueda actual"
-            : "Ejecuta una busqueda para empezar"
+        value: searchedOnce.value ? patients.value.length : "--"
     },
     {
         label: "Ultimo alta",
-        value: latestPatient.value?.nombre ?? "Sin registro nuevo",
-        detail: latestPatient.value?.telefono ?? "Registra un paciente desde este modulo"
+        value: latestPatient.value?.nombre ?? "Sin registro nuevo"
     },
     {
-        label: "Workspace",
-        value: authStore.workspace?.nombre ?? "AGENDO",
-        detail: authStore.workspace?.clinicName ?? "Clinica activa"
+        label: "Cuenta",
+        value: authStore.workspace?.nombre ?? "Cuenta AGENDO"
     }
 ]);
 
@@ -131,13 +126,13 @@ onMounted(() => {
       <AppNavbar
         :links="navLinks"
         brand-href="/dashboard"
-        action-label="Nuevo Paciente"
+        action-label="Cerrar Sesion"
         :show-profile-icon="true"
-        @action="modalOpen = true"
+        @action="logout"
       />
 
       <main class="patients-main section-shell">
-        <section class="patients-hero">
+        <section v-reveal class="patients-hero">
           <div>
             <span class="patients-eyebrow">Base de pacientes</span>
             <h1>Busqueda y alta rapida</h1>
@@ -151,35 +146,29 @@ onMounted(() => {
             <BaseButton @click="modalOpen = true">
               Registrar paciente
             </BaseButton>
-            <BaseButton variant="ghost" @click="logout">
-              Cerrar sesion
-            </BaseButton>
           </div>
         </section>
 
-        <section class="patients-stats">
+        <section class="patients-stats stats-strip">
           <article
             v-for="card in summaryCards"
             :key="card.label"
+            v-reveal="{ delay: 60 }"
             class="patients-stat-card"
           >
             <span>{{ card.label }}</span>
             <strong>{{ card.value }}</strong>
-            <small>{{ card.detail }}</small>
           </article>
         </section>
 
         <section class="patients-layout">
-          <article class="patients-panel">
+          <article v-reveal class="patients-panel">
             <div class="patients-panel__header">
               <div>
                 <span class="patients-panel__eyebrow">Busqueda</span>
-                <h2>Explorar pacientes del workspace</h2>
+                <h2>Explorar pacientes de la cuenta</h2>
                 <p>La busqueda se ejecuta sobre nombre, telefono y correo.</p>
               </div>
-              <BaseButton size="sm" variant="ghost" @click="modalOpen = true">
-                Nuevo paciente
-              </BaseButton>
             </div>
 
             <form class="patients-search" @submit.prevent="performSearch">
@@ -210,7 +199,7 @@ onMounted(() => {
           </article>
 
           <aside class="patients-side">
-            <article class="patients-side__card">
+            <article v-reveal="100" class="patients-side__card">
               <span class="patients-panel__eyebrow">Alta reciente</span>
               <template v-if="latestPatient">
                 <h3>{{ latestPatient.nombre }}</h3>
@@ -226,7 +215,7 @@ onMounted(() => {
               </template>
             </article>
 
-            <article class="patients-side__card">
+            <article v-reveal="140" class="patients-side__card">
               <span class="patients-panel__eyebrow">Sugerencias</span>
               <ul class="patients-side__list">
                 <li>Busca por telefono si quieres encontrar al paciente mas rapido.</li>
@@ -244,7 +233,7 @@ onMounted(() => {
     <BaseModal
       :open="modalOpen"
       title="Registrar paciente"
-      description="Completa la informacion principal para dejar al paciente listo en el workspace."
+      description="Completa la informacion principal para dejar al paciente listo en la cuenta."
       @close="modalOpen = false; createError = ''"
     >
       <PatientForm
@@ -269,8 +258,8 @@ onMounted(() => {
 .patients-panel,
 .patients-side__card {
   border-radius: 26px;
-  border: 1px solid rgba(111, 145, 153, 0.18);
-  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(47, 110, 240, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
 }
 
@@ -280,6 +269,10 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.45rem;
+  background:
+    radial-gradient(circle at top left, rgba(16, 135, 154, 0.12), transparent 42%),
+    radial-gradient(circle at top right, rgba(47, 110, 240, 0.09), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 249, 255, 0.92));
 }
 
 .patients-eyebrow,
@@ -287,7 +280,7 @@ onMounted(() => {
   display: inline-flex;
   padding: 0.38rem 0.78rem;
   border-radius: 999px;
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -378,7 +371,7 @@ onMounted(() => {
 }
 
 .patients-feedback {
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.08));
   color: var(--primary-dark);
 }
 
@@ -402,8 +395,8 @@ onMounted(() => {
 .patients-side__chips span {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
-  background: rgba(247, 251, 252, 0.96);
-  border: 1px solid rgba(111, 145, 153, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
+  border: 1px solid rgba(47, 110, 240, 0.1);
   color: var(--text-soft);
 }
 
@@ -416,7 +409,6 @@ onMounted(() => {
 }
 
 @media (max-width: 980px) {
-  .patients-stats,
   .patients-layout {
     grid-template-columns: 1fr;
   }

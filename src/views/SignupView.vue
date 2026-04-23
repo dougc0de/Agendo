@@ -47,18 +47,18 @@ async function submitSignup(payload) {
       <AppNavbar :links="navLinks" action-label="Iniciar Sesion" @action="goToLogin" />
 
       <main class="signup-main" :style="{ '--signup-bg': `url(${heroBackground})` }">
-        <section class="signup-copy">
+        <section v-reveal class="signup-copy">
           <span class="signup-copy__eyebrow">AGENDO SaaS</span>
           <h1>Activa tu clinica y empieza a ordenar salas, pacientes y reservas.</h1>
           <p>
-            Crea tu workspace, elige un plan y entra con una cuenta administradora lista
+            Crea tu cuenta, elige un plan y entra con una administracion lista
             para crecer.
           </p>
 
           <div class="signup-copy__highlights">
             <article>
               <strong>Un solo acceso</strong>
-              <span>Tu usuario inicial queda listo como owner del workspace.</span>
+              <span>Tu usuario inicial queda listo como administrador de la cuenta.</span>
             </article>
             <article>
               <strong>Trial inmediato</strong>
@@ -71,7 +71,7 @@ async function submitSignup(payload) {
           </div>
         </section>
 
-        <section class="signup-card">
+        <section v-reveal="120" class="signup-card">
           <SignupForm
             :submitting="signupLoading"
             :error-message="signupError"

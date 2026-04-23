@@ -68,7 +68,7 @@ async function submitLogin() {
 
       <main class="login-main">
         <div class="login-layout">
-          <section class="login-showcase">
+          <section v-reveal class="login-showcase">
             <button type="button" class="login-showcase__brand" @click="goHome">
               <span class="login-showcase__brand-mark">A</span>
               <span class="login-showcase__brand-copy">
@@ -85,7 +85,7 @@ async function submitLogin() {
             </div>
           </section>
 
-          <section class="login-panel">
+          <section v-reveal="120" class="login-panel">
             <div class="login-panel__card">
               <h2>Inicia sesion en tu cuenta</h2>
 
@@ -114,7 +114,7 @@ async function submitLogin() {
               </form>
 
               <div class="login-panel__support">
-                <p>Si necesitas recuperar tu acceso, consulta al owner del workspace.</p>
+                <p>Si necesitas recuperar tu acceso, consulta al administrador de la cuenta.</p>
                 <RouterLink to="/#contacto" class="login-panel__support-link">
                   Ir a contacto
                 </RouterLink>

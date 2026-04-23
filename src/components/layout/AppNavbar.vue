@@ -180,13 +180,16 @@ function isActiveLink(href) {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.5rem;
-  background: rgba(250, 253, 253, 0.92);
-  border-bottom: 1px solid rgba(111, 145, 153, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 250, 255, 0.92)),
+    radial-gradient(circle at top right, rgba(47, 110, 240, 0.08), transparent 30%);
+  border-bottom: 1px solid rgba(47, 110, 240, 0.12);
   backdrop-filter: blur(14px);
   box-shadow: 0 18px 40px rgba(17, 39, 46, 0.08);
   position: sticky;
   top: 0;
   z-index: 30;
+  isolation: isolate;
 }
 
 .navbar__brand {
@@ -203,13 +206,13 @@ function isActiveLink(href) {
   border-radius: 14px;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 60%),
-    linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
   color: #fff;
   display: grid;
   place-items: center;
   font-weight: 800;
   letter-spacing: 0.04em;
-  box-shadow: 0 12px 28px rgba(47, 122, 134, 0.24);
+  box-shadow: 0 14px 30px rgba(24, 103, 173, 0.24);
 }
 
 .navbar__brand-copy {
@@ -220,7 +223,7 @@ function isActiveLink(href) {
 
 .navbar__brand-name {
   letter-spacing: 0.08em;
-  color: var(--primary-dark);
+  color: var(--secondary-dark);
   font-weight: 700;
 }
 
@@ -242,17 +245,20 @@ function isActiveLink(href) {
   font-size: 0.95rem;
   padding: 0.55rem 0.85rem;
   border-radius: 999px;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .navbar__link:hover {
-  color: var(--primary);
-  background: rgba(47, 122, 134, 0.08);
+  color: var(--secondary-dark);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.08), rgba(47, 110, 240, 0.1));
 }
 
 .navbar__link--active {
   color: var(--primary-dark);
-  background: rgba(47, 122, 134, 0.12);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
 }
 
 .navbar__actions {
@@ -268,11 +274,12 @@ function isActiveLink(href) {
 .navbar__profile-icon {
   width: 2rem;
   height: 2rem;
-  border: 1px solid rgba(111, 145, 153, 0.28);
+  border: 1px solid rgba(47, 110, 240, 0.14);
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 247, 252, 0.92));
+  box-shadow: 0 10px 22px rgba(14, 39, 58, 0.08);
 }
 
 .navbar__profile-icon span {
@@ -305,9 +312,9 @@ function isActiveLink(href) {
 }
 
 .navbar__burger {
-  border: 1px solid rgba(111, 145, 153, 0.24);
+  border: 1px solid rgba(47, 110, 240, 0.16);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.86);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 251, 0.92));
   width: 44px;
   height: 44px;
   padding: 0;
@@ -316,6 +323,7 @@ function isActiveLink(href) {
   justify-content: center;
   flex-direction: column;
   gap: 4px;
+  box-shadow: 0 10px 24px rgba(14, 39, 58, 0.08);
 }
 
 .navbar__burger span {
@@ -329,19 +337,20 @@ function isActiveLink(href) {
   display: block;
   padding: 0.95rem 1rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(111, 145, 153, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
+  border: 1px solid rgba(47, 110, 240, 0.12);
   color: var(--text-soft);
   text-align: center;
 }
 
 .navbar__mobile-link:hover {
   color: var(--primary-dark);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.08), rgba(47, 110, 240, 0.1));
 }
 
 .navbar__mobile-link--active {
   color: var(--primary-dark);
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
 }
 
 @media (max-width: 980px) {

@@ -38,7 +38,7 @@ const shortDateFormatter = new Intl.DateTimeFormat("es-CR", {
     month: "short"
 });
 
-const workspaceName = computed(() => authStore.workspace?.nombre ?? "Workspace AGENDO");
+const workspaceName = computed(() => authStore.workspace?.nombre ?? "Cuenta AGENDO");
 const planDefinition = computed(
     () => getPlanDefinition(authStore.subscription?.planCode) ?? null
 );
@@ -148,23 +148,19 @@ const nextAppointment = computed(() => upcomingAppointments.value[0] ?? null);
 const statCards = computed(() => [
     {
         label: "Reservas totales",
-        value: totalAppointments.value,
-        detail: "Panorama general del workspace"
+        value: totalAppointments.value
     },
     {
         label: "Pendientes",
-        value: pendingAppointments.value,
-        detail: "Solicitudes por confirmar"
+        value: pendingAppointments.value
     },
     {
         label: "Confirmadas",
-        value: confirmedAppointments.value,
-        detail: "Bloques ya asegurados"
+        value: confirmedAppointments.value
     },
     {
         label: "Esta semana",
-        value: nextSevenDaysAppointments.value,
-        detail: `${todayAppointments.value} programadas para hoy`
+        value: nextSevenDaysAppointments.value
     }
 ]);
 
@@ -203,8 +199,8 @@ onMounted(() => {
       />
 
       <main class="dashboard-main section-shell">
-        <section class="dashboard-hero">
-          <div class="dashboard-hero__copy">
+        <section v-reveal class="dashboard-hero">
+          <div v-reveal="80" class="dashboard-hero__copy">
             <span class="dashboard-eyebrow">Centro de mando</span>
             <h1>{{ workspaceName }}</h1>
             <p>
@@ -223,7 +219,7 @@ onMounted(() => {
           </div>
 
           <div class="dashboard-hero__side">
-            <article class="dashboard-highlight-card">
+            <article v-reveal="140" class="dashboard-highlight-card">
               <p class="dashboard-panel__eyebrow">Siguiente reserva</p>
 
               <template v-if="nextAppointment">
@@ -244,7 +240,7 @@ onMounted(() => {
               </template>
             </article>
 
-            <article v-if="isAdminUser" class="dashboard-plan-card">
+            <article v-if="isAdminUser" v-reveal="180" class="dashboard-plan-card">
               <p class="dashboard-panel__eyebrow">Plan activo</p>
               <strong>{{ planDefinition?.name ?? "Sin plan disponible" }}</strong>
               <p class="dashboard-plan-card__status">
@@ -262,20 +258,20 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="dashboard-stats">
+        <section class="dashboard-stats stats-strip">
           <article
             v-for="card in statCards"
             :key="card.label"
+            v-reveal="{ delay: 60 }"
             class="dashboard-stat-card"
           >
             <span>{{ card.label }}</span>
             <strong>{{ card.value }}</strong>
-            <small>{{ card.detail }}</small>
           </article>
         </section>
 
         <section class="dashboard-grid">
-          <article class="dashboard-panel dashboard-panel--wide">
+          <article v-reveal class="dashboard-panel dashboard-panel--wide">
             <div class="dashboard-panel__heading">
               <div>
                 <p class="dashboard-panel__eyebrow">Agenda</p>
@@ -313,7 +309,7 @@ onMounted(() => {
             </p>
           </article>
 
-          <article class="dashboard-panel dashboard-panel--wide">
+          <article v-reveal="120" class="dashboard-panel dashboard-panel--wide">
             <div class="dashboard-panel__heading">
               <div>
                 <p class="dashboard-panel__eyebrow">Actividad</p>
@@ -361,9 +357,9 @@ onMounted(() => {
 .dashboard-hero,
 .dashboard-stat-card,
 .dashboard-panel {
-  border: 1px solid rgba(111, 145, 153, 0.18);
+  border: 1px solid rgba(47, 110, 240, 0.12);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.84);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
   backdrop-filter: blur(10px);
 }
@@ -374,8 +370,9 @@ onMounted(() => {
   gap: 1.25rem;
   padding: 1.5rem;
   background:
-    radial-gradient(circle at top left, rgba(151, 214, 214, 0.26), transparent 45%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(244, 250, 251, 0.88));
+    radial-gradient(circle at top left, rgba(16, 135, 154, 0.14), transparent 42%),
+    radial-gradient(circle at top right, rgba(47, 110, 240, 0.1), transparent 38%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.9));
 }
 
 .dashboard-hero__copy {
@@ -390,7 +387,7 @@ onMounted(() => {
   align-self: flex-start;
   padding: 0.4rem 0.8rem;
   border-radius: 999px;
-  background: rgba(47, 122, 134, 0.1);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -430,8 +427,8 @@ onMounted(() => {
 .dashboard-plan-card {
   border-radius: 22px;
   padding: 1.2rem;
-  background: rgba(247, 251, 252, 0.9);
-  border: 1px solid rgba(111, 145, 153, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 248, 252, 0.92));
+  border: 1px solid rgba(47, 110, 240, 0.1);
 }
 
 .dashboard-highlight-card strong,
@@ -459,8 +456,8 @@ onMounted(() => {
 .dashboard-plan-card__limits span {
   padding: 0.45rem 0.7rem;
   border-radius: 999px;
-  background: #fff;
-  border: 1px solid rgba(111, 145, 153, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 252, 0.94));
+  border: 1px solid rgba(47, 110, 240, 0.08);
   color: var(--text-soft);
 }
 
@@ -523,7 +520,7 @@ onMounted(() => {
   margin: 0;
   padding: 1rem;
   border-radius: 18px;
-  background: rgba(247, 251, 252, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 251, 0.94));
   color: var(--text-soft);
 }
 
@@ -550,8 +547,8 @@ onMounted(() => {
   align-items: center;
   padding: 1rem;
   border-radius: 18px;
-  background: rgba(247, 251, 252, 0.88);
-  border: 1px solid rgba(111, 145, 153, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 251, 0.94));
+  border: 1px solid rgba(47, 110, 240, 0.1);
 }
 
 .dashboard-appointment-item strong,
@@ -583,7 +580,7 @@ onMounted(() => {
   text-align: center;
   padding: 0.75rem 0.9rem;
   border-radius: 16px;
-  background: rgba(47, 122, 134, 0.08);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.12));
 }
 
 .status-badge {
@@ -603,8 +600,8 @@ onMounted(() => {
 }
 
 .status-badge--confirmada {
-  background: rgba(47, 122, 134, 0.14);
-  color: var(--primary-dark);
+  background: linear-gradient(135deg, rgba(16, 135, 154, 0.14), rgba(47, 110, 240, 0.12));
+  color: var(--secondary-dark);
 }
 
 .status-badge--cancelada {
@@ -614,8 +611,7 @@ onMounted(() => {
 
 @media (max-width: 980px) {
   .dashboard-hero,
-  .dashboard-grid,
-  .dashboard-stats {
+  .dashboard-grid {
     grid-template-columns: 1fr;
   }
 }
