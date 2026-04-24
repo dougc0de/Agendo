@@ -9,17 +9,18 @@ import AppNavbar from "../components/layout/AppNavbar.vue";
 import PatientForm from "../components/patients/PatientForm.vue";
 import PatientTable from "../components/patients/PatientTable.vue";
 import { createPatient, searchPatients } from "../services/patientApi.js";
+import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { useAuthStore } from "../stores/authStore.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const navLinks = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Sucursales", href: "/branches" },
-    { label: "Reservas", href: "/appointments" },
-    { label: "Pacientes", href: "/patients" }
-];
+const navLinks = computed(() =>
+    buildPrivateNavLinks({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
 
 const searchValue = ref("");
 const patients = ref([]);
@@ -254,12 +255,17 @@ onMounted(() => {
 }
 
 .patients-hero,
-.patients-stat-card,
 .patients-panel,
 .patients-side__card {
   border-radius: 26px;
-  border: 1px solid rgba(47, 110, 240, 0.12);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  background: var(--hero-surface);
+  box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
+}
+
+.patients-stat-card {
+  border-radius: 26px;
+  border: 1px solid rgba(17, 184, 159, 0.12);
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
 }
 
@@ -269,10 +275,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.45rem;
-  background:
-    radial-gradient(circle at top left, rgba(16, 135, 154, 0.12), transparent 42%),
-    radial-gradient(circle at top right, rgba(47, 110, 240, 0.09), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 249, 255, 0.92));
+  background: var(--hero-surface-strong);
 }
 
 .patients-eyebrow,
@@ -280,7 +283,7 @@ onMounted(() => {
   display: inline-flex;
   padding: 0.38rem 0.78rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
+  background: var(--hero-chip-bg);
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -371,7 +374,7 @@ onMounted(() => {
 }
 
 .patients-feedback {
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.08));
+  background: linear-gradient(135deg, rgba(17, 184, 159, 0.12), rgba(255, 143, 90, 0.08));
   color: var(--primary-dark);
 }
 
@@ -396,7 +399,7 @@ onMounted(() => {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
-  border: 1px solid rgba(47, 110, 240, 0.1);
+  border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
 }
 

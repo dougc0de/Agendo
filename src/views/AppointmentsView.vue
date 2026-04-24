@@ -13,6 +13,8 @@ import { useAppointments } from "../composables/useAppointments.js";
 import { getBranches } from "../services/branchApi.js";
 import { createPatient } from "../services/patientApi.js";
 import { createRoom, getRooms } from "../services/roomApi.js";
+import { getAccountSettings } from "../services/settingsApi.js";
+import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 
@@ -32,19 +34,16 @@ const {
     deleteAppointment
 } = useAppointments();
 
-const navLinks = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Sucursales", href: "/branches" },
-    { label: "Reservas", href: "/appointments" },
-    { label: "Pacientes", href: "/patients" }
-];
-
 const modalOpen = ref(false);
 const roomModalOpen = ref(false);
 const modalMode = ref("create");
 const currentAppointment = ref({});
 const rooms = ref([]);
 const branches = ref([]);
+const accountSettings = ref({
+    consultationDurationMinutes: 30,
+    procedureDurationMinutes: 60
+});
 const feedback = ref("");
 const modalError = ref("");
 const roomModalError = ref("");
@@ -89,6 +88,12 @@ const modalTitle = computed(() =>
 
 const isAdminUser = computed(() =>
     isAdministrativeUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+const navLinks = computed(() =>
+    buildPrivateNavLinks({
         membershipRole: authStore.membershipRole,
         userRole: authStore.user?.rol
     })
@@ -277,6 +282,30 @@ async function fetchBranches() {
     }
 }
 
+async function fetchAccountSettings() {
+    try {
+        const response = await getAccountSettings();
+        accountSettings.value = {
+            consultationDurationMinutes:
+                Number(response.data?.consultationDurationMinutes ?? 30) || 30,
+            procedureDurationMinutes:
+                Number(response.data?.procedureDurationMinutes ?? 60) || 60
+        };
+    } catch (requestError) {
+        accountSettings.value = {
+            consultationDurationMinutes: 30,
+            procedureDurationMinutes: 60
+        };
+
+        if (!pageError.value) {
+            pageError.value =
+                requestError.response?.msg ||
+                requestError.message ||
+                "No fue posible cargar la configuracion de tiempos.";
+        }
+    }
+}
+
 async function handleSaveAppointment(payload) {
     pageError.value = "";
     modalError.value = "";
@@ -418,7 +447,12 @@ async function bootstrapAppointments() {
         return;
     }
 
-    await Promise.all([fetchAppointments(), fetchRooms(), fetchBranches()]);
+    await Promise.all([
+        fetchAppointments(),
+        fetchRooms(),
+        fetchBranches(),
+        fetchAccountSettings()
+    ]);
 }
 
 onMounted(() => {
@@ -538,6 +572,9 @@ onMounted(() => {
                 <li>Busca al paciente primero si ya existe en la cuenta.</li>
                 <li>Crea el paciente dentro del modal solo cuando haga falta.</li>
                 <li>La sala se elige desde un dropdown, ya no con IDs manuales.</li>
+                <li>
+                  Puedes aplicar duracion base de consulta o procedimiento con un clic.
+                </li>
                 <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro de la cuenta.</li>
                 <li v-else>Si no hay salas disponibles, solicita apoyo a un administrador.</li>
               </ul>
@@ -562,6 +599,7 @@ onMounted(() => {
         :error-message="modalError"
         :current-user-id="authStore.user?.id ?? 0"
         :rooms="appointmentRoomOptions"
+        :duration-settings="accountSettings"
         @submit="handleSaveAppointment"
         @cancel="closeModal"
       />
@@ -592,12 +630,17 @@ onMounted(() => {
 }
 
 .appointments-hero,
-.appointments-stat-card,
 .appointments-panel,
 .appointments-side__card {
   border-radius: 26px;
-  border: 1px solid rgba(47, 110, 240, 0.12);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  background: var(--hero-surface);
+  box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
+}
+
+.appointments-stat-card {
+  border-radius: 26px;
+  border: 1px solid rgba(17, 184, 159, 0.12);
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
 }
 
@@ -607,10 +650,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.45rem;
-  background:
-    radial-gradient(circle at top left, rgba(16, 135, 154, 0.12), transparent 42%),
-    radial-gradient(circle at top right, rgba(47, 110, 240, 0.09), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 249, 255, 0.92));
+  background: var(--hero-surface-strong);
 }
 
 .appointments-eyebrow,
@@ -618,7 +658,7 @@ onMounted(() => {
   display: inline-flex;
   padding: 0.38rem 0.78rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
+  background: var(--hero-chip-bg);
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -706,7 +746,7 @@ onMounted(() => {
 }
 
 .appointments-feedback {
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.08));
+  background: linear-gradient(135deg, rgba(17, 184, 159, 0.12), rgba(255, 143, 90, 0.08));
   color: var(--primary-dark);
 }
 
@@ -731,7 +771,7 @@ onMounted(() => {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
-  border: 1px solid rgba(47, 110, 240, 0.1);
+  border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
 }
 

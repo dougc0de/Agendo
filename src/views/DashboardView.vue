@@ -5,6 +5,7 @@ import BaseButton from "../components/base/BaseButton.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAppointments } from "../composables/useAppointments.js";
+import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { getPlanDefinition } from "../shared/plans.js";
 import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
@@ -20,13 +21,6 @@ const {
     confirmedAppointments,
     fetchAppointments
 } = useAppointments();
-
-const dashboardLinks = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Sucursales", href: "/branches" },
-    { label: "Reservas", href: "/appointments" },
-    { label: "Pacientes", href: "/patients" }
-];
 
 const fullMomentFormatter = new Intl.DateTimeFormat("es-CR", {
     dateStyle: "medium",
@@ -44,6 +38,12 @@ const planDefinition = computed(
 );
 const isAdminUser = computed(() =>
     isAdministrativeUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+const dashboardLinks = computed(() =>
+    buildPrivateNavLinks({
         membershipRole: authStore.membershipRole,
         userRole: authStore.user?.rol
     })
@@ -355,11 +355,17 @@ onMounted(() => {
 }
 
 .dashboard-hero,
-.dashboard-stat-card,
 .dashboard-panel {
-  border: 1px solid rgba(47, 110, 240, 0.12);
+  border: 1px solid rgba(17, 184, 159, 0.12);
   border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 250, 255, 0.92));
+  background: var(--hero-surface);
+  box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.dashboard-stat-card {
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  border-radius: 28px;
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
   backdrop-filter: blur(10px);
 }
@@ -369,10 +375,7 @@ onMounted(() => {
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
   gap: 1.25rem;
   padding: 1.5rem;
-  background:
-    radial-gradient(circle at top left, rgba(16, 135, 154, 0.14), transparent 42%),
-    radial-gradient(circle at top right, rgba(47, 110, 240, 0.1), transparent 38%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 255, 0.9));
+  background: var(--hero-surface-strong);
 }
 
 .dashboard-hero__copy {
@@ -387,7 +390,7 @@ onMounted(() => {
   align-self: flex-start;
   padding: 0.4rem 0.8rem;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
+  background: var(--hero-chip-bg);
   color: var(--primary-dark);
   font-size: 0.82rem;
   font-weight: 700;
@@ -427,8 +430,8 @@ onMounted(() => {
 .dashboard-plan-card {
   border-radius: 22px;
   padding: 1.2rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 248, 252, 0.92));
-  border: 1px solid rgba(47, 110, 240, 0.1);
+  background: var(--hero-surface-alt);
+  border: 1px solid var(--hero-border);
 }
 
 .dashboard-highlight-card strong,
@@ -456,8 +459,8 @@ onMounted(() => {
 .dashboard-plan-card__limits span {
   padding: 0.45rem 0.7rem;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 252, 0.94));
-  border: 1px solid rgba(47, 110, 240, 0.08);
+  background: var(--hero-surface-alt);
+  border: 1px solid rgba(17, 184, 159, 0.12);
   color: var(--text-soft);
 }
 
@@ -520,7 +523,7 @@ onMounted(() => {
   margin: 0;
   padding: 1rem;
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 251, 0.94));
+  background: var(--hero-surface-alt);
   color: var(--text-soft);
 }
 
@@ -547,8 +550,8 @@ onMounted(() => {
   align-items: center;
   padding: 1rem;
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 251, 0.94));
-  border: 1px solid rgba(47, 110, 240, 0.1);
+  background: var(--hero-surface-alt);
+  border: 1px solid rgba(17, 184, 159, 0.1);
 }
 
 .dashboard-appointment-item strong,
@@ -580,7 +583,7 @@ onMounted(() => {
   text-align: center;
   padding: 0.75rem 0.9rem;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.1), rgba(47, 110, 240, 0.12));
+  background: linear-gradient(135deg, rgba(17, 184, 159, 0.12), rgba(255, 143, 90, 0.12));
 }
 
 .status-badge {
@@ -600,7 +603,7 @@ onMounted(() => {
 }
 
 .status-badge--confirmada {
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.14), rgba(47, 110, 240, 0.12));
+  background: linear-gradient(135deg, rgba(17, 184, 159, 0.16), rgba(255, 143, 90, 0.1));
   color: var(--secondary-dark);
 }
 

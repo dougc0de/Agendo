@@ -82,7 +82,6 @@ function isActiveLink(href) {
       <span class="navbar__brand-badge">A</span>
       <span class="navbar__brand-copy">
         <strong class="navbar__brand-name">AGENDO</strong>
-        <small class="navbar__brand-tagline">Gestion clinica de salas</small>
       </span>
     </RouterLink>
     <a
@@ -181,9 +180,10 @@ function isActiveLink(href) {
   gap: 1rem;
   padding: 1rem 1.5rem;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 250, 255, 0.92)),
-    radial-gradient(circle at top right, rgba(47, 110, 240, 0.08), transparent 30%);
-  border-bottom: 1px solid rgba(47, 110, 240, 0.12);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 250, 248, 0.92)),
+    radial-gradient(circle at top right, rgba(255, 143, 90, 0.08), transparent 30%),
+    radial-gradient(circle at top left, rgba(17, 184, 159, 0.08), transparent 30%);
+  border-bottom: 1px solid var(--hero-border);
   backdrop-filter: blur(14px);
   box-shadow: 0 18px 40px rgba(17, 39, 46, 0.08);
   position: sticky;
@@ -206,13 +206,13 @@ function isActiveLink(href) {
   border-radius: 14px;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 60%),
-    linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+    linear-gradient(135deg, var(--secondary) 0%, var(--accent) 52%, var(--primary) 100%);
   color: #fff;
   display: grid;
   place-items: center;
   font-weight: 800;
   letter-spacing: 0.04em;
-  box-shadow: 0 14px 30px rgba(24, 103, 173, 0.24);
+  box-shadow: 0 14px 30px rgba(17, 47, 71, 0.22);
 }
 
 .navbar__brand-copy {
@@ -253,12 +253,12 @@ function isActiveLink(href) {
 
 .navbar__link:hover {
   color: var(--secondary-dark);
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.08), rgba(47, 110, 240, 0.1));
+  background: linear-gradient(135deg, rgba(17, 184, 159, 0.08), rgba(255, 143, 90, 0.1));
 }
 
 .navbar__link--active {
   color: var(--primary-dark);
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
+  background: linear-gradient(135deg, rgba(17, 47, 71, 0.08), rgba(17, 184, 159, 0.14));
 }
 
 .navbar__actions {
@@ -274,11 +274,11 @@ function isActiveLink(href) {
 .navbar__profile-icon {
   width: 2rem;
   height: 2rem;
-  border: 1px solid rgba(47, 110, 240, 0.14);
+  border: 1px solid rgba(17, 184, 159, 0.16);
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 247, 252, 0.92));
+  background: var(--hero-surface-alt);
   box-shadow: 0 10px 22px rgba(14, 39, 58, 0.08);
 }
 
@@ -312,9 +312,9 @@ function isActiveLink(href) {
 }
 
 .navbar__burger {
-  border: 1px solid rgba(47, 110, 240, 0.16);
+  border: 1px solid rgba(17, 184, 159, 0.18);
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 251, 0.92));
+  background: var(--hero-surface-alt);
   width: 44px;
   height: 44px;
   padding: 0;
@@ -337,20 +337,20 @@ function isActiveLink(href) {
   display: block;
   padding: 0.95rem 1rem;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
-  border: 1px solid rgba(47, 110, 240, 0.12);
+  background: var(--hero-surface-alt);
+  border: 1px solid rgba(17, 184, 159, 0.12);
   color: var(--text-soft);
   text-align: center;
 }
 
 .navbar__mobile-link:hover {
   color: var(--primary-dark);
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.08), rgba(47, 110, 240, 0.1));
+  background: linear-gradient(135deg, rgba(17, 184, 159, 0.08), rgba(255, 143, 90, 0.1));
 }
 
 .navbar__mobile-link--active {
   color: var(--primary-dark);
-  background: linear-gradient(135deg, rgba(16, 135, 154, 0.12), rgba(47, 110, 240, 0.12));
+  background: linear-gradient(135deg, rgba(17, 47, 71, 0.08), rgba(17, 184, 159, 0.14));
 }
 
 @media (max-width: 980px) {

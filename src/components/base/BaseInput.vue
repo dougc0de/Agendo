@@ -109,7 +109,7 @@ function updateValue(event) {
 
 .base-input__control:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.15), var(--shadow-hover);
+  box-shadow: 0 0 0 3px rgba(17, 184, 159, 0.15), var(--shadow-hover);
   transform: translateY(-1px);
 }
 

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
+import configuracionRoutes from "./routes/configuracionRoutes.js";
 import pacienteRoutes from "./routes/pacienteRoutes.js";
 import reservaRoutes from "./routes/reservaRoutes.js";
 import salaRoutes from "./routes/salaRoutes.js";
@@ -24,6 +25,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/configuraciones", configuracionRoutes);
 app.use("/pacientes", pacienteRoutes);
 app.use("/reservas", reservaRoutes);
 app.use("/salas", salaRoutes);

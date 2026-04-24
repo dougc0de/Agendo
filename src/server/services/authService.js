@@ -10,6 +10,7 @@ import {
     crearWorkspace,
     buscarWorkspacePorSlug
 } from "../repositories/workspaceRepository.js";
+import { crearWorkspaceSettings } from "../repositories/workspaceSettingsRepository.js";
 import { crearSucursal } from "../repositories/sucursalRepository.js";
 import {
     crearWorkspaceMember,
@@ -327,6 +328,15 @@ export async function signupWorkspaceOwner(payload) {
                     maxUsers: plan.maxUsers,
                     maxRooms: plan.maxRooms,
                     maxReservationsPerMonth: plan.maxReservationsPerMonth
+                },
+                client
+            );
+
+            await crearWorkspaceSettings(
+                {
+                    workspaceId: workspace.id,
+                    consultationDurationMinutes: 30,
+                    procedureDurationMinutes: 60
                 },
                 client
             );

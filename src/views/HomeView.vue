@@ -12,6 +12,7 @@ import reservar from "../assets/reservar.png";
 import eliminar from "../assets/eliminar.png";
 import revisar from "../assets/revisar.png";
 import founderDouglas from "../assets/founderDouglas.jpg";
+import doctorHero from "../assets/doctorHero.jpg";
 import calend from "../assets/calend.png";
 import Divisor from "./Divisor.vue";
 
@@ -30,11 +31,6 @@ const navLinks = [
     { label: "Contacto", href: "#contacto" }
 ];
 
-const heroPoints = [
-    "Reserva salas sin perder contexto",
-    "Consulta disponibilidad de forma clara",
-    "Coordina pacientes y tiempos desde un mismo lugar"
-];
 
 const serviceItems = [
     {
@@ -97,10 +93,14 @@ function submitContact() {
       />
 
       <main>
-        <section v-reveal class="hero-section">
+        <section
+          v-reveal
+          class="hero-section"
+          :style="{ '--hero-bg': `url(${doctorHero})` }"
+        >
           <div class="hero-grid section-shell">
             <div v-reveal class="hero-copy">
-              <span class="hero-eyebrow">Gestion clinica con ritmo real</span>
+              <span class="hero-eyebrow">Sistema de Gestion de Clinicas</span>
               <h1>Administra salas y disponibilidad con una experiencia mas clara y profesional.</h1>
 
 
@@ -113,11 +113,7 @@ function submitContact() {
                 </BaseButton>
               </div>
 
-              <div class="hero-points">
-                <span v-for="point in heroPoints" :key="point">
-                  {{ point }}
-                </span>
-              </div>
+
 
             </div>
 
@@ -314,9 +310,13 @@ function submitContact() {
   position: relative;
   overflow: clip;
   background:
-    radial-gradient(circle at 18% 20%, rgba(120, 170, 179, 0.18), transparent 24%),
-    radial-gradient(circle at 82% 28%, rgba(242, 159, 56, 0.14), transparent 24%),
-    linear-gradient(180deg, rgba(247, 251, 252, 0.96), rgba(232, 243, 247, 0.88));
+    linear-gradient(135deg, rgba(17, 47, 71, 0.78), rgba(17, 184, 159, 0.34)),
+    radial-gradient(circle at 18% 20%, rgba(255, 143, 90, 0.16), transparent 24%),
+    radial-gradient(circle at 82% 28%, rgba(17, 184, 159, 0.16), transparent 24%),
+    var(--hero-bg);
+  background-size: auto, auto, auto, cover;
+  background-position: center;
+  background-repeat: no-repeat;
   border-bottom: 1px solid rgba(111, 145, 153, 0.12);
 }
 
@@ -349,6 +349,9 @@ function submitContact() {
   text-transform: uppercase;
   font-size: 0.82rem;
   margin-bottom: 20px;
+  background-color: #fffffff3;
+  padding: 0.5rem;
+  border-radius: 10px;
 }
 
 .hero-eyebrow::before,
@@ -366,7 +369,7 @@ function submitContact() {
   line-height: 0.94;
   letter-spacing: -0.05em;
   max-width: 10.5ch;
-  color: var(--text);
+  color: #fff;
   margin-bottom: 20px;
 }
 
@@ -594,19 +597,19 @@ function submitContact() {
 }
 
 .service-card__visual--one {
-  background: linear-gradient(135deg, #f4efe8, #c7dce7);
+  background: linear-gradient(135deg, #eefaf7, #b9e9df);
 }
 
 .service-card__visual--two {
-  background: linear-gradient(135deg, #e7f2f8, #bfd7e5);
+  background: linear-gradient(135deg, #eef4fb, #c8dbef);
 }
 
 .service-card__visual--three {
-  background: linear-gradient(135deg, #d7edf4, #cfd9df);
+  background: linear-gradient(135deg, #fff2ea, #ffd4bf);
 }
 
 .service-card__visual--four {
-  background: linear-gradient(135deg, #dae9ef, #b8d0d9);
+  background: linear-gradient(135deg, #edf7fb, #d7e4f4);
 }
 
 .service-card h3 {
@@ -897,6 +900,7 @@ function submitContact() {
   .about-intro h2 {
     font-size: 2rem;
   }
+
 }
 
 @media (max-width: 480px) {

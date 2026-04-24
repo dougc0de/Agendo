@@ -106,17 +106,18 @@ async function submitSignup(payload) {
   gap: 1.5rem;
   padding: 2rem max(1.25rem, 3vw);
   min-height: calc(100vh - 160px);
-  background-image:
-    linear-gradient(rgba(217, 238, 248, 0.86), rgba(217, 238, 248, 0.92)),
+  background:
+    linear-gradient(135deg, rgba(17, 47, 71, 0.74), rgba(17, 184, 159, 0.24)),
+    radial-gradient(circle at 18% 20%, rgba(255, 143, 90, 0.16), transparent 24%),
+    radial-gradient(circle at 82% 28%, rgba(17, 184, 159, 0.16), transparent 24%),
     var(--signup-bg);
-  background-size: cover;
+  background-size: auto, auto, auto, cover;
   background-position: center;
 }
 
 .signup-copy,
 .signup-card {
-  background: rgba(255, 255, 255, 0.86);
-  border-radius: 8px;
+  border-radius: 22px;
   padding: 1.5rem;
 }
 
@@ -125,6 +126,12 @@ async function submitSignup(payload) {
   flex-direction: column;
   justify-content: center;
   gap: 1rem;
+  background:
+    linear-gradient(135deg, rgba(17, 47, 71, 0.82), rgba(17, 184, 159, 0.22)),
+    radial-gradient(circle at top left, rgba(255, 143, 90, 0.16), transparent 32%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 28px 62px rgba(13, 31, 45, 0.22);
+  color: #fff;
 }
 
 .signup-copy__eyebrow {
@@ -132,8 +139,8 @@ async function submitSignup(payload) {
   align-self: flex-start;
   padding: 0.45rem 0.8rem;
   border-radius: 999px;
-  background: rgba(95, 135, 151, 0.12);
-  color: var(--primary-dark);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
   font-weight: 600;
 }
 
@@ -145,7 +152,7 @@ async function submitSignup(payload) {
 
 .signup-copy p {
   margin: 0;
-  color: var(--text-soft);
+  color: rgba(255, 255, 255, 0.82);
   max-width: 56ch;
 }
 
@@ -159,21 +166,24 @@ async function submitSignup(payload) {
   flex-direction: column;
   gap: 0.2rem;
   padding: 1rem;
-  border-radius: 8px;
-  background: rgba(95, 135, 151, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .signup-copy__highlights strong {
-  color: var(--primary-dark);
+  color: #fff;
 }
 
 .signup-copy__highlights span {
-  color: var(--text-soft);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .signup-card {
   width: 100%;
   align-self: center;
+  background: var(--hero-surface);
+  border: 1px solid var(--hero-border);
   box-shadow: var(--shadow);
 }
 

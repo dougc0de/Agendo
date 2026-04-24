@@ -7,6 +7,7 @@ import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAuthStore } from "../stores/authStore.js";
 import loginShowcaseImage from "../assets/hero-illustration.svg";
+import doctorHero from "../assets/doctorHero.jpg";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -68,7 +69,7 @@ async function submitLogin() {
 
       <main class="login-main">
         <div class="login-layout">
-          <section v-reveal class="login-showcase">
+          <section v-reveal class="login-showcase" :style="{ '--login-bg': `url(${doctorHero})` }">
             <button type="button" class="login-showcase__brand" @click="goHome">
               <span class="login-showcase__brand-mark">A</span>
               <span class="login-showcase__brand-copy">
@@ -150,7 +151,7 @@ async function submitLogin() {
 
 <style scoped>
 .login-page {
-  background: linear-gradient(180deg, #dceaf7 0%, #d9e8f6 100%);
+  background: var(--page-bg);
 }
 
 .login-shell {
@@ -186,6 +187,17 @@ async function submitLogin() {
   flex-direction: column;
   justify-content: space-between;
   padding: clamp(1.1rem, 2vw, 1.8rem);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(17, 47, 71, 0.8), rgba(17, 184, 159, 0.28)),
+    radial-gradient(circle at 18% 18%, rgba(255, 143, 90, 0.18), transparent 30%),
+    radial-gradient(circle at 82% 24%, rgba(17, 184, 159, 0.14), transparent 30%),
+    var(--login-bg);
+  background-size: auto, auto, auto, cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 70px rgba(13, 31, 45, 0.22);
 }
 
 .login-showcase__brand {
@@ -196,7 +208,7 @@ async function submitLogin() {
   border: none;
   background: transparent;
   padding: 0;
-  color: var(--text);
+  color: #fff;
   cursor: pointer;
 }
 
@@ -208,8 +220,8 @@ async function submitLogin() {
   place-items: center;
   color: #fff;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--primary) 0%, #1556cf 100%);
-  box-shadow: 0 12px 28px rgba(21, 86, 207, 0.2);
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%);
+  box-shadow: 0 12px 28px rgba(255, 143, 90, 0.24);
 }
 
 .login-showcase__brand-copy {
@@ -222,11 +234,11 @@ async function submitLogin() {
 .login-showcase__brand-copy strong {
   font-size: clamp(2rem, 3vw, 3rem);
   letter-spacing: -0.05em;
-  color: #0c2330;
+  color: #fff;
 }
 
 .login-showcase__brand-copy small {
-  color: var(--text-soft);
+  color: rgba(255, 255, 255, 0.76);
   font-size: 0.86rem;
 }
 
@@ -246,7 +258,7 @@ async function submitLogin() {
   font-size: clamp(2rem, 3.4vw, 3.2rem);
   line-height: 1.03;
   letter-spacing: -0.04em;
-  color: #123b68;
+  color: #fff;
 }
 
 .login-showcase__figure {
@@ -258,6 +270,7 @@ async function submitLogin() {
   width: 100%;
   max-height: 48vh;
   object-fit: contain;
+  filter: drop-shadow(0 24px 42px rgba(7, 18, 28, 0.24));
 }
 
 .login-showcase__caption {
@@ -279,9 +292,12 @@ async function submitLogin() {
   max-width: 700px;
   padding: clamp(1.4rem, 3vw, 2.8rem);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(111, 145, 153, 0.14);
-  box-shadow: 0 28px 70px rgba(19, 45, 72, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(255, 143, 90, 0.1), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(17, 184, 159, 0.08), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(243, 250, 248, 0.94));
+  border: 1px solid var(--hero-border);
+  box-shadow: 0 28px 70px rgba(19, 45, 72, 0.16);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -292,7 +308,7 @@ async function submitLogin() {
   font-size: clamp(2rem, 3vw, 3rem);
   line-height: 1.02;
   letter-spacing: -0.04em;
-  color: #0c2330;
+  color: var(--primary-dark);
 }
 
 .login-form {
@@ -322,7 +338,7 @@ async function submitLogin() {
 .login-panel__support-link {
   display: inline-flex;
   margin-top: 0.45rem;
-  color: #1556cf;
+  color: var(--accent-dark);
   font-weight: 700;
 }
 
@@ -344,9 +360,9 @@ async function submitLogin() {
   width: 100%;
   min-height: 3.8rem;
   border-radius: 16px;
-  border: 2px solid #1f73df;
-  background: #fff;
-  color: #1f73df;
+  border: 2px solid rgba(17, 184, 159, 0.28);
+  background: var(--hero-surface-alt);
+  color: var(--primary-dark);
   font: inherit;
   font-size: 1.02rem;
   font-weight: 700;
@@ -364,6 +380,11 @@ async function submitLogin() {
   cursor: pointer;
 }
 
+.login-panel__secondary-button:hover,
+.login-panel__back-link:hover {
+  color: var(--accent-dark);
+}
+
 .login-panel :deep(.base-input) {
   gap: 0.65rem;
 }
@@ -371,14 +392,14 @@ async function submitLogin() {
 .login-panel :deep(.base-input__label) {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #435260;
+  color: var(--primary-dark);
 }
 
 .login-panel :deep(.base-input__control) {
   min-height: 3.7rem;
   border-radius: 16px;
   border: 2px solid transparent;
-  background: #eaf2fd;
+  background: linear-gradient(180deg, rgba(239, 248, 248, 0.96), rgba(236, 244, 250, 0.94));
   box-shadow: none;
   padding: 1rem 1.1rem;
   font-size: 1rem;
@@ -389,8 +410,8 @@ async function submitLogin() {
 }
 
 .login-panel :deep(.base-input__control:focus) {
-  border-color: #8ab9f4;
-  box-shadow: 0 0 0 2px rgba(138, 185, 244, 0.14);
+  border-color: rgba(17, 184, 159, 0.34);
+  box-shadow: 0 0 0 2px rgba(17, 184, 159, 0.12);
   transform: none;
 }
 
@@ -402,11 +423,13 @@ async function submitLogin() {
 }
 
 .login-panel :deep(.base-button--primary) {
-  background: linear-gradient(135deg, #1f73df 0%, #1663cb 100%);
+  background:
+    linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 34%, var(--secondary) 100%);
 }
 
 .login-panel :deep(.base-button--primary:hover:not(:disabled)) {
-  background: linear-gradient(135deg, #1663cb 0%, #1f73df 100%);
+  background:
+    linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-dark) 38%, var(--secondary) 100%);
 }
 
 @media (max-width: 1120px) {

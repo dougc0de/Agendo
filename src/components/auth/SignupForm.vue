@@ -217,9 +217,9 @@ function handleSubmit() {
 
 .signup-form__plan {
   width: 100%;
-  border: 1px solid #d6e3e8;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid rgba(17, 184, 159, 0.14);
+  border-radius: 16px;
+  background: var(--hero-surface);
   padding: 1rem;
   text-align: left;
   display: flex;
@@ -229,9 +229,9 @@ function handleSubmit() {
 }
 
 .signup-form__plan--active {
-  border-color: var(--primary);
-  background: rgba(95, 135, 151, 0.08);
-  box-shadow: 0 0 0 2px rgba(95, 135, 151, 0.12);
+  border-color: rgba(17, 184, 159, 0.34);
+  background: var(--hero-surface-alt);
+  box-shadow: 0 0 0 2px rgba(17, 184, 159, 0.12);
 }
 
 .signup-form__plan strong {

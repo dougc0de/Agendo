@@ -118,7 +118,7 @@ function appointmentTimeRange(appointment) {
 }
 
 .appointment-table__badge--confirmada {
-  background: rgba(95, 135, 151, 0.16);
+  background: rgba(17, 184, 159, 0.16);
   color: var(--primary-dark);
 }
 

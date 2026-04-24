@@ -62,7 +62,7 @@ const props = defineProps({
 .base-button:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 3px rgba(47, 110, 240, 0.16),
+    0 0 0 3px rgba(17, 184, 159, 0.2),
     var(--shadow-hover);
 }
 
@@ -96,9 +96,10 @@ const props = defineProps({
 }
 
 .base-button--primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  background:
+    linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 34%, var(--secondary) 100%);
   color: #fff;
-  box-shadow: 0 18px 34px rgba(27, 111, 179, 0.24);
+  box-shadow: 0 18px 34px rgba(17, 47, 71, 0.24);
 }
 
 .base-button--primary:hover:not(:disabled) {
@@ -109,23 +110,23 @@ const props = defineProps({
   background: linear-gradient(
     135deg,
     var(--secondary) 0%,
-    var(--secondary-dark) 72%,
+    var(--accent) 58%,
     var(--primary-dark) 100%
   );
   color: #fff;
-  box-shadow: 0 18px 34px rgba(33, 91, 189, 0.24);
+  box-shadow: 0 18px 34px rgba(17, 184, 159, 0.22);
 }
 
 .base-button--ghost {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
-  border-color: rgba(47, 110, 240, 0.12);
+  background: var(--hero-surface-alt);
+  border-color: rgba(17, 184, 159, 0.18);
   color: var(--secondary-dark);
   box-shadow: 0 12px 24px rgba(14, 39, 58, 0.06);
 }
 
 .base-button--ghost:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(239, 247, 251, 0.98));
-  border-color: rgba(16, 135, 154, 0.24);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(239, 248, 247, 0.98));
+  border-color: rgba(255, 143, 90, 0.24);
   color: var(--primary-dark);
 }
 

@@ -5,7 +5,9 @@ import DashboardView from "../views/DashboardView.vue";
 import AppointmentsView from "../views/AppointmentsView.vue";
 import PatientsView from "../views/PatientsView.vue";
 import BranchesView from "../views/BranchesView.vue";
+import SettingsView from "../views/SettingsView.vue";
 import SignupView from "../views/SignupView.vue";
+import { hasStoredAdministrativeAccess } from "../shared/privateNavigation.js";
 
 function hasSession() {
     return Boolean(localStorage.getItem("agendo-token"));
@@ -49,6 +51,12 @@ const router = createRouter({
             meta: { requiresAuth: true }
         },
         {
+            path: "/settings",
+            name: "settings",
+            component: SettingsView,
+            meta: { requiresAuth: true, requiresAdmin: true }
+        },
+        {
             path: "/signup",
             name: "signup",
             component: SignupView
@@ -69,6 +77,10 @@ router.beforeEach((to) => {
 
     if (to.meta.requiresAuth && !authenticated) {
         return { name: "login" };
+    }
+
+    if (to.meta.requiresAdmin && !hasStoredAdministrativeAccess()) {
+        return { name: "dashboard" };
     }
 
     if ((to.name === "login" || to.name === "signup") && authenticated) {
