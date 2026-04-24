@@ -1,4 +1,4 @@
-import { Reserva, Sala, Clinica } from "../../models/index.js";
+import { Reserva, Sala } from "../../models/index.js";
 import {
     crearReserva as crearReservaRepository,
     buscarReservaPorId as buscarReservaPorIdRepository,
@@ -8,10 +8,12 @@ import {
     eliminarReserva as eliminarReservaRepository
 } from "../repositories/reservaRepository.js";
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
-import { buscarClinicaPorId } from "../repositories/clinicaRepository.js";
 import { buscarPacientePorId as buscarPacientePorIdRepository } from "../repositories/pacienteRepository.js";
+import { obtenerConfiguracionOperativaNormalizada } from "./workspaceSettingsService.js";
+import { canViewAllPastReservations } from "../../shared/roles.js";
 
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
+const TIPOS_ATENCION_PERMITIDOS = ["consulta", "procedimiento"];
 
 function esIdValido(valor) {
     const numero = Number(valor);
@@ -58,19 +60,12 @@ function normalizarHora(hora) {
     return String(hora).slice(0, 5);
 }
 
-function normalizarDiasLaborales(diasLaborales) {
-    if (Array.isArray(diasLaborales)) {
-        return diasLaborales;
-    }
+function normalizarTexto(valor) {
+    return String(valor ?? "").trim();
+}
 
-    if (!diasLaborales) {
-        return [];
-    }
-
-    return String(diasLaborales)
-        .split(",")
-        .map((dia) => dia.trim())
-        .filter(Boolean);
+function normalizarTipoAtencion(valor) {
+    return normalizarTexto(valor).toLowerCase();
 }
 
 function disponibilidadABooleano(disponibilidad) {
@@ -85,7 +80,7 @@ function mapearEstadoADominio(estado) {
     return estado === "cancelada" ? "cancelada" : "activa";
 }
 
-function formatearReservaSalida(filaReserva) {
+function formatearReservaSalida(filaReserva, options = {}) {
     if (!filaReserva) {
         return null;
     }
@@ -97,8 +92,10 @@ function formatearReservaSalida(filaReserva) {
         horaFin: normalizarHora(filaReserva.hora_fin),
         descripcion: filaReserva.descripcion,
         estado: filaReserva.estado,
+        tipoAtencion: filaReserva.tipo_atencion ?? "consulta",
         tipoConsulta: filaReserva.tipo_consulta,
         usuarioId: filaReserva.usuario_id,
+        usuarioNombre: filaReserva.usuario_nombre ?? null,
         pacienteId: filaReserva.paciente_id,
         pacienteNombre: filaReserva.paciente_nombre ?? null,
         pacienteTelefono: filaReserva.paciente_telefono ?? null,
@@ -106,21 +103,28 @@ function formatearReservaSalida(filaReserva) {
         salaId: filaReserva.sala_id,
         salaNombre: filaReserva.sala_nombre ?? null,
         createdAt: filaReserva.created_at,
-        updatedAt: filaReserva.updated_at
+        updatedAt: filaReserva.updated_at,
+        ...(options.timeZone
+            ? {
+                  timeStatus: resolveTimeStatus(filaReserva, options.timeZone)
+              }
+            : {})
     };
 }
 
 function normalizarDatosEntrada(datosReserva) {
     return {
-        id: datosReserva?.id !== undefined && datosReserva?.id !== null
-            ? Number(datosReserva.id)
-            : null,
+        id:
+            datosReserva?.id !== undefined && datosReserva?.id !== null
+                ? Number(datosReserva.id)
+                : null,
         fecha: normalizarFecha(datosReserva?.fecha),
         horaInicio: normalizarHora(datosReserva?.horaInicio),
         horaFin: normalizarHora(datosReserva?.horaFin),
-        descripcion: datosReserva?.descripcion ?? null,
-        estado: datosReserva?.estado ?? "pendiente",
-        tipoConsulta: datosReserva?.tipoConsulta ?? null,
+        descripcion: normalizarTexto(datosReserva?.descripcion) || null,
+        estado: normalizarTexto(datosReserva?.estado).toLowerCase() || "pendiente",
+        tipoAtencion: normalizarTipoAtencion(datosReserva?.tipoAtencion) || "consulta",
+        tipoConsulta: normalizarTexto(datosReserva?.tipoConsulta) || null,
         usuarioId: Number(datosReserva?.usuarioId),
         pacienteId: Number(datosReserva?.pacienteId),
         salaId: Number(datosReserva?.salaId),
@@ -152,10 +156,17 @@ function validarEntradaReserva(datosReserva) {
         };
     }
 
+    if (!TIPOS_ATENCION_PERMITIDOS.includes(datosNormalizados.tipoAtencion)) {
+        return {
+            ok: false,
+            msg: "El tipo de atencion no es valido."
+        };
+    }
+
     if (!datosNormalizados.tipoConsulta) {
         return {
             ok: false,
-            msg: "El tipo de consulta es obligatorio."
+            msg: "El nombre de la consulta o procedimiento es obligatorio."
         };
     }
 
@@ -205,19 +216,6 @@ function construirSalaDominio(filaSala) {
     );
 }
 
-function construirClinicaDominio(filaClinica) {
-    return new Clinica(
-        filaClinica.id,
-        filaClinica.nombre,
-        filaClinica.direccion,
-        filaClinica.telefono,
-        normalizarHora(filaClinica.hora_apertura),
-        normalizarHora(filaClinica.hora_cierre),
-        normalizarDiasLaborales(filaClinica.dias_laborales),
-        filaClinica.estado
-    );
-}
-
 function construirReservaDominio(datosReserva) {
     return new Reserva(
         Number(datosReserva.id ?? 0),
@@ -232,7 +230,7 @@ function construirReservaDominio(datosReserva) {
     );
 }
 
-async function obtenerSalaYClinica(salaId, workspaceId) {
+async function obtenerSala(salaId, workspaceId) {
     const filaSala = await buscarSalaPorId(salaId, workspaceId);
 
     if (!filaSala) {
@@ -249,24 +247,305 @@ async function obtenerSalaYClinica(salaId, workspaceId) {
         return validacionSala;
     }
 
-    const filaClinica = await buscarClinicaPorId(filaSala.clinica_id, workspaceId);
-
-    if (!filaClinica) {
-        return {
-            ok: false,
-            msg: "La clinica asociada a la sala no existe."
-        };
-    }
-
-    const clinica = construirClinicaDominio(filaClinica);
-
     return {
         ok: true,
         data: {
-            sala,
-            clinica
+            sala
         }
     };
+}
+
+function resolverVentanaOperativa(settings, tipoAtencion) {
+    if (tipoAtencion === "procedimiento") {
+        return {
+            etiqueta: "procedimiento",
+            openTime: settings.procedureOpenTime,
+            closeTime: settings.procedureCloseTime,
+            noClosing: Boolean(settings.procedureNoClosing)
+        };
+    }
+
+    return {
+        etiqueta: "consulta",
+        openTime: settings.consultationOpenTime,
+        closeTime: settings.consultationCloseTime,
+        noClosing: Boolean(settings.consultationNoClosing)
+    };
+}
+
+function validarReservaContraConfiguracionOperativa(datosReserva, settings) {
+    const ventana = resolverVentanaOperativa(settings, datosReserva.tipoAtencion);
+
+    if (datosReserva.horaInicio < ventana.openTime) {
+        return {
+            ok: false,
+            msg: `La ${ventana.etiqueta} debe iniciar a partir de ${ventana.openTime}.`
+        };
+    }
+
+    if (!ventana.noClosing && datosReserva.horaFin > ventana.closeTime) {
+        return {
+            ok: false,
+            msg: `La ${ventana.etiqueta} debe terminar antes de ${ventana.closeTime}.`
+        };
+    }
+
+    return {
+        ok: true
+    };
+}
+
+function getCurrentZonedDateTime(timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    });
+
+    const partMap = {};
+
+    for (const part of formatter.formatToParts(new Date())) {
+        if (part.type !== "literal") {
+            partMap[part.type] = part.value;
+        }
+    }
+
+    const date = `${partMap.year}-${partMap.month}-${partMap.day}`;
+    const time = `${partMap.hour}:${partMap.minute}`;
+
+    return {
+        date,
+        time
+    };
+}
+
+function compareReservationEndToNow(filaReserva, timeZone) {
+    const current = getCurrentZonedDateTime(timeZone);
+    const reservationDate = normalizarFecha(filaReserva.fecha);
+    const reservationEnd = normalizarHora(filaReserva.hora_fin);
+
+    if (!reservationDate || !reservationEnd) {
+        return 1;
+    }
+
+    const reservationKey = `${reservationDate}T${reservationEnd}`;
+    const currentKey = `${current.date}T${current.time}`;
+
+    if (reservationKey < currentKey) {
+        return -1;
+    }
+
+    if (reservationKey > currentKey) {
+        return 1;
+    }
+
+    return 0;
+}
+
+function compareReservationStartToNow(filaReserva, timeZone) {
+    const current = getCurrentZonedDateTime(timeZone);
+    const reservationDate = normalizarFecha(filaReserva.fecha);
+    const reservationStart = normalizarHora(filaReserva.hora_inicio);
+
+    if (!reservationDate || !reservationStart) {
+        return 1;
+    }
+
+    const reservationKey = `${reservationDate}T${reservationStart}`;
+    const currentKey = `${current.date}T${current.time}`;
+
+    if (reservationKey < currentKey) {
+        return -1;
+    }
+
+    if (reservationKey > currentKey) {
+        return 1;
+    }
+
+    return 0;
+}
+
+function esReservaPasada(filaReserva, timeZone) {
+    return compareReservationEndToNow(filaReserva, timeZone) < 0;
+}
+
+function resolveTimeStatus(filaReserva, timeZone) {
+    const endComparison = compareReservationEndToNow(filaReserva, timeZone);
+
+    if (endComparison < 0) {
+        return "pasada";
+    }
+
+    const startComparison = compareReservationStartToNow(filaReserva, timeZone);
+
+    if (startComparison <= 0 && endComparison >= 0) {
+        return "en_curso";
+    }
+
+    const current = getCurrentZonedDateTime(timeZone);
+    const reservationDate = normalizarFecha(filaReserva.fecha);
+
+    if (reservationDate === current.date) {
+        return "proxima_hoy";
+    }
+
+    return "programada";
+}
+
+function ordenarReservasPorInicio(filasReservas, direction = "asc") {
+    const multiplier = direction === "desc" ? -1 : 1;
+
+    return [...filasReservas].sort((left, right) => {
+        const leftKey = `${normalizarFecha(left.fecha)}T${normalizarHora(left.hora_inicio)}`;
+        const rightKey = `${normalizarFecha(right.fecha)}T${normalizarHora(right.hora_inicio)}`;
+
+        if (leftKey === rightKey) {
+            return 0;
+        }
+
+        return leftKey > rightKey ? multiplier : -1 * multiplier;
+    });
+}
+
+function filtrarReservasPasadasPorCriterio(
+    filasReservas,
+    filters,
+    auth,
+    timeZone
+) {
+    const from = normalizarFecha(filters?.from);
+    const to = normalizarFecha(filters?.to);
+    const patientQuery = normalizarTexto(filters?.patient).toLowerCase();
+    const requestedUserId = Number(filters?.userId);
+    const status = normalizarTexto(filters?.status).toLowerCase();
+    const authUserId = resolveUserId(auth);
+    const canViewAll = canViewAllPastReservations({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+
+    return filasReservas.filter((filaReserva) => {
+        if (!esReservaPasada(filaReserva, timeZone)) {
+            return false;
+        }
+
+        if (from && normalizarFecha(filaReserva.fecha) < from) {
+            return false;
+        }
+
+        if (to && normalizarFecha(filaReserva.fecha) > to) {
+            return false;
+        }
+
+        if (status && status !== "todos" && filaReserva.estado !== status) {
+            return false;
+        }
+
+        if (!canViewAll && filaReserva.usuario_id !== authUserId) {
+            return false;
+        }
+
+        if (canViewAll && esIdValido(requestedUserId) && filaReserva.usuario_id !== requestedUserId) {
+            return false;
+        }
+
+        if (patientQuery) {
+            const haystack = [
+                filaReserva.paciente_nombre,
+                filaReserva.paciente_telefono,
+                filaReserva.paciente_correo
+            ]
+                .join(" ")
+                .toLowerCase();
+
+            if (!haystack.includes(patientQuery)) {
+                return false;
+            }
+        }
+
+        return true;
+    });
+}
+
+function filtrarReservasCalendarioPorCriterio(
+    filasReservas,
+    filters,
+    auth
+) {
+    const from = normalizarFecha(filters?.from);
+    const to = normalizarFecha(filters?.to);
+    const authUserId = resolveUserId(auth);
+    const canViewAll = canViewAllPastReservations({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+
+    return filasReservas.filter((filaReserva) => {
+        const reservationDate = normalizarFecha(filaReserva.fecha);
+
+        if (from && reservationDate < from) {
+            return false;
+        }
+
+        if (to && reservationDate > to) {
+            return false;
+        }
+
+        if (!canViewAll && filaReserva.usuario_id !== authUserId) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
+function construirResumenCalendarioPorFecha(filasReservas, timeZone) {
+    const summaryMap = filasReservas.reduce((accumulator, filaReserva) => {
+        const dateKey = normalizarFecha(filaReserva.fecha);
+
+        if (!dateKey) {
+            return accumulator;
+        }
+
+        if (!accumulator[dateKey]) {
+            accumulator[dateKey] = {
+                date: dateKey,
+                total: 0,
+                pending: 0,
+                confirmed: 0,
+                cancelled: 0,
+                inProgress: 0
+            };
+        }
+
+        const summary = accumulator[dateKey];
+        summary.total += 1;
+
+        if (filaReserva.estado === "pendiente") {
+            summary.pending += 1;
+        }
+
+        if (filaReserva.estado === "confirmada") {
+            summary.confirmed += 1;
+        }
+
+        if (filaReserva.estado === "cancelada") {
+            summary.cancelled += 1;
+        }
+
+        if (resolveTimeStatus(filaReserva, timeZone) === "en_curso") {
+            summary.inProgress += 1;
+        }
+
+        return accumulator;
+    }, {});
+
+    return Object.values(summaryMap).sort((left, right) => left.date.localeCompare(right.date));
 }
 
 async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
@@ -286,28 +565,27 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
     }
 
     const datosNormalizados = resultadoEntrada.data;
-    const resultadoContexto = await obtenerSalaYClinica(
-        datosNormalizados.salaId,
-        workspaceId
-    );
+    const resultadoSala = await obtenerSala(datosNormalizados.salaId, workspaceId);
 
-    if (!resultadoContexto.ok) {
-        return resultadoContexto;
+    if (!resultadoSala.ok) {
+        return resultadoSala;
     }
 
-    const { clinica } = resultadoContexto.data;
     const reservaDominio = construirReservaDominio(datosNormalizados);
-
     const validacionHorario = reservaDominio.validarHorario();
 
     if (!validacionHorario.ok) {
         return validacionHorario;
     }
 
-    const validacionClinica = clinica.puedeRecibirReserva(reservaDominio);
+    const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
+    const validacionOperativa = validarReservaContraConfiguracionOperativa(
+        datosNormalizados,
+        settings
+    );
 
-    if (!validacionClinica.ok) {
-        return validacionClinica;
+    if (!validacionOperativa.ok) {
+        return validacionOperativa;
     }
 
     const filaPaciente = await buscarPacientePorIdRepository(
@@ -318,7 +596,7 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
     if (!filaPaciente) {
         return {
             ok: false,
-            msg: "El paciente no existe en este workspace."
+            msg: "El paciente no existe en esta cuenta."
         };
     }
 
@@ -369,17 +647,99 @@ export async function listarReservas(auth) {
             };
         }
 
+        const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
         const filasReservas = await listarReservasRepository(workspaceId);
+        const reservasActivas = ordenarReservasPorInicio(
+            filasReservas.filter(
+                (filaReserva) => !esReservaPasada(filaReserva, settings.timeZone)
+            )
+        );
 
         return {
             ok: true,
-            msg: "Reservas listadas correctamente.",
-            data: filasReservas.map((filaReserva) => formatearReservaSalida(filaReserva))
+            msg: "Reservas activas listadas correctamente.",
+            data: reservasActivas.map((filaReserva) => formatearReservaSalida(filaReserva))
         };
     } catch (error) {
         return {
             ok: false,
             msg: `Error al listar las reservas: ${error.message}`
+        };
+    }
+}
+
+export async function listarReservasPasadas(filters, auth) {
+    try {
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
+        const filasReservas = await listarReservasRepository(workspaceId);
+        const reservasPasadas = ordenarReservasPorInicio(
+            filtrarReservasPasadasPorCriterio(
+                filasReservas,
+                filters,
+                auth,
+                settings.timeZone
+            ),
+            "desc"
+        );
+
+        return {
+            ok: true,
+            msg: "Reservas pasadas listadas correctamente.",
+            data: reservasPasadas.map((filaReserva) => formatearReservaSalida(filaReserva))
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            msg: `Error al listar las reservas pasadas: ${error.message}`
+        };
+    }
+}
+
+export async function listarReservasCalendario(filters, auth) {
+    try {
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
+        const filasReservas = await listarReservasRepository(workspaceId);
+        const reservasFiltradas = ordenarReservasPorInicio(
+            filtrarReservasCalendarioPorCriterio(filasReservas, filters, auth)
+        );
+
+        return {
+            ok: true,
+            msg: "Calendario de reservas cargado correctamente.",
+            data: {
+                summaryByDate: construirResumenCalendarioPorFecha(
+                    reservasFiltradas,
+                    settings.timeZone
+                ),
+                items: reservasFiltradas.map((filaReserva) =>
+                    formatearReservaSalida(filaReserva, {
+                        timeZone: settings.timeZone
+                    })
+                )
+            }
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            msg: `Error al cargar el calendario de reservas: ${error.message}`
         };
     }
 }
@@ -505,10 +865,12 @@ export async function editarReserva(id, datosReserva, auth) {
         const datosActualizados = {
             id,
             fecha: datosReserva?.fecha ?? normalizarFecha(filaReservaActual.fecha),
-            horaInicio: datosReserva?.horaInicio ?? normalizarHora(filaReservaActual.hora_inicio),
+            horaInicio:
+                datosReserva?.horaInicio ?? normalizarHora(filaReservaActual.hora_inicio),
             horaFin: datosReserva?.horaFin ?? normalizarHora(filaReservaActual.hora_fin),
             descripcion: datosReserva?.descripcion ?? filaReservaActual.descripcion,
             estado: datosReserva?.estado ?? filaReservaActual.estado,
+            tipoAtencion: datosReserva?.tipoAtencion ?? filaReservaActual.tipo_atencion,
             tipoConsulta: datosReserva?.tipoConsulta ?? filaReservaActual.tipo_consulta,
             usuarioId,
             pacienteId: datosReserva?.pacienteId ?? filaReservaActual.paciente_id,

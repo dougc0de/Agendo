@@ -10,13 +10,14 @@ export async function crearReserva(reserva, executor = pool) {
                     hora_fin,
                     descripcion,
                     estado,
+                    tipo_atencion,
                     tipo_consulta,
                     usuario_id,
                     paciente_id,
                     sala_id,
                     workspace_id
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id
         `,
         [
@@ -25,6 +26,7 @@ export async function crearReserva(reserva, executor = pool) {
             reserva.horaFin,
             reserva.descripcion,
             reserva.estado,
+            reserva.tipoAtencion,
             reserva.tipoConsulta,
             reserva.usuarioId,
             reserva.pacienteId,
@@ -44,6 +46,7 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
             SELECT
                 r.*,
                 s.nombre AS sala_nombre,
+                u.nombre AS usuario_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
                 p.correo AS paciente_correo
@@ -51,6 +54,8 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
             LEFT JOIN salas s
                 ON s.id = r.sala_id
                AND s.workspace_id = r.workspace_id
+            LEFT JOIN usuarios u
+                ON u.id = r.usuario_id
             LEFT JOIN pacientes p
                 ON p.id = r.paciente_id
                AND p.workspace_id = r.workspace_id
@@ -94,6 +99,7 @@ export async function listarReservas(workspaceId, executor = pool) {
             SELECT
                 r.*,
                 s.nombre AS sala_nombre,
+                u.nombre AS usuario_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
                 p.correo AS paciente_correo
@@ -101,6 +107,8 @@ export async function listarReservas(workspaceId, executor = pool) {
             LEFT JOIN salas s
                 ON s.id = r.sala_id
                AND s.workspace_id = r.workspace_id
+            LEFT JOIN usuarios u
+                ON u.id = r.usuario_id
             LEFT JOIN pacientes p
                 ON p.id = r.paciente_id
                AND p.workspace_id = r.workspace_id
@@ -123,12 +131,13 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
                 hora_fin = $3,
                 descripcion = $4,
                 estado = $5,
-                tipo_consulta = $6,
-                usuario_id = $7,
-                paciente_id = $8,
-                sala_id = $9
-            WHERE id = $10
-              AND workspace_id = $11
+                tipo_atencion = $6,
+                tipo_consulta = $7,
+                usuario_id = $8,
+                paciente_id = $9,
+                sala_id = $10
+            WHERE id = $11
+              AND workspace_id = $12
         `,
         [
             datos.fecha,
@@ -136,6 +145,7 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
             datos.horaFin,
             datos.descripcion,
             datos.estado,
+            datos.tipoAtencion,
             datos.tipoConsulta,
             datos.usuarioId,
             datos.pacienteId,

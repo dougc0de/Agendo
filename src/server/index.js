@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import configuracionRoutes from "./routes/configuracionRoutes.js";
+import financeRoutes from "./routes/financeRoutes.js";
+import internalUserRoutes from "./routes/internalUserRoutes.js";
 import pacienteRoutes from "./routes/pacienteRoutes.js";
 import reservaRoutes from "./routes/reservaRoutes.js";
 import salaRoutes from "./routes/salaRoutes.js";
@@ -26,6 +28,8 @@ app.get("/", (req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/configuraciones", configuracionRoutes);
+app.use("/finanzas", financeRoutes);
+app.use("/usuarios-internos", internalUserRoutes);
 app.use("/pacientes", pacienteRoutes);
 app.use("/reservas", reservaRoutes);
 app.use("/salas", salaRoutes);

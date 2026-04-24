@@ -126,9 +126,7 @@ async function submitSignup(payload) {
   flex-direction: column;
   justify-content: center;
   gap: 1rem;
-  background:
-    linear-gradient(135deg, rgba(17, 47, 71, 0.82), rgba(17, 184, 159, 0.22)),
-    radial-gradient(circle at top left, rgba(255, 143, 90, 0.16), transparent 32%);
+  background: rgba(17, 47, 71, 0.84);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 28px 62px rgba(13, 31, 45, 0.22);
   color: #fff;

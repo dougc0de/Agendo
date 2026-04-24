@@ -7,6 +7,9 @@ import {
 
 const DEFAULT_CONSULTATION_DURATION = 30;
 const DEFAULT_PROCEDURE_DURATION = 60;
+const DEFAULT_OPEN_TIME = "08:00";
+const DEFAULT_CLOSE_TIME = "17:00";
+const DEFAULT_TIME_ZONE = "America/Costa_Rica";
 
 function resolveWorkspaceId(auth) {
     const workspaceId = Number(auth?.workspaceId);
@@ -35,9 +38,31 @@ function sanitizeSettings(row) {
         procedureDurationMinutes: Number(
             row.procedure_duration_minutes ?? DEFAULT_PROCEDURE_DURATION
         ),
+        consultationOpenTime: normalizeTime(
+            row.consultation_open_time,
+            DEFAULT_OPEN_TIME
+        ),
+        consultationCloseTime: row.consultation_no_closing
+            ? null
+            : normalizeTime(row.consultation_close_time, DEFAULT_CLOSE_TIME),
+        consultationNoClosing: Boolean(row.consultation_no_closing),
+        procedureOpenTime: normalizeTime(
+            row.procedure_open_time,
+            DEFAULT_OPEN_TIME
+        ),
+        procedureCloseTime: row.procedure_no_closing
+            ? null
+            : normalizeTime(row.procedure_close_time, DEFAULT_CLOSE_TIME),
+        procedureNoClosing: Boolean(row.procedure_no_closing),
+        timeZone: String(row.time_zone ?? DEFAULT_TIME_ZONE),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
+}
+
+function normalizeTime(value, fallback = null) {
+    const normalized = String(value ?? "").trim().slice(0, 5);
+    return normalized || fallback;
 }
 
 function normalizeDuration(value, fallback) {
@@ -48,6 +73,70 @@ function normalizeDuration(value, fallback) {
     }
 
     return duration;
+}
+
+function normalizeBoolean(value) {
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    if (typeof value === "string") {
+        return value.trim().toLowerCase() === "true";
+    }
+
+    return Boolean(value);
+}
+
+function validateScheduleBlock({
+    openTime,
+    closeTime,
+    noClosing,
+    openLabel,
+    closeLabel
+}) {
+    const normalizedOpenTime = normalizeTime(openTime);
+    const normalizedCloseTime = normalizeTime(closeTime);
+
+    if (!normalizedOpenTime) {
+        return {
+            ok: false,
+            msg: `La ${openLabel} es obligatoria.`
+        };
+    }
+
+    if (noClosing) {
+        return {
+            ok: true,
+            data: {
+                openTime: normalizedOpenTime,
+                closeTime: null,
+                noClosing: true
+            }
+        };
+    }
+
+    if (!normalizedCloseTime) {
+        return {
+            ok: false,
+            msg: `La ${closeLabel} es obligatoria.`
+        };
+    }
+
+    if (normalizedCloseTime <= normalizedOpenTime) {
+        return {
+            ok: false,
+            msg: `La ${closeLabel} debe ser posterior a la ${openLabel}.`
+        };
+    }
+
+    return {
+        ok: true,
+        data: {
+            openTime: normalizedOpenTime,
+            closeTime: normalizedCloseTime,
+            noClosing: false
+        }
+    };
 }
 
 async function ensureWorkspaceSettings(workspaceId, executor) {
@@ -61,10 +150,25 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
         {
             workspaceId,
             consultationDurationMinutes: DEFAULT_CONSULTATION_DURATION,
-            procedureDurationMinutes: DEFAULT_PROCEDURE_DURATION
+            procedureDurationMinutes: DEFAULT_PROCEDURE_DURATION,
+            consultationOpenTime: DEFAULT_OPEN_TIME,
+            consultationCloseTime: DEFAULT_CLOSE_TIME,
+            consultationNoClosing: false,
+            procedureOpenTime: DEFAULT_OPEN_TIME,
+            procedureCloseTime: DEFAULT_CLOSE_TIME,
+            procedureNoClosing: false,
+            timeZone: DEFAULT_TIME_ZONE
         },
         executor
     );
+}
+
+export async function obtenerConfiguracionOperativaNormalizada(
+    workspaceId,
+    executor = undefined
+) {
+    const settings = await ensureWorkspaceSettings(workspaceId, executor);
+    return sanitizeSettings(settings);
 }
 
 export async function obtenerConfiguracionCuenta(auth) {
@@ -119,6 +223,9 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             payload?.procedureDurationMinutes,
             NaN
         );
+        const consultationNoClosing = normalizeBoolean(payload?.consultationNoClosing);
+        const procedureNoClosing = normalizeBoolean(payload?.procedureNoClosing);
+        const timeZone = String(payload?.timeZone ?? DEFAULT_TIME_ZONE).trim();
 
         if (
             !Number.isInteger(consultationDurationMinutes) ||
@@ -142,11 +249,49 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             };
         }
 
+        if (!timeZone) {
+            return {
+                ok: false,
+                msg: "La zona horaria es obligatoria."
+            };
+        }
+
+        const consultationSchedule = validateScheduleBlock({
+            openTime: payload?.consultationOpenTime,
+            closeTime: payload?.consultationCloseTime,
+            noClosing: consultationNoClosing,
+            openLabel: "hora de apertura de consultas",
+            closeLabel: "hora de cierre de consultas"
+        });
+
+        if (!consultationSchedule.ok) {
+            return consultationSchedule;
+        }
+
+        const procedureSchedule = validateScheduleBlock({
+            openTime: payload?.procedureOpenTime,
+            closeTime: payload?.procedureCloseTime,
+            noClosing: procedureNoClosing,
+            openLabel: "hora de apertura de procedimientos",
+            closeLabel: "hora de cierre de procedimientos"
+        });
+
+        if (!procedureSchedule.ok) {
+            return procedureSchedule;
+        }
+
         await ensureWorkspaceSettings(workspaceId);
 
         const updatedSettings = await actualizarWorkspaceSettings(workspaceId, {
             consultationDurationMinutes,
-            procedureDurationMinutes
+            procedureDurationMinutes,
+            consultationOpenTime: consultationSchedule.data.openTime,
+            consultationCloseTime: consultationSchedule.data.closeTime,
+            consultationNoClosing: consultationSchedule.data.noClosing,
+            procedureOpenTime: procedureSchedule.data.openTime,
+            procedureCloseTime: procedureSchedule.data.closeTime,
+            procedureNoClosing: procedureSchedule.data.noClosing,
+            timeZone
         });
 
         return {

@@ -9,6 +9,18 @@ const props = defineProps({
     loading: {
         type: Boolean,
         default: false
+    },
+    showActions: {
+        type: Boolean,
+        default: true
+    },
+    showUser: {
+        type: Boolean,
+        default: false
+    },
+    emptyMessage: {
+        type: String,
+        default: "No hay reservas registradas todavia."
     }
 });
 
@@ -26,7 +38,7 @@ function appointmentTimeRange(appointment) {
     </div>
 
     <div v-else-if="!props.appointments.length" class="appointment-table__state">
-      No hay reservas registradas todavia.
+      {{ props.emptyMessage }}
     </div>
 
     <table v-else class="appointment-table__table">
@@ -36,9 +48,10 @@ function appointmentTimeRange(appointment) {
           <th>Fecha</th>
           <th>Tiempo de reserva</th>
           <th>Paciente</th>
+          <th v-if="props.showUser">Usuario</th>
           <th>Tipo</th>
           <th>Estado</th>
-          <th>Opciones</th>
+          <th v-if="props.showActions">Opciones</th>
         </tr>
       </thead>
       <tbody>
@@ -47,6 +60,7 @@ function appointmentTimeRange(appointment) {
           <td>{{ appointment.fecha }}</td>
           <td>{{ appointmentTimeRange(appointment) }}</td>
           <td>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</td>
+          <td v-if="props.showUser">{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</td>
           <td>{{ appointment.tipoConsulta }}</td>
           <td>
             <span
@@ -56,7 +70,7 @@ function appointmentTimeRange(appointment) {
               {{ appointment.estado }}
             </span>
           </td>
-          <td class="appointment-table__actions-cell">
+          <td v-if="props.showActions" class="appointment-table__actions-cell">
             <div class="appointment-table__actions">
               <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
                 Editar

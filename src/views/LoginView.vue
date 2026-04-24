@@ -292,10 +292,7 @@ async function submitLogin() {
   max-width: 700px;
   padding: clamp(1.4rem, 3vw, 2.8rem);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(255, 143, 90, 0.1), transparent 34%),
-    radial-gradient(circle at bottom left, rgba(17, 184, 159, 0.08), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(243, 250, 248, 0.94));
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--hero-border);
   box-shadow: 0 28px 70px rgba(19, 45, 72, 0.16);
   display: flex;
@@ -361,7 +358,7 @@ async function submitLogin() {
   min-height: 3.8rem;
   border-radius: 16px;
   border: 2px solid rgba(17, 184, 159, 0.28);
-  background: var(--hero-surface-alt);
+  background: #f2f7f8;
   color: var(--primary-dark);
   font: inherit;
   font-size: 1.02rem;
@@ -399,7 +396,7 @@ async function submitLogin() {
   min-height: 3.7rem;
   border-radius: 16px;
   border: 2px solid transparent;
-  background: linear-gradient(180deg, rgba(239, 248, 248, 0.96), rgba(236, 244, 250, 0.94));
+  background: #eef5f7;
   box-shadow: none;
   padding: 1rem 1.1rem;
   font-size: 1rem;
@@ -462,11 +459,22 @@ async function submitLogin() {
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 760px) {
   .login-layout {
-    padding: 0.75rem;
+    padding: 0;
+    gap: 0;
   }
 
+  .login-showcase {
+    display: none;
+  }
+
+  .login-panel {
+    padding: 0.85rem;
+  }
+}
+
+@media (max-width: 560px) {
   .login-showcase__brand-copy strong {
     font-size: 1.85rem;
   }

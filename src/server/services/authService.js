@@ -336,7 +336,14 @@ export async function signupWorkspaceOwner(payload) {
                 {
                     workspaceId: workspace.id,
                     consultationDurationMinutes: 30,
-                    procedureDurationMinutes: 60
+                    procedureDurationMinutes: 60,
+                    consultationOpenTime: clinic.horaApertura,
+                    consultationCloseTime: clinic.horaCierre,
+                    consultationNoClosing: false,
+                    procedureOpenTime: clinic.horaApertura,
+                    procedureCloseTime: clinic.horaCierre,
+                    procedureNoClosing: false,
+                    timeZone: "America/Costa_Rica"
                 },
                 client
             );

@@ -2,6 +2,8 @@ import express from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import {
     listarReservas,
+    listarReservasCalendario,
+    listarReservasPasadas,
     buscarReservaPorId,
     crearReserva,
     editarReserva,
@@ -22,6 +24,26 @@ function resolveReservaStatus(resultado, fallbackStatus) {
 
 router.get("/", async (req, res) => {
     const resultado = await listarReservas(req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveReservaStatus(resultado, 500)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/calendario", async (req, res) => {
+    const resultado = await listarReservasCalendario(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveReservaStatus(resultado, 500)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/pasadas", async (req, res) => {
+    const resultado = await listarReservasPasadas(req.query, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveReservaStatus(resultado, 500)).json(resultado);

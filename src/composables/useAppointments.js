@@ -1,5 +1,10 @@
 import { computed, ref } from "vue";
-import { apiRequest } from "../services/api.js";
+import {
+    createAppointment as createAppointmentRequest,
+    deleteAppointment as deleteAppointmentRequest,
+    getAppointments,
+    updateAppointment as updateAppointmentRequest
+} from "../services/appointmentApi.js";
 
 export function useAppointments() {
     const appointments = ref([]);
@@ -20,7 +25,7 @@ export function useAppointments() {
         error.value = "";
 
         try {
-            const response = await apiRequest("/reservas");
+            const response = await getAppointments();
             appointments.value = response.data ?? [];
             return response;
         } catch (requestError) {
@@ -39,13 +44,10 @@ export function useAppointments() {
         error.value = "";
 
         try {
-            const response = await apiRequest("/reservas", {
-                method: "POST",
-                body: payload
-            });
+            const response = await createAppointmentRequest(payload);
 
-            if (response.data) {
-                appointments.value = [response.data, ...appointments.value];
+            if (response.ok) {
+                await fetchAppointments();
             }
 
             return response;
@@ -65,15 +67,10 @@ export function useAppointments() {
         error.value = "";
 
         try {
-            const response = await apiRequest(`/reservas/${id}`, {
-                method: "PUT",
-                body: payload
-            });
+            const response = await updateAppointmentRequest(id, payload);
 
-            if (response.data) {
-                appointments.value = appointments.value.map((item) =>
-                    item.id === response.data.id ? response.data : item
-                );
+            if (response.ok) {
+                await fetchAppointments();
             }
 
             return response;
@@ -93,11 +90,11 @@ export function useAppointments() {
         error.value = "";
 
         try {
-            const response = await apiRequest(`/reservas/${id}`, {
-                method: "DELETE"
-            });
+            const response = await deleteAppointmentRequest(id);
 
-            appointments.value = appointments.value.filter((item) => item.id !== id);
+            if (response.ok) {
+                await fetchAppointments();
+            }
             return response;
         } catch (requestError) {
             error.value = requestError.message;

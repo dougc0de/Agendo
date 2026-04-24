@@ -47,3 +47,34 @@ export async function crearUsuario(datosUsuario, executor = pool) {
 
     return rows[0];
 }
+
+export async function actualizarUsuario(id, datosUsuario, executor = pool) {
+    const { rows } = await executor.query(
+        `
+        UPDATE usuarios
+        SET
+            nombre = $2,
+            correo = $3,
+            rol = $4
+        WHERE id = $1
+        RETURNING *
+        `,
+        [id, datosUsuario.nombre, datosUsuario.correo, datosUsuario.rol]
+    );
+
+    return rows[0];
+}
+
+export async function actualizarEstadoUsuario(id, estado, executor = pool) {
+    const { rows } = await executor.query(
+        `
+        UPDATE usuarios
+        SET estado = $2
+        WHERE id = $1
+        RETURNING *
+        `,
+        [id, estado]
+    );
+
+    return rows[0];
+}

@@ -474,8 +474,7 @@ function submitContact() {
   margin: 0 auto;
   padding: 1rem;
   border-radius: 34px;
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(236, 246, 248, 0.9));
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(111, 145, 153, 0.16);
   box-shadow: 0 32px 70px rgba(18, 43, 49, 0.12);
 }
@@ -597,19 +596,19 @@ function submitContact() {
 }
 
 .service-card__visual--one {
-  background: linear-gradient(135deg, #eefaf7, #b9e9df);
+  background: #dcf4ec;
 }
 
 .service-card__visual--two {
-  background: linear-gradient(135deg, #eef4fb, #c8dbef);
+  background: #e6f0f8;
 }
 
 .service-card__visual--three {
-  background: linear-gradient(135deg, #fff2ea, #ffd4bf);
+  background: #fff0e5;
 }
 
 .service-card__visual--four {
-  background: linear-gradient(135deg, #edf7fb, #d7e4f4);
+  background: #eaf2f6;
 }
 
 .service-card h3 {
@@ -623,13 +622,13 @@ function submitContact() {
 }
 
 .section-block--about {
-  background: linear-gradient(180deg, rgba(247, 251, 252, 0.84), rgba(238, 246, 248, 0.78));
+  background: rgba(245, 250, 251, 0.9);
 }
 
 .about-intro {
   padding: 1.5rem 1.6rem;
   border-radius: 26px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  background: var(--primary-dark);
   box-shadow: var(--shadow);
 }
 
@@ -724,7 +723,7 @@ function submitContact() {
 .vision-strip__art {
   min-height: 160px;
   border-radius: 30px;
-  background: linear-gradient(135deg, #e6f1f5, #bed6df);
+  background: #dfecef;
   overflow: hidden;
 }
 
@@ -751,7 +750,7 @@ function submitContact() {
 }
 
 .founder-card__profile {
-  background: linear-gradient(180deg, #e9f4f8, #d9eef8);
+  background: #e6f0f4;
   border-radius: 20px;
   padding: 1rem;
   display: grid;

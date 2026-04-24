@@ -1,6 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import AppointmentCalendar from "../components/appointments/AppointmentCalendar.vue";
+import AppointmentDayPanel from "../components/appointments/AppointmentDayPanel.vue";
 import AppointmentFilters from "../components/appointments/AppointmentFilters.vue";
 import AppointmentForm from "../components/appointments/AppointmentForm.vue";
 import AppointmentTable from "../components/appointments/AppointmentTable.vue";
@@ -10,6 +12,7 @@ import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import RoomForm from "../components/rooms/RoomForm.vue";
 import { useAppointments } from "../composables/useAppointments.js";
+import { getAppointmentCalendar } from "../services/appointmentApi.js";
 import { getBranches } from "../services/branchApi.js";
 import { createPatient } from "../services/patientApi.js";
 import { createRoom, getRooms } from "../services/roomApi.js";
@@ -17,8 +20,18 @@ import { getAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
+import {
+    addDays,
+    addMonths,
+    getScaleRange,
+    getTodayDateKey,
+    groupAppointmentsByDate,
+    mapSummaryByDate,
+    parseDateKey
+} from "../utils/appointmentCalendar.js";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const {
     appointments,
@@ -42,7 +55,14 @@ const rooms = ref([]);
 const branches = ref([]);
 const accountSettings = ref({
     consultationDurationMinutes: 30,
-    procedureDurationMinutes: 60
+    procedureDurationMinutes: 60,
+    consultationOpenTime: "08:00",
+    consultationCloseTime: "17:00",
+    consultationNoClosing: false,
+    procedureOpenTime: "08:00",
+    procedureCloseTime: "17:00",
+    procedureNoClosing: false,
+    timeZone: "America/Costa_Rica"
 });
 const feedback = ref("");
 const modalError = ref("");
@@ -50,6 +70,12 @@ const roomModalError = ref("");
 const roomSaving = ref(false);
 const pageError = ref("");
 const shouldOpenReservationAfterRoomCreate = ref(false);
+const calendarLoading = ref(false);
+const calendarError = ref("");
+const calendarSummary = ref([]);
+const calendarItems = ref([]);
+const selectedCalendarDate = ref("");
+const calendarDetailModalOpen = ref(false);
 const filters = ref({
     search: "",
     status: "todos"
@@ -82,6 +108,40 @@ function formatAppointmentMoment(appointment) {
     return fullMomentFormatter.format(appointmentDate);
 }
 
+function updateRouteQuery(patch) {
+    const nextQuery = {
+        ...route.query,
+        ...patch
+    };
+
+    Object.keys(nextQuery).forEach((key) => {
+        const value = nextQuery[key];
+
+        if (value === undefined || value === null || value === "") {
+            delete nextQuery[key];
+        }
+    });
+
+    router.replace({
+        query: nextQuery
+    });
+}
+
+function isMobileCalendarLayout() {
+    return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
+}
+
+function createEmptyCalendarSummary(dateKey) {
+    return {
+        date: dateKey,
+        total: 0,
+        pending: 0,
+        confirmed: 0,
+        cancelled: 0,
+        inProgress: 0
+    };
+}
+
 const modalTitle = computed(() =>
     modalMode.value === "edit" ? "Editar reserva" : "Nueva reserva"
 );
@@ -92,6 +152,7 @@ const isAdminUser = computed(() =>
         userRole: authStore.user?.rol
     })
 );
+
 const navLinks = computed(() =>
     buildPrivateNavLinks({
         membershipRole: authStore.membershipRole,
@@ -158,10 +219,6 @@ const filteredAppointments = computed(() => {
 
 const nextVisibleAppointment = computed(() =>
     [...filteredAppointments.value]
-        .filter((appointment) => {
-            const appointmentDate = toAppointmentDate(appointment);
-            return Boolean(appointmentDate && appointmentDate.getTime() >= Date.now());
-        })
         .sort((left, right) => {
             const leftDate = toAppointmentDate(left)?.getTime() ?? 0;
             const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
@@ -191,6 +248,86 @@ const statCards = computed(() => [
         value: canceledAppointments.value
     }
 ]);
+
+const viewMode = computed(() =>
+    String(route.query.view ?? "").toLowerCase() === "calendar" ? "calendar" : "list"
+);
+
+const calendarScale = computed(() => {
+    const scale = String(route.query.scale ?? "").toLowerCase();
+    return ["month", "week", "day"].includes(scale) ? scale : "month";
+});
+
+const calendarDate = computed(() => {
+    const queryDate = String(route.query.date ?? "");
+
+    if (parseDateKey(queryDate)) {
+        return queryDate;
+    }
+
+    return getTodayDateKey(accountSettings.value.timeZone);
+});
+
+const calendarRange = computed(() =>
+    getScaleRange(calendarScale.value, calendarDate.value)
+);
+
+const calendarSummaryMap = computed(() => mapSummaryByDate(calendarSummary.value));
+const calendarItemsByDate = computed(() => groupAppointmentsByDate(calendarItems.value));
+
+const activeCalendarAppointments = computed(() =>
+    selectedCalendarDate.value
+        ? calendarItemsByDate.value[selectedCalendarDate.value] ?? []
+        : []
+);
+
+const activeCalendarSummary = computed(() =>
+    selectedCalendarDate.value
+        ? calendarSummaryMap.value[selectedCalendarDate.value] ??
+          createEmptyCalendarSummary(selectedCalendarDate.value)
+        : createEmptyCalendarSummary("")
+);
+
+const panelTitle = computed(() =>
+    viewMode.value === "calendar" ? "Agenda visual de la cuenta" : "Agenda de la cuenta"
+);
+
+const panelDescription = computed(() =>
+    viewMode.value === "calendar"
+        ? "Revisa reservas por mes, semana o dia y abre el detalle del dia con un clic."
+        : "Usa los filtros para localizar una reserva antes de editarla."
+);
+
+const showCalendarDetailAside = computed(
+    () =>
+        viewMode.value === "calendar" &&
+        Boolean(selectedCalendarDate.value) &&
+        !isMobileCalendarLayout()
+);
+
+const calendarDetailTitle = computed(() =>
+    selectedCalendarDate.value ? "Reservas de la fecha" : "Detalle del dia"
+);
+
+async function fetchCalendarData() {
+    calendarLoading.value = true;
+    calendarError.value = "";
+
+    try {
+        const response = await getAppointmentCalendar(calendarRange.value);
+        calendarSummary.value = response.data?.summaryByDate ?? [];
+        calendarItems.value = response.data?.items ?? [];
+    } catch (requestError) {
+        calendarSummary.value = [];
+        calendarItems.value = [];
+        calendarError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible cargar el calendario de reservas.";
+    } finally {
+        calendarLoading.value = false;
+    }
+}
 
 function openCreateModal() {
     pageError.value = "";
@@ -289,12 +426,26 @@ async function fetchAccountSettings() {
             consultationDurationMinutes:
                 Number(response.data?.consultationDurationMinutes ?? 30) || 30,
             procedureDurationMinutes:
-                Number(response.data?.procedureDurationMinutes ?? 60) || 60
+                Number(response.data?.procedureDurationMinutes ?? 60) || 60,
+            consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
+            consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
+            consultationNoClosing: Boolean(response.data?.consultationNoClosing),
+            procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
+            procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
+            procedureNoClosing: Boolean(response.data?.procedureNoClosing),
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica"
         };
     } catch (requestError) {
         accountSettings.value = {
             consultationDurationMinutes: 30,
-            procedureDurationMinutes: 60
+            procedureDurationMinutes: 60,
+            consultationOpenTime: "08:00",
+            consultationCloseTime: "17:00",
+            consultationNoClosing: false,
+            procedureOpenTime: "08:00",
+            procedureCloseTime: "17:00",
+            procedureNoClosing: false,
+            timeZone: "America/Costa_Rica"
         };
 
         if (!pageError.value) {
@@ -304,6 +455,92 @@ async function fetchAccountSettings() {
                 "No fue posible cargar la configuracion de tiempos.";
         }
     }
+}
+
+function handleViewModeChange(nextMode) {
+    if (nextMode === "calendar") {
+        updateRouteQuery({
+            view: "calendar",
+            scale: calendarScale.value,
+            date: calendarDate.value
+        });
+        return;
+    }
+
+    selectedCalendarDate.value = "";
+    calendarDetailModalOpen.value = false;
+    updateRouteQuery({
+        view: undefined,
+        scale: undefined,
+        date: undefined
+    });
+}
+
+function handleCalendarScaleChange(nextScale) {
+    updateRouteQuery({
+        view: "calendar",
+        scale: nextScale,
+        date: calendarDate.value
+    });
+
+    if (nextScale === "day" && !selectedCalendarDate.value) {
+        selectedCalendarDate.value = calendarDate.value;
+    }
+}
+
+function handleCalendarNavigate(step) {
+    let nextDate = calendarDate.value;
+
+    if (calendarScale.value === "month") {
+        nextDate = addMonths(calendarDate.value, step);
+    } else if (calendarScale.value === "week") {
+        nextDate = addDays(calendarDate.value, step * 7);
+    } else {
+        nextDate = addDays(calendarDate.value, step);
+    }
+
+    updateRouteQuery({
+        view: "calendar",
+        scale: calendarScale.value,
+        date: nextDate
+    });
+}
+
+function handleCalendarToday() {
+    const todayKey = getTodayDateKey(accountSettings.value.timeZone);
+
+    updateRouteQuery({
+        view: "calendar",
+        scale: calendarScale.value,
+        date: todayKey
+    });
+}
+
+function handleCalendarSelectDate(dateKey) {
+    selectedCalendarDate.value = dateKey;
+    updateRouteQuery({
+        view: "calendar",
+        scale: calendarScale.value,
+        date: dateKey
+    });
+
+    if (isMobileCalendarLayout()) {
+        calendarDetailModalOpen.value = true;
+    }
+}
+
+function closeCalendarDetail() {
+    selectedCalendarDate.value = "";
+    calendarDetailModalOpen.value = false;
+}
+
+function openAppointmentFromCalendar(appointment) {
+    calendarDetailModalOpen.value = false;
+    openEditModal(appointment);
+}
+
+async function handleCalendarRefresh() {
+    await Promise.all([fetchAppointments(), fetchCalendarData()]);
 }
 
 async function handleSaveAppointment(payload) {
@@ -340,6 +577,7 @@ async function handleSaveAppointment(payload) {
         horaFin: payload.horaFin,
         descripcion: payload.descripcion,
         estado: payload.estado,
+        tipoAtencion: payload.tipoAtencion,
         tipoConsulta: payload.tipoConsulta,
         usuarioId: Number(payload.usuarioId || authStore.user?.id || 0) || null,
         pacienteId: patientId,
@@ -354,6 +592,11 @@ async function handleSaveAppointment(payload) {
     if (result.ok) {
         feedback.value = result.msg;
         closeModal();
+
+        if (viewMode.value === "calendar") {
+            await fetchCalendarData();
+        }
+
         return;
     }
 
@@ -421,6 +664,10 @@ async function handleDeleteAppointment(appointment) {
 
     const result = await deleteAppointment(appointment.id);
     feedback.value = result.msg;
+
+    if (result.ok && viewMode.value === "calendar") {
+        await fetchCalendarData();
+    }
 }
 
 function clearFilters() {
@@ -453,7 +700,43 @@ async function bootstrapAppointments() {
         fetchBranches(),
         fetchAccountSettings()
     ]);
+
+    if (viewMode.value === "calendar") {
+        await fetchCalendarData();
+    }
 }
+
+watch(
+    () => calendarDate.value,
+    (nextDate) => {
+        if (selectedCalendarDate.value) {
+            selectedCalendarDate.value = nextDate;
+        }
+    }
+);
+
+watch(
+    [() => viewMode.value, () => calendarScale.value],
+    ([nextMode, nextScale]) => {
+        if (nextMode !== "calendar") {
+            calendarDetailModalOpen.value = false;
+            return;
+        }
+
+        if (nextScale === "day" && !selectedCalendarDate.value) {
+            selectedCalendarDate.value = calendarDate.value;
+        }
+    }
+);
+
+watch(
+    [() => viewMode.value, () => calendarScale.value, () => calendarDate.value],
+    async ([nextMode]) => {
+        if (nextMode === "calendar" && authStore.isAuthenticated) {
+            await fetchCalendarData();
+        }
+    }
+);
 
 onMounted(() => {
     bootstrapAppointments();
@@ -477,14 +760,17 @@ onMounted(() => {
             <span class="appointments-eyebrow">Operacion diaria</span>
             <h1>Reservas y disponibilidad</h1>
             <p>
-              Crea, filtra, edita y elimina reservas sin salir del mismo flujo. Si hace
-              falta, puedes registrar al paciente desde el modal.
+              Trabaja la agenda desde una lista tradicional o desde un calendario visible
+              por mes, semana y dia sin salir del mismo modulo.
             </p>
           </div>
 
           <div class="appointments-hero__actions">
             <BaseButton @click="openCreateModal">
               Agendar reserva
+            </BaseButton>
+            <BaseButton variant="ghost" @click="router.push('/appointments/past')">
+              Reservas pasadas
             </BaseButton>
             <BaseButton
               v-if="isAdminUser"
@@ -511,24 +797,38 @@ onMounted(() => {
           </article>
         </section>
 
-        <section class="appointments-layout">
+        <section
+          class="appointments-layout"
+          :class="{ 'appointments-layout--calendar': viewMode === 'calendar' }"
+        >
           <div class="appointments-content">
             <article v-reveal class="appointments-panel">
               <div class="appointments-panel__header">
                 <div>
                   <span class="appointments-panel__eyebrow">Panel principal</span>
-                  <h2>Agenda de la cuenta</h2>
-                  <p>Usa los filtros para localizar una reserva antes de editarla.</p>
+                  <h2>{{ panelTitle }}</h2>
+                  <p>{{ panelDescription }}</p>
+                </div>
+
+                <div class="appointments-panel__view-switch">
+                  <button
+                    type="button"
+                    class="appointments-panel__view-button"
+                    :class="{ 'is-active': viewMode === 'list' }"
+                    @click="handleViewModeChange('list')"
+                  >
+                    Lista
+                  </button>
+                  <button
+                    type="button"
+                    class="appointments-panel__view-button"
+                    :class="{ 'is-active': viewMode === 'calendar' }"
+                    @click="handleViewModeChange('calendar')"
+                  >
+                    Calendario
+                  </button>
                 </div>
               </div>
-
-              <AppointmentFilters
-                :search="filters.search"
-                :status="filters.status"
-                @update:search="filters.search = $event"
-                @update:status="filters.status = $event"
-                @clear="clearFilters"
-              />
 
               <p v-if="feedback" class="appointments-feedback">{{ feedback }}</p>
               <p
@@ -537,48 +837,115 @@ onMounted(() => {
               >
                 {{ pageError }}
               </p>
-              <p v-if="error && !modalOpen" class="appointments-error">{{ error }}</p>
+              <p v-if="error && !modalOpen && viewMode === 'list'" class="appointments-error">
+                {{ error }}
+              </p>
 
-              <AppointmentTable
-                :appointments="filteredAppointments"
-                :loading="loading"
-                @edit="openEditModal"
-                @delete="handleDeleteAppointment"
-              />
+              <template v-if="viewMode === 'list'">
+                <AppointmentFilters
+                  :search="filters.search"
+                  :status="filters.status"
+                  @update:search="filters.search = $event"
+                  @update:status="filters.status = $event"
+                  @clear="clearFilters"
+                />
+
+                <AppointmentTable
+                  :appointments="filteredAppointments"
+                  :loading="loading"
+                  @edit="openEditModal"
+                  @delete="handleDeleteAppointment"
+                />
+              </template>
+
+              <template v-else>
+                <AppointmentCalendar
+                  :scale="calendarScale"
+                  :active-date="calendarDate"
+                  :summary-by-date="calendarSummary"
+                  :items="calendarItems"
+                  :loading="calendarLoading"
+                  :error="calendarError"
+                  @navigate="handleCalendarNavigate"
+                  @today="handleCalendarToday"
+                  @change-scale="handleCalendarScaleChange"
+                  @select-date="handleCalendarSelectDate"
+                  @select-appointment="openAppointmentFromCalendar"
+                  @refresh="handleCalendarRefresh"
+                />
+              </template>
             </article>
           </div>
 
           <aside class="appointments-side">
-            <article v-reveal="100" class="appointments-side__card">
-              <span class="appointments-panel__eyebrow">Proxima visible</span>
-              <template v-if="nextVisibleAppointment">
-                <h3>{{ nextVisibleAppointment.pacienteNombre || `Paciente #${nextVisibleAppointment.pacienteId}` }}</h3>
-                <p>{{ formatAppointmentMoment(nextVisibleAppointment) }}</p>
-                <div class="appointments-side__meta">
-                  <span>{{ nextVisibleAppointment.salaNombre || `Sala #${nextVisibleAppointment.salaId}` }}</span>
-                  <span>{{ nextVisibleAppointment.tipoConsulta }}</span>
-                  <span>{{ nextVisibleAppointment.estado }}</span>
-                </div>
-              </template>
-              <template v-else>
-                <h3>No hay reservas futuras con los filtros actuales</h3>
-                <p>Prueba limpiando filtros o crea una nueva reserva.</p>
-              </template>
-            </article>
+            <template v-if="viewMode === 'calendar'">
+              <article
+                v-if="showCalendarDetailAside"
+                v-reveal="100"
+                class="appointments-side__card appointments-side__card--calendar"
+              >
+                <AppointmentDayPanel
+                  :date-key="selectedCalendarDate"
+                  :appointments="activeCalendarAppointments"
+                  :summary="activeCalendarSummary"
+                  :title="calendarDetailTitle"
+                  @close="closeCalendarDetail"
+                  @open-appointment="openAppointmentFromCalendar"
+                />
+              </article>
 
-            <article v-reveal="140" class="appointments-side__card">
-              <span class="appointments-panel__eyebrow">Guia rapida</span>
-              <ul class="appointments-side__list">
-                <li>Busca al paciente primero si ya existe en la cuenta.</li>
-                <li>Crea el paciente dentro del modal solo cuando haga falta.</li>
-                <li>La sala se elige desde un dropdown, ya no con IDs manuales.</li>
-                <li>
-                  Puedes aplicar duracion base de consulta o procedimiento con un clic.
-                </li>
-                <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro de la cuenta.</li>
-                <li v-else>Si no hay salas disponibles, solicita apoyo a un administrador.</li>
-              </ul>
-            </article>
+              <article
+                v-else
+                v-reveal="120"
+                class="appointments-side__card appointments-side__card--calendar-hint"
+              >
+                <span class="appointments-panel__eyebrow">Detalle del dia</span>
+                <h3>Elige una fecha del calendario</h3>
+                <p>
+                  Al hacer clic en un dia veras aqui las reservas de esa fecha con su
+                  estado temporal: si ya paso, si esta en curso o si viene en camino.
+                </p>
+                <div class="appointments-side__meta">
+                  <span>Mes</span>
+                  <span>Semana</span>
+                  <span>Dia</span>
+                </div>
+              </article>
+            </template>
+
+            <template v-else>
+              <article v-reveal="100" class="appointments-side__card">
+                <span class="appointments-panel__eyebrow">Proxima visible</span>
+                <template v-if="nextVisibleAppointment">
+                  <h3>{{ nextVisibleAppointment.pacienteNombre || `Paciente #${nextVisibleAppointment.pacienteId}` }}</h3>
+                  <p>{{ formatAppointmentMoment(nextVisibleAppointment) }}</p>
+                  <div class="appointments-side__meta">
+                    <span>{{ nextVisibleAppointment.salaNombre || `Sala #${nextVisibleAppointment.salaId}` }}</span>
+                    <span>{{ nextVisibleAppointment.tipoConsulta }}</span>
+                    <span>{{ nextVisibleAppointment.estado }}</span>
+                  </div>
+                </template>
+                <template v-else>
+                  <h3>No hay reservas futuras con los filtros actuales</h3>
+                  <p>Prueba limpiando filtros o crea una nueva reserva.</p>
+                </template>
+              </article>
+
+              <article v-reveal="140" class="appointments-side__card">
+                <span class="appointments-panel__eyebrow">Guia rapida</span>
+                <ul class="appointments-side__list">
+                  <li>Busca al paciente primero si ya existe en la cuenta.</li>
+                  <li>Crea el paciente dentro del modal solo cuando haga falta.</li>
+                  <li>La sala se elige desde un dropdown, ya no con IDs manuales.</li>
+                  <li>
+                    Puedes aplicar duracion base de consulta o procedimiento con un clic.
+                  </li>
+                  <li>Usa Calendario para ver la carga diaria sin repetir lo del dashboard.</li>
+                  <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro de la cuenta.</li>
+                  <li v-else>Si no hay salas disponibles, solicita apoyo a un administrador.</li>
+                </ul>
+              </article>
+            </template>
           </aside>
         </section>
       </main>
@@ -617,6 +984,22 @@ onMounted(() => {
         :error-message="roomModalError"
         @submit="handleCreateRoom"
         @cancel="closeRoomModal"
+      />
+    </BaseModal>
+
+    <BaseModal
+      :open="calendarDetailModalOpen && Boolean(selectedCalendarDate)"
+      :title="calendarDetailTitle"
+      description="Revisa la ocupacion del dia y abre cualquier reserva para verla en el flujo actual."
+      @close="closeCalendarDetail"
+    >
+      <AppointmentDayPanel
+        :date-key="selectedCalendarDate"
+        :appointments="activeCalendarAppointments"
+        :summary="activeCalendarSummary"
+        :title="calendarDetailTitle"
+        @close="closeCalendarDetail"
+        @open-appointment="openAppointmentFromCalendar"
       />
     </BaseModal>
   </div>
@@ -716,6 +1099,10 @@ onMounted(() => {
   align-items: start;
 }
 
+.appointments-layout--calendar {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+}
+
 .appointments-content {
   min-width: 0;
 }
@@ -738,6 +1125,30 @@ onMounted(() => {
   gap: 1rem;
 }
 
+.appointments-panel__view-switch {
+  display: inline-flex;
+  padding: 0.24rem;
+  border-radius: 999px;
+  background: var(--hero-surface-alt);
+  border: 1px solid rgba(17, 184, 159, 0.12);
+}
+
+.appointments-panel__view-button {
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-weight: 700;
+  padding: 0.5rem 0.88rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.appointments-panel__view-button.is-active {
+  background: linear-gradient(135deg, rgba(17, 47, 71, 0.96), rgba(31, 80, 120, 0.92));
+  color: #fff;
+}
+
 .appointments-feedback,
 .appointments-error {
   margin: 0;
@@ -746,7 +1157,7 @@ onMounted(() => {
 }
 
 .appointments-feedback {
-  background: linear-gradient(135deg, rgba(17, 184, 159, 0.12), rgba(255, 143, 90, 0.08));
+  background: #eaf7f3;
   color: var(--primary-dark);
 }
 
@@ -760,6 +1171,11 @@ onMounted(() => {
   gap: 1rem;
 }
 
+.appointments-side__card--calendar {
+  position: sticky;
+  top: 1rem;
+}
+
 .appointments-side__meta {
   display: flex;
   flex-wrap: wrap;
@@ -770,7 +1186,7 @@ onMounted(() => {
 .appointments-side__meta span {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
+  background: #f2f7f8;
   border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
 }
@@ -784,7 +1200,8 @@ onMounted(() => {
 }
 
 @media (max-width: 980px) {
-  .appointments-layout {
+  .appointments-layout,
+  .appointments-layout--calendar {
     grid-template-columns: 1fr;
   }
 }
@@ -796,13 +1213,25 @@ onMounted(() => {
     align-items: stretch;
   }
 
-  .appointments-hero__actions {
+  .appointments-hero__actions,
+  .appointments-panel__view-switch {
     width: 100%;
+  }
+
+  .appointments-hero__actions {
     justify-content: stretch;
   }
 
   .appointments-hero__actions :deep(.base-button) {
     width: 100%;
+  }
+
+  .appointments-panel__view-button {
+    flex: 1;
+  }
+
+  .appointments-layout--calendar .appointments-side {
+    display: none;
   }
 }
 </style>

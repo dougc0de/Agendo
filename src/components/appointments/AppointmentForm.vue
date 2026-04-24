@@ -47,6 +47,7 @@ function createDefaultForm() {
         horaFin: "",
         descripcion: "",
         estado: "pendiente",
+        tipoAtencion: "consulta",
         tipoConsulta: "",
         usuarioId: Number(props.currentUserId) || null,
         salaId: null
@@ -303,9 +304,11 @@ function applyDurationPreset(kind) {
     }
 
     form.horaFin = nextEndTime;
+    form.tipoAtencion = kind;
 
     if (!String(form.tipoConsulta ?? "").trim()) {
-        form.tipoConsulta = kind;
+        form.tipoConsulta =
+            kind === "procedimiento" ? "Procedimiento" : "Consulta";
     }
 }
 
@@ -415,6 +418,7 @@ function handleSubmit() {
         horaFin: form.horaFin,
         descripcion: form.descripcion,
         estado: form.estado,
+        tipoAtencion: form.tipoAtencion,
         tipoConsulta: form.tipoConsulta,
         usuarioId: Number(form.usuarioId || props.currentUserId || 0) || null,
         salaId: Number(form.salaId),
@@ -469,6 +473,19 @@ function handleSubmit() {
         :required="true"
         @update:model-value="form.horaFin = $event"
       />
+      <label class="appointment-form__field appointment-form__field--compact">
+        <span class="appointment-form__label">
+          Tipo de atencion
+          <span class="appointment-form__required">*</span>
+        </span>
+        <select
+          v-model="form.tipoAtencion"
+          class="appointment-form__select"
+        >
+          <option value="consulta">Consulta</option>
+          <option value="procedimiento">Procedimiento</option>
+        </select>
+      </label>
       <div class="appointment-form__preset-panel">
         <span class="appointment-form__label">Duraciones base</span>
         <div class="appointment-form__preset-actions">
@@ -495,7 +512,7 @@ function handleSubmit() {
       </div>
       <BaseInput
         :model-value="form.tipoConsulta"
-        label="Tipo de atencion"
+        label="Nombre de la atencion"
         placeholder="Ej. Consulta general o procedimiento menor"
         :required="true"
         @update:model-value="form.tipoConsulta = $event"

@@ -431,7 +431,7 @@ onMounted(() => {
 }
 
 .branches-feedback {
-  background: linear-gradient(135deg, rgba(17, 184, 159, 0.12), rgba(255, 143, 90, 0.08));
+  background: #eaf7f3;
   color: var(--primary-dark);
 }
 
@@ -455,7 +455,7 @@ onMounted(() => {
 .branches-side__chips span {
   padding: 0.45rem 0.72rem;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 251, 0.94));
+  background: #f2f7f8;
   border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
   text-transform: capitalize;

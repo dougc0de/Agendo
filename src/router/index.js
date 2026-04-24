@@ -3,11 +3,18 @@ import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 import DashboardView from "../views/DashboardView.vue";
 import AppointmentsView from "../views/AppointmentsView.vue";
+import PastAppointmentsView from "../views/PastAppointmentsView.vue";
 import PatientsView from "../views/PatientsView.vue";
 import BranchesView from "../views/BranchesView.vue";
+import FinanceView from "../views/FinanceView.vue";
 import SettingsView from "../views/SettingsView.vue";
 import SignupView from "../views/SignupView.vue";
-import { hasStoredAdministrativeAccess } from "../shared/privateNavigation.js";
+import UsersView from "../views/UsersView.vue";
+import {
+    hasStoredAdministrativeAccess,
+    hasStoredFinanceAccess,
+    hasStoredUserManagementAccess
+} from "../shared/privateNavigation.js";
 
 function hasSession() {
     return Boolean(localStorage.getItem("agendo-token"));
@@ -45,6 +52,12 @@ const router = createRouter({
             meta: { requiresAuth: true }
         },
         {
+            path: "/appointments/past",
+            name: "past-appointments",
+            component: PastAppointmentsView,
+            meta: { requiresAuth: true }
+        },
+        {
             path: "/patients",
             name: "patients",
             component: PatientsView,
@@ -55,6 +68,18 @@ const router = createRouter({
             name: "settings",
             component: SettingsView,
             meta: { requiresAuth: true, requiresAdmin: true }
+        },
+        {
+            path: "/users",
+            name: "users",
+            component: UsersView,
+            meta: { requiresAuth: true, requiresUserManager: true }
+        },
+        {
+            path: "/finance",
+            name: "finance",
+            component: FinanceView,
+            meta: { requiresAuth: true, requiresFinance: true }
         },
         {
             path: "/signup",
@@ -80,6 +105,14 @@ router.beforeEach((to) => {
     }
 
     if (to.meta.requiresAdmin && !hasStoredAdministrativeAccess()) {
+        return { name: "dashboard" };
+    }
+
+    if (to.meta.requiresUserManager && !hasStoredUserManagementAccess()) {
+        return { name: "dashboard" };
+    }
+
+    if (to.meta.requiresFinance && !hasStoredFinanceAccess()) {
         return { name: "dashboard" };
     }
 

@@ -18,7 +18,14 @@ const error = ref("");
 const feedback = ref("");
 const settings = ref({
     consultationDurationMinutes: 30,
-    procedureDurationMinutes: 60
+    procedureDurationMinutes: 60,
+    consultationOpenTime: "08:00",
+    consultationCloseTime: "17:00",
+    consultationNoClosing: false,
+    procedureOpenTime: "08:00",
+    procedureCloseTime: "17:00",
+    procedureNoClosing: false,
+    timeZone: "America/Costa_Rica"
 });
 
 const isAdminUser = computed(() =>
@@ -45,12 +52,16 @@ const statCards = computed(() => [
         value: `${Number(settings.value.procedureDurationMinutes ?? 60)} min`
     },
     {
-        label: "Diferencia",
-        value: `${Math.max(
-            0,
-            Number(settings.value.procedureDurationMinutes ?? 60) -
-                Number(settings.value.consultationDurationMinutes ?? 30)
-        )} min`
+        label: "Horario consulta",
+        value: settings.value.consultationNoClosing
+            ? `Desde ${settings.value.consultationOpenTime ?? "08:00"}`
+            : `${settings.value.consultationOpenTime ?? "08:00"} - ${settings.value.consultationCloseTime ?? "17:00"}`
+    },
+    {
+        label: "Horario procedimiento",
+        value: settings.value.procedureNoClosing
+            ? `Desde ${settings.value.procedureOpenTime ?? "08:00"}`
+            : `${settings.value.procedureOpenTime ?? "08:00"} - ${settings.value.procedureCloseTime ?? "17:00"}`
     }
 ]);
 
@@ -64,13 +75,31 @@ async function fetchSettings() {
             consultationDurationMinutes:
                 Number(response.data?.consultationDurationMinutes ?? 30) || 30,
             procedureDurationMinutes:
-                Number(response.data?.procedureDurationMinutes ?? 60) || 60
+                Number(response.data?.procedureDurationMinutes ?? 60) || 60,
+            consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
+            consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
+            consultationNoClosing: Boolean(response.data?.consultationNoClosing),
+            procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
+            procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
+            procedureNoClosing: Boolean(response.data?.procedureNoClosing),
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica"
         };
     } catch (requestError) {
         error.value =
             requestError.response?.msg ||
             requestError.message ||
             "No fue posible cargar la configuracion.";
+        settings.value = {
+            consultationDurationMinutes: 30,
+            procedureDurationMinutes: 60,
+            consultationOpenTime: "08:00",
+            consultationCloseTime: "17:00",
+            consultationNoClosing: false,
+            procedureOpenTime: "08:00",
+            procedureCloseTime: "17:00",
+            procedureNoClosing: false,
+            timeZone: "America/Costa_Rica"
+        };
     } finally {
         loading.value = false;
     }
@@ -87,7 +116,14 @@ async function handleSaveSettings(payload) {
             consultationDurationMinutes:
                 Number(response.data?.consultationDurationMinutes ?? 30) || 30,
             procedureDurationMinutes:
-                Number(response.data?.procedureDurationMinutes ?? 60) || 60
+                Number(response.data?.procedureDurationMinutes ?? 60) || 60,
+            consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
+            consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
+            consultationNoClosing: Boolean(response.data?.consultationNoClosing),
+            procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
+            procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
+            procedureNoClosing: Boolean(response.data?.procedureNoClosing),
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica"
         };
         feedback.value = response.msg;
     } catch (requestError) {
@@ -141,14 +177,14 @@ onMounted(() => {
 
       <main class="settings-main section-shell">
         <section v-reveal class="settings-hero">
-          <div>
-            <span class="settings-eyebrow">Control administrativo</span>
-            <h1>Configuraciones de atencion</h1>
-            <p>
-              Ajusta la duracion base de consultas y procedimientos para que el equipo
-              reserve mas rapido y con menos friccion.
-            </p>
-          </div>
+            <div>
+              <span class="settings-eyebrow">Control administrativo</span>
+              <h1>Configuraciones de atencion</h1>
+              <p>
+              Ajusta duraciones base, horario de consultas, horario de procedimientos y
+              zona horaria sin tocar codigo.
+              </p>
+            </div>
 
           <div class="settings-hero__actions">
             <BaseButton variant="ghost" @click="fetchSettings">
@@ -173,9 +209,9 @@ onMounted(() => {
           <article v-reveal class="settings-panel">
             <div class="settings-panel__header">
               <div>
-                <span class="settings-panel__eyebrow">Duraciones base</span>
-                <h2>Tiempo estandar por tipo de atencion</h2>
-                <p>Estos valores se aplican desde el modal de reservas con un clic.</p>
+                <span class="settings-panel__eyebrow">Fuente operativa</span>
+                <h2>Reglas de agenda de la cuenta</h2>
+                <p>Estas reglas controlan la duracion base, el horario y la clasificacion de reservas.</p>
               </div>
             </div>
 
@@ -195,10 +231,10 @@ onMounted(() => {
           <aside class="settings-side">
             <article v-reveal="100" class="settings-side__card">
               <span class="settings-panel__eyebrow">Uso recomendado</span>
-              <h3>Consultas cortas, procedimientos mas largos</h3>
+              <h3>Horarios separados por tipo de atencion</h3>
               <p>
-                Mantener una base distinta ayuda a reservar mejor sin obligar al equipo a
-                calcular todo manualmente cada vez.
+                La consulta y el procedimiento pueden manejar ventanas distintas sin volver
+                a cambiar el codigo del sistema.
               </p>
             </article>
 
@@ -206,8 +242,8 @@ onMounted(() => {
               <span class="settings-panel__eyebrow">Acceso</span>
               <ul class="settings-side__list">
                 <li>Solo el admin puede cambiar esta configuracion.</li>
-                <li>Doctores y staff siguen aprovechando estos tiempos al reservar.</li>
-                <li>Siempre puedes ajustar la hora final manualmente si un caso lo requiere.</li>
+                <li>Recepcion y doctores usan estas reglas automaticamente al reservar.</li>
+                <li>La zona horaria define que reservas ya pasaron y como se leen los cierres mensuales.</li>
               </ul>
             </article>
           </aside>
@@ -278,7 +314,7 @@ onMounted(() => {
 
 .settings-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -332,7 +368,7 @@ onMounted(() => {
 }
 
 .settings-feedback {
-  background: linear-gradient(135deg, rgba(17, 184, 159, 0.1), rgba(255, 143, 90, 0.08));
+  background: #eaf7f3;
   color: var(--primary-dark);
 }
 

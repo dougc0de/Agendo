@@ -1,14 +1,20 @@
 <script setup>
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import BaseButton from "../components/base/BaseButton.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAppointments } from "../composables/useAppointments.js";
+import { getAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { getPlanDefinition } from "../shared/plans.js";
-import { isAdministrativeUser } from "../shared/roles.js";
+import { canAccessFinance, isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
+import {
+    addDays,
+    getTodayDateKey,
+    parseDateKey
+} from "../utils/appointmentCalendar.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -31,13 +37,23 @@ const shortDateFormatter = new Intl.DateTimeFormat("es-CR", {
     day: "numeric",
     month: "short"
 });
+const weekdayFormatter = new Intl.DateTimeFormat("es-CR", {
+    weekday: "short"
+});
 
 const workspaceName = computed(() => authStore.workspace?.nombre ?? "Cuenta AGENDO");
+const dashboardTimeZone = ref("America/Costa_Rica");
 const planDefinition = computed(
     () => getPlanDefinition(authStore.subscription?.planCode) ?? null
 );
 const isAdminUser = computed(() =>
     isAdministrativeUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+const canSeeFinance = computed(() =>
+    canAccessFinance({
         membershipRole: authStore.membershipRole,
         userRole: authStore.user?.rol
     })
@@ -121,10 +137,6 @@ const nextSevenDaysAppointments = computed(() => {
 
 const upcomingAppointments = computed(() =>
     [...appointments.value]
-        .filter((appointment) => {
-            const appointmentDate = toAppointmentDate(appointment);
-            return Boolean(appointmentDate && appointmentDate.getTime() >= Date.now());
-        })
         .sort((left, right) => {
             const leftDate = toAppointmentDate(left)?.getTime() ?? 0;
             const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
@@ -144,6 +156,30 @@ const recentAppointments = computed(() =>
 );
 
 const nextAppointment = computed(() => upcomingAppointments.value[0] ?? null);
+
+const agendaPreviewDays = computed(() => {
+    const todayKey = getTodayDateKey(dashboardTimeZone.value);
+
+    return Array.from({ length: 7 }, (_, index) => {
+        const dateKey = addDays(todayKey, index);
+        const matchingAppointments = appointments.value.filter(
+            (appointment) => appointment.fecha === dateKey
+        );
+        const date = parseDateKey(dateKey);
+
+        return {
+            dateKey,
+            total: matchingAppointments.length,
+            confirmed: matchingAppointments.filter((appointment) => appointment.estado === "confirmada")
+                .length,
+            pending: matchingAppointments.filter((appointment) => appointment.estado === "pendiente")
+                .length,
+            label: date ? weekdayFormatter.format(date).replace(".", "") : "",
+            dayNumber: dateKey.slice(-2),
+            isToday: index === 0
+        };
+    });
+});
 
 const statCards = computed(() => [
     {
@@ -169,6 +205,15 @@ function logout() {
     router.push("/login");
 }
 
+async function fetchDashboardSettings() {
+    try {
+        const response = await getAccountSettings();
+        dashboardTimeZone.value = response.data?.timeZone ?? "America/Costa_Rica";
+    } catch {
+        dashboardTimeZone.value = "America/Costa_Rica";
+    }
+}
+
 async function bootstrapDashboard() {
     if (!authStore.isHydrated) {
         await authStore.hydrate();
@@ -179,7 +224,7 @@ async function bootstrapDashboard() {
         return;
     }
 
-    await fetchAppointments();
+    await Promise.all([fetchAppointments(), fetchDashboardSettings()]);
 }
 
 onMounted(() => {
@@ -212,8 +257,14 @@ onMounted(() => {
               <BaseButton @click="router.push('/appointments')">
                 Abrir modulo de reservas
               </BaseButton>
+              <BaseButton variant="ghost" @click="router.push('/appointments/past')">
+                Reservas pasadas
+              </BaseButton>
               <BaseButton variant="ghost" @click="router.push('/patients')">
                 Gestionar pacientes
+              </BaseButton>
+              <BaseButton v-if="canSeeFinance" variant="ghost" @click="router.push('/finance')">
+                Finanzas
               </BaseButton>
             </div>
           </div>
@@ -310,6 +361,37 @@ onMounted(() => {
           </article>
 
           <article v-reveal="120" class="dashboard-panel dashboard-panel--wide">
+            <div class="dashboard-panel__heading">
+              <div>
+                <p class="dashboard-panel__eyebrow">Agenda visual</p>
+                <h2>Vista previa del calendario</h2>
+              </div>
+              <BaseButton
+                size="sm"
+                variant="ghost"
+                @click="router.push({ path: '/appointments', query: { view: 'calendar', scale: 'month', date: getTodayDateKey(dashboardTimeZone) } })"
+              >
+                Abrir calendario
+              </BaseButton>
+            </div>
+
+            <div class="dashboard-calendar-preview">
+              <button
+                v-for="day in agendaPreviewDays"
+                :key="day.dateKey"
+                type="button"
+                class="dashboard-calendar-preview__day"
+                :class="{ 'is-today': day.isToday }"
+                @click="router.push({ path: '/appointments', query: { view: 'calendar', scale: 'day', date: day.dateKey } })"
+              >
+                <span>{{ day.label }}</span>
+                <strong>{{ day.dayNumber }}</strong>
+                <small>{{ day.total }} reservas</small>
+              </button>
+            </div>
+          </article>
+
+          <article v-reveal="160" class="dashboard-panel dashboard-panel--full">
             <div class="dashboard-panel__heading">
               <div>
                 <p class="dashboard-panel__eyebrow">Actividad</p>
@@ -512,6 +594,10 @@ onMounted(() => {
   min-width: 0;
 }
 
+.dashboard-panel--full {
+  grid-column: 1 / -1;
+}
+
 .dashboard-panel__heading {
   display: flex;
   align-items: flex-start;
@@ -583,7 +669,41 @@ onMounted(() => {
   text-align: center;
   padding: 0.75rem 0.9rem;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(17, 184, 159, 0.12), rgba(255, 143, 90, 0.12));
+  background: #eaf7f3;
+}
+
+.dashboard-calendar-preview {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.dashboard-calendar-preview__day {
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  border-radius: 18px;
+  background: #fff;
+  padding: 0.9rem 0.65rem;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: var(--text);
+}
+
+.dashboard-calendar-preview__day span,
+.dashboard-calendar-preview__day small {
+  color: var(--text-soft);
+}
+
+.dashboard-calendar-preview__day strong {
+  font-size: 1.25rem;
+  color: var(--primary-dark);
+}
+
+.dashboard-calendar-preview__day.is-today {
+  background: #eefbf7;
+  box-shadow: 0 0 0 2px rgba(17, 184, 159, 0.18);
 }
 
 .status-badge {
@@ -603,7 +723,7 @@ onMounted(() => {
 }
 
 .status-badge--confirmada {
-  background: linear-gradient(135deg, rgba(17, 184, 159, 0.16), rgba(255, 143, 90, 0.1));
+  background: rgba(17, 184, 159, 0.14);
   color: var(--secondary-dark);
 }
 
@@ -616,6 +736,10 @@ onMounted(() => {
   .dashboard-hero,
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-calendar-preview {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -638,6 +762,10 @@ onMounted(() => {
   .dashboard-appointment-item,
   .dashboard-history-item {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-calendar-preview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dashboard-appointment-item__meta {
