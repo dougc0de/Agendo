@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 import AccountSettingsForm from "../components/settings/AccountSettingsForm.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
-import BaseButton from "../components/base/BaseButton.vue";
 import { getAccountSettings, updateAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { isAdministrativeUser } from "../shared/roles.js";
@@ -17,7 +16,9 @@ const saving = ref(false);
 const error = ref("");
 const feedback = ref("");
 const settings = ref({
+    consultationDurationEnabled: false,
     consultationDurationMinutes: 30,
+    procedureDurationEnabled: false,
     procedureDurationMinutes: 60,
     consultationOpenTime: "08:00",
     consultationCloseTime: "17:00",
@@ -26,6 +27,7 @@ const settings = ref({
     procedureCloseTime: "17:00",
     procedureNoClosing: false,
     timeZone: "America/Costa_Rica",
+    procedurePricingPolicy: "bloqueado",
     defaultProcedurePricingMode: "solo_sala"
 });
 
@@ -43,14 +45,28 @@ const navLinks = computed(() =>
     })
 );
 
+function formatPricingMode(mode) {
+    return (
+        {
+            solo_sala: "Solo sala",
+            solo_insumos: "Solo insumos",
+            sala_mas_insumos: "Sala + insumos"
+        }[mode] ?? mode
+    );
+}
+
 const statCards = computed(() => [
     {
         label: "Consultas",
-        value: `${Number(settings.value.consultationDurationMinutes ?? 30)} min`
+        value: settings.value.consultationDurationEnabled
+            ? `${Number(settings.value.consultationDurationMinutes ?? 30)} min ref.`
+            : "Tiempo libre"
     },
     {
         label: "Procedimientos",
-        value: `${Number(settings.value.procedureDurationMinutes ?? 60)} min`
+        value: settings.value.procedureDurationEnabled
+            ? `${Number(settings.value.procedureDurationMinutes ?? 60)} min ref.`
+            : "Tiempo libre"
     },
     {
         label: "Horario consulta",
@@ -59,19 +75,8 @@ const statCards = computed(() => [
             : `${settings.value.consultationOpenTime ?? "08:00"} - ${settings.value.consultationCloseTime ?? "17:00"}`
     },
     {
-        label: "Horario procedimiento",
-        value: settings.value.procedureNoClosing
-            ? `Desde ${settings.value.procedureOpenTime ?? "08:00"}`
-            : `${settings.value.procedureOpenTime ?? "08:00"} - ${settings.value.procedureCloseTime ?? "17:00"}`
-    },
-    {
-        label: "Cobro procedural base",
-        value:
-            {
-                solo_sala: "Solo sala",
-                solo_insumos: "Solo insumos",
-                sala_mas_insumos: "Sala + insumos"
-            }[settings.value.defaultProcedurePricingMode] ?? "Solo sala"
+        label: "Facturacion procedural",
+        value: `${formatPricingMode(settings.value.defaultProcedurePricingMode)} · bloqueada`
     }
 ]);
 
@@ -82,8 +87,10 @@ async function fetchSettings() {
     try {
         const response = await getAccountSettings();
         settings.value = {
+            consultationDurationEnabled: Boolean(response.data?.consultationDurationEnabled),
             consultationDurationMinutes:
                 Number(response.data?.consultationDurationMinutes ?? 30) || 30,
+            procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
             procedureDurationMinutes:
                 Number(response.data?.procedureDurationMinutes ?? 60) || 60,
             consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
@@ -93,6 +100,7 @@ async function fetchSettings() {
             procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
             procedureNoClosing: Boolean(response.data?.procedureNoClosing),
             timeZone: response.data?.timeZone ?? "America/Costa_Rica",
+            procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
                 response.data?.defaultProcedurePricingMode ?? "solo_sala"
         };
@@ -102,7 +110,9 @@ async function fetchSettings() {
             requestError.message ||
             "No fue posible cargar la configuracion.";
         settings.value = {
+            consultationDurationEnabled: false,
             consultationDurationMinutes: 30,
+            procedureDurationEnabled: false,
             procedureDurationMinutes: 60,
             consultationOpenTime: "08:00",
             consultationCloseTime: "17:00",
@@ -111,6 +121,7 @@ async function fetchSettings() {
             procedureCloseTime: "17:00",
             procedureNoClosing: false,
             timeZone: "America/Costa_Rica",
+            procedurePricingPolicy: "bloqueado",
             defaultProcedurePricingMode: "solo_sala"
         };
     } finally {
@@ -126,8 +137,10 @@ async function handleSaveSettings(payload) {
     try {
         const response = await updateAccountSettings(payload);
         settings.value = {
+            consultationDurationEnabled: Boolean(response.data?.consultationDurationEnabled),
             consultationDurationMinutes:
                 Number(response.data?.consultationDurationMinutes ?? 30) || 30,
+            procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
             procedureDurationMinutes:
                 Number(response.data?.procedureDurationMinutes ?? 60) || 60,
             consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
@@ -137,6 +150,7 @@ async function handleSaveSettings(payload) {
             procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
             procedureNoClosing: Boolean(response.data?.procedureNoClosing),
             timeZone: response.data?.timeZone ?? "America/Costa_Rica",
+            procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
                 response.data?.defaultProcedurePricingMode ?? "solo_sala"
         };
@@ -196,17 +210,19 @@ onMounted(() => {
               <span class="settings-eyebrow">Control administrativo</span>
               <h1>Configuraciones de atencion</h1>
               <p>
-              Ajusta duraciones base, horario de consultas, horario de procedimientos y
-              zona horaria sin tocar codigo.
+              Define tiempos de referencia opcionales, horario operativo y la modalidad procedural que ejecutara recepcion.
               </p>
             </div>
-
-          <div class="settings-hero__actions">
-            <BaseButton variant="ghost" @click="fetchSettings">
-              Recargar configuracion
-            </BaseButton>
-          </div>
         </section>
+
+        <nav v-reveal="40" class="settings-admin-switch">
+          <RouterLink to="/settings" class="settings-admin-switch__link settings-admin-switch__link--active">
+            Configuraciones
+          </RouterLink>
+          <RouterLink to="/users" class="settings-admin-switch__link">
+            Usuarios
+          </RouterLink>
+        </nav>
 
         <section class="settings-stats stats-strip">
           <article
@@ -225,8 +241,8 @@ onMounted(() => {
             <div class="settings-panel__header">
               <div>
                 <span class="settings-panel__eyebrow">Fuente operativa</span>
-                <h2>Reglas de agenda de la cuenta</h2>
-                <p>Estas reglas controlan la duracion base, el horario y la clasificacion de reservas.</p>
+                <h2>Agenda de la cuenta</h2>
+                <p>Estas reglas controlan el horario de atencion, los tiempos de referencia opcionales y la forma en que se factura cada procedimiento.</p>
               </div>
             </div>
 
@@ -242,26 +258,6 @@ onMounted(() => {
               @submit="handleSaveSettings"
             />
           </article>
-
-          <aside class="settings-side">
-            <article v-reveal="100" class="settings-side__card">
-              <span class="settings-panel__eyebrow">Uso recomendado</span>
-              <h3>Horarios separados por tipo de atencion</h3>
-              <p>
-                La consulta y el procedimiento pueden manejar ventanas distintas sin volver
-                a cambiar el codigo del sistema.
-              </p>
-            </article>
-
-            <article v-reveal="140" class="settings-side__card">
-              <span class="settings-panel__eyebrow">Acceso</span>
-              <ul class="settings-side__list">
-                <li>Solo el admin puede cambiar esta configuracion.</li>
-                <li>Recepcion y doctores usan estas reglas automaticamente al reservar.</li>
-                <li>La zona horaria define que reservas ya pasaron y como se leen los cierres mensuales.</li>
-              </ul>
-            </article>
-          </aside>
         </section>
       </main>
 
@@ -278,8 +274,7 @@ onMounted(() => {
 }
 
 .settings-hero,
-.settings-panel,
-.settings-side__card {
+.settings-panel {
   border-radius: 26px;
   border: 1px solid rgba(17, 184, 159, 0.12);
   background: var(--hero-surface);
@@ -315,16 +310,39 @@ onMounted(() => {
 }
 
 .settings-hero h1,
-.settings-panel__header h2,
-.settings-side__card h3 {
+.settings-panel__header h2 {
   margin: 0.7rem 0 0;
 }
 
 .settings-hero p,
-.settings-panel__header p,
-.settings-side__card p {
+.settings-panel__header p {
   margin: 0.55rem 0 0;
   color: var(--text-soft);
+}
+
+.settings-admin-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.settings-admin-switch__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.7rem;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 184, 159, 0.14);
+  background: var(--hero-surface);
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.settings-admin-switch__link--active {
+  background: var(--primary-dark);
+  color: #fff;
+  border-color: transparent;
 }
 
 .settings-stats {
@@ -351,13 +369,11 @@ onMounted(() => {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.85fr);
+  grid-template-columns: 1fr;
   gap: 1rem;
-  align-items: start;
 }
 
-.settings-panel,
-.settings-side__card {
+.settings-panel {
   padding: 1.2rem;
 }
 
@@ -397,25 +413,6 @@ onMounted(() => {
   color: var(--text-soft);
 }
 
-.settings-side {
-  display: grid;
-  gap: 1rem;
-}
-
-.settings-side__list {
-  margin: 0.9rem 0 0;
-  padding-left: 1rem;
-  color: var(--text-soft);
-  display: grid;
-  gap: 0.7rem;
-}
-
-@media (max-width: 980px) {
-  .settings-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 760px) {
   .settings-hero,
   .settings-panel__header {
@@ -423,8 +420,12 @@ onMounted(() => {
     align-items: stretch;
   }
 
-  .settings-hero__actions :deep(.base-button) {
+  .settings-admin-switch {
     width: 100%;
+  }
+
+  .settings-admin-switch__link {
+    flex: 1 1 180px;
   }
 }
 </style>

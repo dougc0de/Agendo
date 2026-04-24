@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { onBeforeUnmount, reactive, ref, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import { searchPatients } from "../../services/patientApi.js";
@@ -28,13 +28,6 @@ const props = defineProps({
     rooms: {
         type: Array,
         default: () => []
-    },
-    durationSettings: {
-        type: Object,
-        default: () => ({
-            consultationDurationMinutes: 30,
-            procedureDurationMinutes: 60
-        })
     }
 });
 
@@ -101,46 +94,8 @@ function clearPatientSearchTimer() {
     }
 }
 
-const consultationDurationLabel = computed(() =>
-    formatDurationLabel(props.durationSettings?.consultationDurationMinutes, 30)
-);
-
-const procedureDurationLabel = computed(() =>
-    formatDurationLabel(props.durationSettings?.procedureDurationMinutes, 60)
-);
-
 function resolveDefaultRoomId() {
     return Number(props.rooms[0]?.id ?? 0) || null;
-}
-
-function formatDurationLabel(value, fallback) {
-    const duration = Number(value ?? fallback) || fallback;
-    return `${duration} min`;
-}
-
-function addMinutesToTime(timeValue, minutesToAdd) {
-    const [hours, minutes] = String(timeValue ?? "")
-        .split(":")
-        .map((value) => Number(value));
-
-    if (
-        !Number.isInteger(hours) ||
-        !Number.isInteger(minutes) ||
-        !Number.isInteger(minutesToAdd)
-    ) {
-        return null;
-    }
-
-    const totalMinutes = hours * 60 + minutes + minutesToAdd;
-
-    if (totalMinutes < 0 || totalMinutes > 23 * 60 + 59) {
-        return null;
-    }
-
-    const endHours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
-    const endMinutes = String(totalMinutes % 60).padStart(2, "0");
-
-    return `${endHours}:${endMinutes}`;
 }
 
 function hasValidRoomId(value) {
@@ -273,43 +228,6 @@ function clearSelectedPatient() {
     patientResults.value = [];
     patientSearchError.value = "";
     patientValidationError.value = "";
-}
-
-function applyDurationPreset(kind) {
-    formValidationError.value = "";
-
-    if (!form.horaInicio) {
-        formValidationError.value =
-            "Selecciona primero la hora de inicio para aplicar una duracion base.";
-        return;
-    }
-
-    const duration =
-        kind === "procedimiento"
-            ? Number(props.durationSettings?.procedureDurationMinutes ?? 60)
-            : Number(props.durationSettings?.consultationDurationMinutes ?? 30);
-
-    if (!Number.isInteger(duration) || duration < 1) {
-        formValidationError.value =
-            "La configuracion de duracion no es valida para este tipo de atencion.";
-        return;
-    }
-
-    const nextEndTime = addMinutesToTime(form.horaInicio, duration);
-
-    if (!nextEndTime) {
-        formValidationError.value =
-            "La duracion seleccionada deja la reserva fuera del rango horario del dia.";
-        return;
-    }
-
-    form.horaFin = nextEndTime;
-    form.tipoAtencion = kind;
-
-    if (!String(form.tipoConsulta ?? "").trim()) {
-        form.tipoConsulta =
-            kind === "procedimiento" ? "Procedimiento" : "Consulta";
-    }
 }
 
 function startNewPatientFlow() {
@@ -486,30 +404,6 @@ function handleSubmit() {
           <option value="procedimiento">Procedimiento</option>
         </select>
       </label>
-      <div class="appointment-form__preset-panel">
-        <span class="appointment-form__label">Duraciones base</span>
-        <div class="appointment-form__preset-actions">
-          <BaseButton
-            type="button"
-            size="sm"
-            variant="ghost"
-            @click="applyDurationPreset('consulta')"
-          >
-            Consulta · {{ consultationDurationLabel }}
-          </BaseButton>
-          <BaseButton
-            type="button"
-            size="sm"
-            variant="ghost"
-            @click="applyDurationPreset('procedimiento')"
-          >
-            Procedimiento · {{ procedureDurationLabel }}
-          </BaseButton>
-        </div>
-        <p class="appointment-form__helper">
-          Se aplican a partir de la hora de inicio y pueden ajustarse luego si hace falta.
-        </p>
-      </div>
       <BaseInput
         :model-value="form.tipoConsulta"
         label="Nombre de la atencion"
@@ -767,22 +661,6 @@ function handleSubmit() {
   min-width: 0;
 }
 
-.appointment-form__preset-panel {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 0.65rem;
-  padding: 0.95rem 1rem;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 248, 251, 0.92));
-  border: 1px solid rgba(17, 184, 159, 0.12);
-}
-
-.appointment-form__preset-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
 .appointment-form__label {
   font-size: 0.92rem;
   font-weight: 600;
@@ -982,10 +860,6 @@ function handleSubmit() {
   .appointment-form__patient-card {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .appointment-form__preset-actions :deep(.base-button) {
-    width: 100%;
   }
 
   .appointment-form__patient-card-actions {

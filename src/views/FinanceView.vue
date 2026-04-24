@@ -63,6 +63,8 @@ const userOptions = ref([]);
 const roomOptions = ref([]);
 const reservationOptions = ref([]);
 const settings = ref({
+    timeZone: "America/Costa_Rica",
+    procedurePricingPolicy: "bloqueado",
     defaultProcedurePricingMode: "solo_sala"
 });
 const filters = ref({
@@ -99,7 +101,7 @@ const canWaive = computed(() =>
 
 const heroTitle = computed(() =>
     ({
-        cobros: "Cobros por operacion",
+        cobros: "Facturacion de procedimientos",
         inventario: "Inventario clinico",
         reportes: "Reportes operativos"
     })[activeTab.value] ?? "Finanzas operativas"
@@ -108,7 +110,7 @@ const heroTitle = computed(() =>
 const heroDescription = computed(() =>
     ({
         cobros:
-            "Registra el monto de sala, los insumos usados y la decision de cobro por cada procedimiento.",
+            "Recepcion cierra el procedimiento, carga lo usado desde inventario y genera el bill imprimible segun la modalidad definida por la cuenta.",
         inventario:
             "Mantiene un catalogo reusable de hilos, agujas, equipos y cualquier insumo propio de la clinica.",
         reportes:
@@ -117,7 +119,9 @@ const heroDescription = computed(() =>
 );
 
 const reportModalTitle = computed(() =>
-    reportModalMode.value === "edit" ? "Editar reporte operativo" : "Registrar reporte operativo"
+    reportModalMode.value === "edit"
+        ? "Editar facturacion procedural"
+        : "Registrar facturacion procedural"
 );
 
 const inventoryModalTitle = computed(() =>
@@ -136,14 +140,6 @@ const summaryCards = computed(() => [
     {
         label: "Exonerado",
         value: formatCurrency(summary.value.montoExonerado)
-    },
-    {
-        label: "Ingresos por sala",
-        value: formatCurrency(summary.value.ingresosSala)
-    },
-    {
-        label: "Ingresos por insumos",
-        value: formatCurrency(summary.value.ingresosInsumos)
     },
     {
         label: "Margen bruto",
@@ -203,6 +199,15 @@ async function fetchReservationOptions() {
                 .map((report) => Number(report.reservationId))
         );
 
+        const todayKey = new Intl.DateTimeFormat("en-CA", {
+            timeZone: settings.value.timeZone ?? "America/Costa_Rica",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        })
+            .format(new Date())
+            .replaceAll("/", "-");
+
         reservationOptions.value = [
             ...(activeResponse.data ?? []),
             ...(pastResponse.data ?? [])
@@ -219,7 +224,26 @@ async function fetchReservationOptions() {
             }
 
             return !usedReservationIds.has(Number(reservation.id));
-        });
+        })
+            .sort((left, right) => {
+                const leftDate = String(left.fecha ?? "");
+                const rightDate = String(right.fecha ?? "");
+                const leftGroup = leftDate === todayKey ? 0 : leftDate < todayKey ? 1 : 2;
+                const rightGroup = rightDate === todayKey ? 0 : rightDate < todayKey ? 1 : 2;
+
+                if (leftGroup !== rightGroup) {
+                    return leftGroup - rightGroup;
+                }
+
+                const leftKey = `${leftDate}T${String(left.horaFin ?? left.horaInicio ?? "00:00").slice(0, 5)}`;
+                const rightKey = `${rightDate}T${String(right.horaFin ?? right.horaInicio ?? "00:00").slice(0, 5)}`;
+
+                if (leftGroup === 2) {
+                    return leftKey.localeCompare(rightKey);
+                }
+
+                return rightKey.localeCompare(leftKey);
+            });
     } catch {
         reservationOptions.value = [];
     }
@@ -241,11 +265,15 @@ async function fetchSettings() {
     try {
         const response = await getAccountSettings();
         settings.value = {
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica",
+            procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
                 response.data?.defaultProcedurePricingMode ?? "solo_sala"
         };
     } catch {
         settings.value = {
+            timeZone: "America/Costa_Rica",
+            procedurePricingPolicy: "bloqueado",
             defaultProcedurePricingMode: "solo_sala"
         };
     }
@@ -478,7 +506,7 @@ onMounted(() => {
               v-if="activeTab === 'cobros'"
               @click="openCreateReportModal"
             >
-              Registrar reporte
+              Registrar facturacion
             </BaseButton>
             <BaseButton
               v-else-if="activeTab === 'inventario'"
@@ -492,9 +520,6 @@ onMounted(() => {
             >
               Actualizar resumen
             </BaseButton>
-            <BaseButton variant="ghost" @click="activeTab === 'inventario' ? fetchInventory() : fetchFinanceData()">
-              Actualizar
-            </BaseButton>
           </div>
         </section>
 
@@ -505,7 +530,7 @@ onMounted(() => {
             :class="{ 'finance-tabs__button--active': activeTab === 'cobros' }"
             @click="activeTab = 'cobros'"
           >
-            Cobros
+            Facturacion
           </button>
           <button
             type="button"
@@ -534,7 +559,11 @@ onMounted(() => {
               <div class="finance-panel__header">
                 <div>
                   <span class="finance-panel__eyebrow">Filtros</span>
-                  <h2>Reportes por operacion</h2>
+                  <h2>Facturacion por procedimiento</h2>
+                  <p class="finance-panel__copy">
+                    Modalidad actual de la cuenta: {{ formatPricingMode(settings.defaultProcedurePricingMode) }}.
+                    Recepcion la ejecuta tal como fue definida por administracion.
+                  </p>
                 </div>
               </div>
 
@@ -669,7 +698,7 @@ onMounted(() => {
                           variant="ghost"
                           @click="handleDownloadPdf(report)"
                         >
-                          PDF
+                          Bill PDF
                         </BaseButton>
                       </td>
                     </tr>
@@ -767,6 +796,14 @@ onMounted(() => {
 
               <div class="finance-operational-grid">
                 <article class="finance-operational-card">
+                  <span>Ingresos por sala</span>
+                  <strong>{{ formatCurrency(summary.ingresosSala) }}</strong>
+                </article>
+                <article class="finance-operational-card">
+                  <span>Ingresos por insumos</span>
+                  <strong>{{ formatCurrency(summary.ingresosInsumos) }}</strong>
+                </article>
+                <article class="finance-operational-card">
                   <span>Cobros registrados</span>
                   <strong>{{ summary.cobrosRegistrados }}</strong>
                 </article>
@@ -816,7 +853,7 @@ onMounted(() => {
     <BaseModal
       :open="reportModalOpen"
       :title="reportModalTitle"
-      description="Registra el monto de sala, los insumos usados y la decision financiera del procedimiento."
+      description="Cierra el procedimiento con monto fijo o insumos ya usados y genera el bill imprimible para firma manual."
       @close="closeReportModal"
     >
       <FinanceChargeForm
@@ -826,6 +863,7 @@ onMounted(() => {
         :submitting="savingReport"
         :error-message="reportModalError"
         :mode="reportModalMode"
+        :pricing-policy="settings.procedurePricingPolicy"
         :default-pricing-mode="settings.defaultProcedurePricingMode"
         :can-waive="canWaive"
         @submit="handleSaveReport"
@@ -963,7 +1001,7 @@ onMounted(() => {
 
 .finance-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
 }
 

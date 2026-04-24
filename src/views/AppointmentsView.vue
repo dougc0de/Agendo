@@ -54,7 +54,9 @@ const currentAppointment = ref({});
 const rooms = ref([]);
 const branches = ref([]);
 const accountSettings = ref({
+    consultationDurationEnabled: false,
     consultationDurationMinutes: 30,
+    procedureDurationEnabled: false,
     procedureDurationMinutes: 60,
     consultationOpenTime: "08:00",
     consultationCloseTime: "17:00",
@@ -62,7 +64,9 @@ const accountSettings = ref({
     procedureOpenTime: "08:00",
     procedureCloseTime: "17:00",
     procedureNoClosing: false,
-    timeZone: "America/Costa_Rica"
+    timeZone: "America/Costa_Rica",
+    procedurePricingPolicy: "bloqueado",
+    defaultProcedurePricingMode: "solo_sala"
 });
 const feedback = ref("");
 const modalError = ref("");
@@ -423,8 +427,10 @@ async function fetchAccountSettings() {
     try {
         const response = await getAccountSettings();
         accountSettings.value = {
+            consultationDurationEnabled: Boolean(response.data?.consultationDurationEnabled),
             consultationDurationMinutes:
                 Number(response.data?.consultationDurationMinutes ?? 30) || 30,
+            procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
             procedureDurationMinutes:
                 Number(response.data?.procedureDurationMinutes ?? 60) || 60,
             consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
@@ -433,11 +439,16 @@ async function fetchAccountSettings() {
             procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
             procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
             procedureNoClosing: Boolean(response.data?.procedureNoClosing),
-            timeZone: response.data?.timeZone ?? "America/Costa_Rica"
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica",
+            procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
+            defaultProcedurePricingMode:
+                response.data?.defaultProcedurePricingMode ?? "solo_sala"
         };
     } catch (requestError) {
         accountSettings.value = {
+            consultationDurationEnabled: false,
             consultationDurationMinutes: 30,
+            procedureDurationEnabled: false,
             procedureDurationMinutes: 60,
             consultationOpenTime: "08:00",
             consultationCloseTime: "17:00",
@@ -445,7 +456,9 @@ async function fetchAccountSettings() {
             procedureOpenTime: "08:00",
             procedureCloseTime: "17:00",
             procedureNoClosing: false,
-            timeZone: "America/Costa_Rica"
+            timeZone: "America/Costa_Rica",
+            procedurePricingPolicy: "bloqueado",
+            defaultProcedurePricingMode: "solo_sala"
         };
 
         if (!pageError.value) {
@@ -770,17 +783,7 @@ onMounted(() => {
               Agendar reserva
             </BaseButton>
             <BaseButton variant="ghost" @click="router.push('/appointments/past')">
-              Reservas pasadas
-            </BaseButton>
-            <BaseButton
-              v-if="isAdminUser"
-              variant="ghost"
-              @click="openCreateRoomModal()"
-            >
-              Crear sala
-            </BaseButton>
-            <BaseButton variant="ghost" @click="fetchAppointments">
-              Actualizar datos
+              Historial de Reservas
             </BaseButton>
           </div>
         </section>
@@ -810,23 +813,34 @@ onMounted(() => {
                   <p>{{ panelDescription }}</p>
                 </div>
 
-                <div class="appointments-panel__view-switch">
-                  <button
-                    type="button"
-                    class="appointments-panel__view-button"
-                    :class="{ 'is-active': viewMode === 'list' }"
-                    @click="handleViewModeChange('list')"
+                <div class="appointments-panel__tools">
+                  <BaseButton
+                    v-if="isAdminUser"
+                    size="sm"
+                    variant="ghost"
+                    @click="openCreateRoomModal()"
                   >
-                    Lista
-                  </button>
-                  <button
-                    type="button"
-                    class="appointments-panel__view-button"
-                    :class="{ 'is-active': viewMode === 'calendar' }"
-                    @click="handleViewModeChange('calendar')"
-                  >
-                    Calendario
-                  </button>
+                    Crear sala
+                  </BaseButton>
+
+                  <div class="appointments-panel__view-switch">
+                    <button
+                      type="button"
+                      class="appointments-panel__view-button"
+                      :class="{ 'is-active': viewMode === 'list' }"
+                      @click="handleViewModeChange('list')"
+                    >
+                      Lista
+                    </button>
+                    <button
+                      type="button"
+                      class="appointments-panel__view-button"
+                      :class="{ 'is-active': viewMode === 'calendar' }"
+                      @click="handleViewModeChange('calendar')"
+                    >
+                      Calendario
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -899,17 +913,9 @@ onMounted(() => {
                 v-reveal="120"
                 class="appointments-side__card appointments-side__card--calendar-hint"
               >
-                <span class="appointments-panel__eyebrow">Detalle del dia</span>
-                <h3>Elige una fecha del calendario</h3>
-                <p>
-                  Al hacer clic en un dia veras aqui las reservas de esa fecha con su
-                  estado temporal: si ya paso, si esta en curso o si viene en camino.
-                </p>
-                <div class="appointments-side__meta">
-                  <span>Mes</span>
-                  <span>Semana</span>
-                  <span>Dia</span>
-                </div>
+                <span class="appointments-panel__eyebrow">Selecciona un dia</span>
+                <h3>Abre el detalle del calendario</h3>
+                <p>Elige una fecha para ver las reservas del dia sin salir del modulo.</p>
               </article>
             </template>
 
@@ -931,20 +937,6 @@ onMounted(() => {
                 </template>
               </article>
 
-              <article v-reveal="140" class="appointments-side__card">
-                <span class="appointments-panel__eyebrow">Guia rapida</span>
-                <ul class="appointments-side__list">
-                  <li>Busca al paciente primero si ya existe en la cuenta.</li>
-                  <li>Crea el paciente dentro del modal solo cuando haga falta.</li>
-                  <li>La sala se elige desde un dropdown, ya no con IDs manuales.</li>
-                  <li>
-                    Puedes aplicar duracion base de consulta o procedimiento con un clic.
-                  </li>
-                  <li>Usa Calendario para ver la carga diaria sin repetir lo del dashboard.</li>
-                  <li v-if="isAdminUser">Solo admin puede crear salas nuevas dentro de la cuenta.</li>
-                  <li v-else>Si no hay salas disponibles, solicita apoyo a un administrador.</li>
-                </ul>
-              </article>
             </template>
           </aside>
         </section>
@@ -966,7 +958,6 @@ onMounted(() => {
         :error-message="modalError"
         :current-user-id="authStore.user?.id ?? 0"
         :rooms="appointmentRoomOptions"
-        :duration-settings="accountSettings"
         @submit="handleSaveAppointment"
         @cancel="closeModal"
       />
@@ -1015,10 +1006,22 @@ onMounted(() => {
 .appointments-hero,
 .appointments-panel,
 .appointments-side__card {
+  position: relative;
+  overflow: hidden;
   border-radius: 26px;
   border: 1px solid rgba(17, 184, 159, 0.12);
   background: var(--hero-surface);
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
+}
+
+.appointments-hero::before,
+.appointments-panel::before,
+.appointments-side__card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(17, 184, 159, 0.88), rgba(31, 80, 120, 0.74));
 }
 
 .appointments-stat-card {
@@ -1125,6 +1128,14 @@ onMounted(() => {
   gap: 1rem;
 }
 
+.appointments-panel__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
 .appointments-panel__view-switch {
   display: inline-flex;
   padding: 0.24rem;
@@ -1214,6 +1225,7 @@ onMounted(() => {
   }
 
   .appointments-hero__actions,
+  .appointments-panel__tools,
   .appointments-panel__view-switch {
     width: 100%;
   }

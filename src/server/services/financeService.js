@@ -26,6 +26,7 @@ const ESTADOS_INVENTARIO = ["activo", "inactivo"];
 const MODOS_COBRO = ["solo_sala", "solo_insumos", "sala_mas_insumos"];
 const DECISIONES_COBRO = ["cobrable", "exonerado"];
 const DEFAULT_CURRENCY_CODE = "CRC";
+const DEFAULT_PRICING_POLICY = "bloqueado";
 const DEFAULT_PRICING_MODE = "solo_sala";
 
 function resolveWorkspaceId(auth) {
@@ -466,12 +467,26 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
     const workspaceId = resolveWorkspaceId(auth);
     const registeredByUserId = resolveUserId(auth);
     const existingCharge = opciones.existingCharge ?? null;
-    const pricingModeFallback =
-        opciones.defaultPricingMode ??
-        existingCharge?.pricingMode ??
-        existingCharge?.pricing_mode ??
-        DEFAULT_PRICING_MODE;
-    const pricingMode = normalizarModoCobro(payload?.pricingMode, pricingModeFallback);
+    const pricingPolicy = normalizarTexto(
+        opciones.pricingPolicy ?? DEFAULT_PRICING_POLICY
+    ).toLowerCase();
+    const defaultPricingMode = normalizarModoCobro(
+        opciones.defaultPricingMode,
+        DEFAULT_PRICING_MODE
+    );
+    const lockedPricingMode = existingCharge
+        ? normalizarModoCobro(
+              existingCharge?.pricingMode ?? existingCharge?.pricing_mode,
+              defaultPricingMode
+          )
+        : defaultPricingMode;
+    const requestedPricingMode = normalizarTexto(payload?.pricingMode)
+        ? normalizarModoCobro(payload?.pricingMode, lockedPricingMode)
+        : null;
+    const pricingMode =
+        pricingPolicy === DEFAULT_PRICING_POLICY
+            ? lockedPricingMode
+            : normalizarModoCobro(payload?.pricingMode, lockedPricingMode);
     const chargeDecision = normalizarDecisionCobro(
         payload?.chargeDecision,
         existingCharge?.chargeDecision ?? existingCharge?.charge_decision ?? "cobrable"
@@ -513,6 +528,20 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
         return {
             ok: false,
             msg: "El nombre del procedimiento es obligatorio."
+        };
+    }
+
+    if (pricingPolicy !== DEFAULT_PRICING_POLICY) {
+        return {
+            ok: false,
+            msg: "La politica procedural configurada no es valida."
+        };
+    }
+
+    if (requestedPricingMode && requestedPricingMode !== lockedPricingMode) {
+        return {
+            ok: false,
+            msg: "La modalidad del procedimiento esta bloqueada por la cuenta y no puede cambiarse desde este reporte."
         };
     }
 
@@ -791,6 +820,7 @@ export async function crearCobro(payload, auth) {
         const result = await withTransaction(async (client) => {
             const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId, client);
             const normalizedPayload = await normalizarPayloadReporte(payload, auth, {
+                pricingPolicy: settings.procedurePricingPolicy,
                 defaultPricingMode: settings.defaultProcedurePricingMode,
                 executor: client
             });
@@ -922,6 +952,7 @@ export async function actualizarCobro(id, payload, auth) {
             const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId, client);
             const normalizedPayload = await normalizarPayloadReporte(payload, auth, {
                 existingCharge: existingReport,
+                pricingPolicy: settings.procedurePricingPolicy,
                 defaultPricingMode: settings.defaultProcedurePricingMode,
                 executor: client
             });

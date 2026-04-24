@@ -33,74 +33,124 @@ const emit = defineEmits(["edit", "toggle-status"]);
       {{ props.emptyMessage }}
     </div>
 
-    <div v-else class="branch-table__scroll">
-      <table class="branch-table__table">
-        <thead>
-          <tr>
-            <th>Sucursal</th>
-            <th>Contacto</th>
-            <th>Salas</th>
-            <th>Usuarios</th>
-            <th>Estado</th>
-            <th>Opciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="branch in props.branches" :key="branch.id">
-            <td>
-              <div class="branch-table__identity">
-                <strong>{{ branch.nombre }}</strong>
-                <span>{{ branch.codigo }}</span>
-                <small>{{ branch.direccion || "Sin direccion registrada" }}</small>
-              </div>
-            </td>
-            <td>{{ branch.telefono || "Sin telefono" }}</td>
-            <td>
-              <div class="branch-table__metrics">
-                <span>{{ branch.roomsCount }} total</span>
-                <small>{{ branch.activeRoomsCount }} activas</small>
-              </div>
-            </td>
-            <td>
-              <div class="branch-table__metrics">
-                <span>{{ branch.usersCount }} total</span>
-                <small>{{ branch.activeUsersCount }} activos</small>
-              </div>
-            </td>
-            <td>
-              <span
-                class="branch-table__badge"
-                :class="{
-                  'branch-table__badge--inactive': branch.estado === 'inactiva'
-                }"
-              >
-                {{ branch.estado }}
-              </span>
-            </td>
-            <td>
-              <div class="branch-table__actions actions-stack">
-                <BaseButton size="sm" variant="ghost" @click="emit('edit', branch)">
-                  Editar
-                </BaseButton>
-                <BaseButton
-                  size="sm"
-                  :variant="branch.estado === 'activa' ? 'warning' : 'secondary'"
-                  :disabled="props.changingStatusId === branch.id"
-                  @click="emit('toggle-status', branch)"
+    <div v-else class="branch-table__content">
+      <div class="branch-table__cards">
+        <article
+          v-for="branch in props.branches"
+          :key="`card-${branch.id}`"
+          class="branch-table__card"
+        >
+          <div class="branch-table__card-top">
+            <div class="branch-table__identity">
+              <strong>{{ branch.nombre }}</strong>
+              <span>{{ branch.codigo }}</span>
+              <small>{{ branch.direccion || "Sin direccion registrada" }}</small>
+            </div>
+            <span
+              class="branch-table__badge"
+              :class="{ 'branch-table__badge--inactive': branch.estado === 'inactiva' }"
+            >
+              {{ branch.estado }}
+            </span>
+          </div>
+
+          <div class="branch-table__chips">
+            <span>{{ branch.telefono || "Sin telefono" }}</span>
+            <span>{{ branch.roomsCount }} salas</span>
+            <span>{{ branch.usersCount }} usuarios</span>
+          </div>
+
+          <div class="branch-table__actions branch-table__actions--card">
+            <BaseButton size="sm" variant="ghost" @click="emit('edit', branch)">
+              Editar
+            </BaseButton>
+            <BaseButton
+              size="sm"
+              :variant="branch.estado === 'activa' ? 'warning' : 'secondary'"
+              :disabled="props.changingStatusId === branch.id"
+              @click="emit('toggle-status', branch)"
+            >
+              {{
+                props.changingStatusId === branch.id
+                  ? "Actualizando..."
+                  : branch.estado === "activa"
+                    ? "Desactivar"
+                    : "Activar"
+              }}
+            </BaseButton>
+          </div>
+        </article>
+      </div>
+
+      <div class="branch-table__scroll">
+        <table class="branch-table__table">
+          <thead>
+            <tr>
+              <th>Sucursal</th>
+              <th>Contacto</th>
+              <th>Salas</th>
+              <th>Usuarios</th>
+              <th>Estado</th>
+              <th>Opciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="branch in props.branches" :key="branch.id">
+              <td>
+                <div class="branch-table__identity">
+                  <strong>{{ branch.nombre }}</strong>
+                  <span>{{ branch.codigo }}</span>
+                  <small>{{ branch.direccion || "Sin direccion registrada" }}</small>
+                </div>
+              </td>
+              <td>{{ branch.telefono || "Sin telefono" }}</td>
+              <td>
+                <div class="branch-table__metrics">
+                  <span>{{ branch.roomsCount }} total</span>
+                  <small>{{ branch.activeRoomsCount }} activas</small>
+                </div>
+              </td>
+              <td>
+                <div class="branch-table__metrics">
+                  <span>{{ branch.usersCount }} total</span>
+                  <small>{{ branch.activeUsersCount }} activos</small>
+                </div>
+              </td>
+              <td>
+                <span
+                  class="branch-table__badge"
+                  :class="{
+                    'branch-table__badge--inactive': branch.estado === 'inactiva'
+                  }"
                 >
-                  {{
-                    props.changingStatusId === branch.id
-                      ? "Actualizando..."
-                      : branch.estado === "activa"
-                        ? "Desactivar"
-                        : "Activar"
-                  }}
-                </BaseButton>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                  {{ branch.estado }}
+                </span>
+              </td>
+              <td>
+                <div class="branch-table__actions actions-stack">
+                  <BaseButton size="sm" variant="ghost" @click="emit('edit', branch)">
+                    Editar
+                  </BaseButton>
+                  <BaseButton
+                    size="sm"
+                    :variant="branch.estado === 'activa' ? 'warning' : 'secondary'"
+                    :disabled="props.changingStatusId === branch.id"
+                    @click="emit('toggle-status', branch)"
+                  >
+                    {{
+                      props.changingStatusId === branch.id
+                        ? "Actualizando..."
+                        : branch.estado === "activa"
+                          ? "Desactivar"
+                          : "Activar"
+                    }}
+                  </BaseButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -117,6 +167,50 @@ const emit = defineEmits(["edit", "toggle-status"]);
   padding: 2rem 1.2rem;
   text-align: center;
   color: var(--text-soft);
+}
+
+.branch-table__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.branch-table__cards {
+  display: none;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.branch-table__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: #f9fcfd;
+  border: 1px solid rgba(111, 145, 153, 0.14);
+}
+
+.branch-table__card-top {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.branch-table__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.branch-table__chips span {
+  padding: 0.38rem 0.68rem;
+  border-radius: 999px;
+  background: #f2f7f8;
+  border: 1px solid rgba(17, 184, 159, 0.1);
+  color: var(--text-soft);
+  font-size: 0.84rem;
 }
 
 .branch-table__scroll {
@@ -190,5 +284,26 @@ const emit = defineEmits(["edit", "toggle-status"]);
 
 .branch-table__actions {
   min-width: 120px;
+}
+
+.branch-table__actions--card {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+@media (max-width: 760px) {
+  .branch-table__cards {
+    display: flex;
+  }
+
+  .branch-table__scroll {
+    display: none;
+  }
+
+  .branch-table__actions--card :deep(.base-button) {
+    flex: 1 1 160px;
+  }
 }
 </style>

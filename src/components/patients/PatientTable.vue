@@ -42,35 +42,58 @@ function formatDate(value) {
       {{ props.emptyMessage }}
     </div>
 
-    <div v-else class="patient-table__scroll">
-      <table class="patient-table__table">
-        <thead>
-          <tr>
-            <th>Paciente</th>
-            <th>Telefono</th>
-            <th>Correo</th>
-            <th>Procedimiento</th>
-            <th>Estado</th>
-            <th>Creado</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="patient in props.patients" :key="patient.id">
-            <td>
-              <strong>{{ patient.nombre }}</strong>
-            </td>
-            <td>{{ patient.telefono || "Sin telefono" }}</td>
-            <td>{{ patient.correo || "Sin correo" }}</td>
-            <td>{{ patient.tipoProcedimiento || "Sin procedimiento" }}</td>
-            <td>
-              <span class="patient-table__badge">
-                {{ patient.estado || "activo" }}
-              </span>
-            </td>
-            <td>{{ formatDate(patient.createdAt) }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else class="patient-table__content">
+      <div class="patient-table__cards">
+        <article
+          v-for="patient in props.patients"
+          :key="`card-${patient.id}`"
+          class="patient-table__card"
+        >
+          <div class="patient-table__card-top">
+            <strong>{{ patient.nombre }}</strong>
+            <span class="patient-table__badge">
+              {{ patient.estado || "activo" }}
+            </span>
+          </div>
+          <p>{{ patient.tipoProcedimiento || "Sin procedimiento principal" }}</p>
+          <div class="patient-table__chips">
+            <span>{{ patient.telefono || "Sin telefono" }}</span>
+            <span>{{ patient.correo || "Sin correo" }}</span>
+            <span>{{ formatDate(patient.createdAt) }}</span>
+          </div>
+        </article>
+      </div>
+
+      <div class="patient-table__scroll">
+        <table class="patient-table__table">
+          <thead>
+            <tr>
+              <th>Paciente</th>
+              <th>Telefono</th>
+              <th>Correo</th>
+              <th>Procedimiento</th>
+              <th>Estado</th>
+              <th>Creado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="patient in props.patients" :key="patient.id">
+              <td>
+                <strong>{{ patient.nombre }}</strong>
+              </td>
+              <td>{{ patient.telefono || "Sin telefono" }}</td>
+              <td>{{ patient.correo || "Sin correo" }}</td>
+              <td>{{ patient.tipoProcedimiento || "Sin procedimiento" }}</td>
+              <td>
+                <span class="patient-table__badge">
+                  {{ patient.estado || "activo" }}
+                </span>
+              </td>
+              <td>{{ formatDate(patient.createdAt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -87,6 +110,56 @@ function formatDate(value) {
   padding: 2rem 1.2rem;
   text-align: center;
   color: var(--text-soft);
+}
+
+.patient-table__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.patient-table__cards {
+  display: none;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.patient-table__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: #f9fcfd;
+  border: 1px solid rgba(111, 145, 153, 0.14);
+}
+
+.patient-table__card-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.patient-table__card p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.patient-table__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.patient-table__chips span {
+  padding: 0.38rem 0.68rem;
+  border-radius: 999px;
+  background: #f2f7f8;
+  border: 1px solid rgba(17, 184, 159, 0.1);
+  color: var(--text-soft);
+  font-size: 0.84rem;
 }
 
 .patient-table__scroll {
@@ -129,5 +202,15 @@ function formatDate(value) {
   background: rgba(47, 122, 134, 0.12);
   color: var(--primary-dark);
   text-transform: capitalize;
+}
+
+@media (max-width: 760px) {
+  .patient-table__cards {
+    display: flex;
+  }
+
+  .patient-table__scroll {
+    display: none;
+  }
 }
 </style>

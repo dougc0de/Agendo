@@ -8,7 +8,7 @@ import { useAppointments } from "../composables/useAppointments.js";
 import { getAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { getPlanDefinition } from "../shared/plans.js";
-import { canAccessFinance, isAdministrativeUser } from "../shared/roles.js";
+import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 import {
     addDays,
@@ -48,12 +48,6 @@ const planDefinition = computed(
 );
 const isAdminUser = computed(() =>
     isAdministrativeUser({
-        membershipRole: authStore.membershipRole,
-        userRole: authStore.user?.rol
-    })
-);
-const canSeeFinance = computed(() =>
-    canAccessFinance({
         membershipRole: authStore.membershipRole,
         userRole: authStore.user?.rol
     })
@@ -98,27 +92,6 @@ function formatDate(value) {
         : shortDateFormatter.format(date);
 }
 
-const todayAppointments = computed(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    const day = today.getDate();
-
-    return appointments.value.filter((appointment) => {
-        const appointmentDate = toAppointmentDate(appointment);
-
-        if (!appointmentDate) {
-            return false;
-        }
-
-        return (
-            appointmentDate.getFullYear() === year &&
-            appointmentDate.getMonth() === month &&
-            appointmentDate.getDate() === day
-        );
-    }).length;
-});
-
 const nextSevenDaysAppointments = computed(() => {
     const now = new Date();
     const limit = new Date(now);
@@ -142,17 +115,7 @@ const upcomingAppointments = computed(() =>
             const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
             return leftDate - rightDate;
         })
-        .slice(0, 5)
-);
-
-const recentAppointments = computed(() =>
-    [...appointments.value]
-        .sort((left, right) => {
-            const leftDate = toAppointmentDate(left)?.getTime() ?? 0;
-            const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
-            return rightDate - leftDate;
-        })
-        .slice(0, 5)
+        .slice(0, 3)
 );
 
 const nextAppointment = computed(() => upcomingAppointments.value[0] ?? null);
@@ -255,16 +218,10 @@ onMounted(() => {
 
             <div class="dashboard-hero__actions">
               <BaseButton @click="router.push('/appointments')">
-                Abrir modulo de reservas
+                Abrir reservas
               </BaseButton>
               <BaseButton variant="ghost" @click="router.push('/appointments/past')">
-                Reservas pasadas
-              </BaseButton>
-              <BaseButton variant="ghost" @click="router.push('/patients')">
-                Gestionar pacientes
-              </BaseButton>
-              <BaseButton v-if="canSeeFinance" variant="ghost" @click="router.push('/finance')">
-                Finanzas
+                Historial de Reservas
               </BaseButton>
             </div>
           </div>
@@ -274,15 +231,22 @@ onMounted(() => {
               <p class="dashboard-panel__eyebrow">Siguiente reserva</p>
 
               <template v-if="nextAppointment">
-                <strong>{{ nextAppointment.pacienteNombre || `Paciente #${nextAppointment.pacienteId}` }}</strong>
-                <p>{{ formatAppointmentMoment(nextAppointment) }}</p>
-                <div class="dashboard-highlight-card__meta">
-                  <span>{{ nextAppointment.salaNombre || `Sala #${nextAppointment.salaId}` }}</span>
-                  <span>{{ nextAppointment.tipoConsulta }}</span>
+                <div class="dashboard-highlight-card__order">
+                  <span class="dashboard-info-chip dashboard-info-chip--time">
+                    {{ formatAppointmentMoment(nextAppointment) }}
+                  </span>
+                  <span class="dashboard-info-chip">
+                    {{ nextAppointment.salaNombre || `Sala #${nextAppointment.salaId}` }}
+                  </span>
+                  <span class="dashboard-info-chip">
+                    {{ nextAppointment.tipoConsulta }}
+                  </span>
                   <span class="status-badge" :class="`status-badge--${nextAppointment.estado}`">
                     {{ nextAppointment.estado }}
                   </span>
                 </div>
+                <strong>{{ nextAppointment.pacienteNombre || `Paciente #${nextAppointment.pacienteId}` }}</strong>
+                <p>{{ nextAppointment.descripcion || "Reserva lista para atencion." }}</p>
               </template>
 
               <template v-else>
@@ -326,11 +290,8 @@ onMounted(() => {
             <div class="dashboard-panel__heading">
               <div>
                 <p class="dashboard-panel__eyebrow">Agenda</p>
-                <h2>Proximas reservas</h2>
+                <h2>Siguientes en agenda</h2>
               </div>
-              <BaseButton size="sm" variant="ghost" @click="fetchAppointments">
-                Actualizar
-              </BaseButton>
             </div>
 
             <p v-if="loading" class="dashboard-state">
@@ -345,13 +306,23 @@ onMounted(() => {
                 :key="appointment.id"
                 class="dashboard-appointment-item"
               >
-                <div>
+                <div class="dashboard-appointment-item__content">
+                  <div class="dashboard-appointment-item__order">
+                    <span class="dashboard-info-chip dashboard-info-chip--time">
+                      {{ formatAppointmentMoment(appointment) }}
+                    </span>
+                    <span class="dashboard-info-chip">
+                      {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
+                    </span>
+                    <span class="dashboard-info-chip">
+                      {{ appointment.tipoConsulta }}
+                    </span>
+                    <span class="status-badge" :class="`status-badge--${appointment.estado}`">
+                      {{ appointment.estado }}
+                    </span>
+                  </div>
                   <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
                   <p>{{ appointment.descripcion || "Reserva sin descripcion adicional." }}</p>
-                </div>
-                <div class="dashboard-appointment-item__meta">
-                  <span>{{ formatAppointmentMoment(appointment) }}</span>
-                  <span>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</span>
                 </div>
               </li>
             </ul>
@@ -391,36 +362,6 @@ onMounted(() => {
             </div>
           </article>
 
-          <article v-reveal="160" class="dashboard-panel dashboard-panel--full">
-            <div class="dashboard-panel__heading">
-              <div>
-                <p class="dashboard-panel__eyebrow">Actividad</p>
-                <h2>Ultimos movimientos</h2>
-              </div>
-            </div>
-
-            <ul v-if="recentAppointments.length" class="dashboard-history-list">
-              <li
-                v-for="appointment in recentAppointments"
-                :key="`recent-${appointment.id}`"
-                class="dashboard-history-item"
-              >
-                <div class="dashboard-history-item__date">
-                  <strong>{{ shortDateFormatter.format(toAppointmentDate(appointment) || new Date()) }}</strong>
-                </div>
-                <div>
-                  <strong>{{ appointment.tipoConsulta }}</strong>
-                  <p>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</p>
-                </div>
-                <span class="status-badge" :class="`status-badge--${appointment.estado}`">
-                  {{ appointment.estado }}
-                </span>
-              </li>
-            </ul>
-            <p v-else class="dashboard-state">
-              Aun no hay actividad para mostrar.
-            </p>
-          </article>
         </section>
       </main>
 
@@ -438,11 +379,22 @@ onMounted(() => {
 
 .dashboard-hero,
 .dashboard-panel {
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(17, 184, 159, 0.12);
   border-radius: 28px;
   background: var(--hero-surface);
   box-shadow: 0 28px 60px rgba(16, 38, 44, 0.08);
   backdrop-filter: blur(10px);
+}
+
+.dashboard-hero::before,
+.dashboard-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(17, 184, 159, 0.88), rgba(31, 80, 120, 0.74));
 }
 
 .dashboard-stat-card {
@@ -514,6 +466,7 @@ onMounted(() => {
   padding: 1.2rem;
   background: var(--hero-surface-alt);
   border: 1px solid var(--hero-border);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
 
 .dashboard-highlight-card strong,
@@ -537,6 +490,14 @@ onMounted(() => {
   margin-top: 0.85rem;
 }
 
+.dashboard-highlight-card__order,
+.dashboard-appointment-item__order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
 .dashboard-highlight-card__meta span,
 .dashboard-plan-card__limits span {
   padding: 0.45rem 0.7rem;
@@ -544,6 +505,22 @@ onMounted(() => {
   background: var(--hero-surface-alt);
   border: 1px solid rgba(17, 184, 159, 0.12);
   color: var(--text-soft);
+}
+
+.dashboard-info-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: #f4f8fa;
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.dashboard-info-chip--time {
+  background: #edf5fb;
+  color: var(--primary-dark);
 }
 
 .dashboard-plan-card__status {
@@ -594,10 +571,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.dashboard-panel--full {
-  grid-column: 1 / -1;
-}
-
 .dashboard-panel__heading {
   display: flex;
   align-items: flex-start;
@@ -618,8 +591,7 @@ onMounted(() => {
   color: #b8392d;
 }
 
-.dashboard-appointment-list,
-.dashboard-history-list {
+.dashboard-appointment-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -628,8 +600,7 @@ onMounted(() => {
   gap: 0.85rem;
 }
 
-.dashboard-appointment-item,
-.dashboard-history-item {
+.dashboard-appointment-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 1rem;
@@ -638,38 +609,20 @@ onMounted(() => {
   border-radius: 18px;
   background: var(--hero-surface-alt);
   border: 1px solid rgba(17, 184, 159, 0.1);
+  box-shadow: inset 4px 0 0 rgba(17, 184, 159, 0.16);
 }
 
-.dashboard-appointment-item strong,
-.dashboard-history-item strong {
+.dashboard-appointment-item strong {
   color: var(--primary-dark);
 }
 
-.dashboard-appointment-item p,
-.dashboard-history-item p {
+.dashboard-appointment-item__content {
+  min-width: 0;
+}
+
+.dashboard-appointment-item p {
   margin: 0.3rem 0 0;
   color: var(--text-soft);
-}
-
-.dashboard-appointment-item__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  text-align: right;
-  color: var(--text-soft);
-  font-size: 0.92rem;
-}
-
-.dashboard-history-item {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-
-.dashboard-history-item__date {
-  min-width: 80px;
-  text-align: center;
-  padding: 0.75rem 0.9rem;
-  border-radius: 16px;
-  background: #eaf7f3;
 }
 
 .dashboard-calendar-preview {
@@ -759,8 +712,7 @@ onMounted(() => {
   }
 
   .dashboard-panel__heading,
-  .dashboard-appointment-item,
-  .dashboard-history-item {
+  .dashboard-appointment-item {
     grid-template-columns: 1fr;
   }
 
@@ -768,12 +720,5 @@ onMounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .dashboard-appointment-item__meta {
-    text-align: left;
-  }
-
-  .dashboard-history-item__date {
-    width: fit-content;
-  }
 }
 </style>

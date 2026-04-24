@@ -41,10 +41,6 @@ const summaryCards = computed(() => [
     {
         label: "Ultimo alta",
         value: latestPatient.value?.nombre ?? "Sin registro nuevo"
-    },
-    {
-        label: "Cuenta",
-        value: authStore.workspace?.nombre ?? "Cuenta AGENDO"
     }
 ]);
 
@@ -215,15 +211,6 @@ onMounted(() => {
                 <p>Cuando registres uno, lo veras destacado aqui.</p>
               </template>
             </article>
-
-            <article v-reveal="140" class="patients-side__card">
-              <span class="patients-panel__eyebrow">Sugerencias</span>
-              <ul class="patients-side__list">
-                <li>Busca por telefono si quieres encontrar al paciente mas rapido.</li>
-                <li>El correo ayuda a evitar duplicados cuando el telefono cambia.</li>
-                <li>Asocia un procedimiento principal para reutilizarlo en reservas futuras.</li>
-              </ul>
-            </article>
           </aside>
         </section>
       </main>
@@ -313,7 +300,7 @@ onMounted(() => {
 
 .patients-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
 }
 
@@ -401,14 +388,6 @@ onMounted(() => {
   background: #f2f7f8;
   border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
-}
-
-.patients-side__list {
-  margin: 0.9rem 0 0;
-  padding-left: 1rem;
-  color: var(--text-soft);
-  display: grid;
-  gap: 0.7rem;
 }
 
 @media (max-width: 980px) {

@@ -61,18 +61,24 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
         @click="emit('open-appointment', appointment)"
       >
         <div class="appointment-day-panel__item-main">
-          <div>
+          <div class="appointment-day-panel__item-order">
             <span class="appointment-day-panel__time">
               {{ appointment.horaInicio }} - {{ appointment.horaFin }}
             </span>
-            <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
-            <p>{{ appointment.tipoConsulta }}</p>
-          </div>
-
-          <div class="appointment-day-panel__meta">
             <span class="appointment-day-panel__chip appointment-day-panel__chip--room">
               {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
             </span>
+            <span class="appointment-day-panel__chip appointment-day-panel__chip--type">
+              {{ appointment.tipoConsulta }}
+            </span>
+          </div>
+
+          <div>
+            <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
+            <p>{{ appointment.descripcion || "Reserva operativa del dia." }}</p>
+          </div>
+
+          <div class="appointment-day-panel__meta">
             <span
               class="appointment-day-panel__chip"
               :class="`appointment-day-panel__chip--${appointment.estado}`"
@@ -168,12 +174,19 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
   padding: 1rem;
   text-align: left;
   cursor: pointer;
+  box-shadow: inset 4px 0 0 rgba(17, 184, 159, 0.18);
 }
 
 .appointment-day-panel__item-main {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+
+.appointment-day-panel__item-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.48rem;
 }
 
 .appointment-day-panel__time {
@@ -211,6 +224,11 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
 
 .appointment-day-panel__chip--room {
   border: 1px solid rgba(17, 184, 159, 0.1);
+}
+
+.appointment-day-panel__chip--type {
+  background: #edf5fb;
+  color: var(--primary-dark);
 }
 
 .appointment-day-panel__chip--pendiente {

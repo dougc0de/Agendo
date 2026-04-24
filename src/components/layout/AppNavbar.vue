@@ -61,13 +61,17 @@ function resolveRouterTarget(href) {
     return path;
 }
 
-function isActiveLink(href) {
+function isActiveLink(link) {
+    const href = link?.href;
+
     if (!isRouterHref(href)) {
         return false;
     }
 
     const [path] = href.split("#");
-    return route.path === path;
+    const matchPaths = Array.isArray(link?.matchPaths) ? link.matchPaths : [path];
+
+    return matchPaths.includes(route.path);
 }
 </script>
 
@@ -115,7 +119,7 @@ function isActiveLink(href) {
           v-if="isRouterHref(link.href)"
           :to="resolveRouterTarget(link.href)"
           class="navbar__link"
-          :class="{ 'navbar__link--active': isActiveLink(link.href) }"
+          :class="{ 'navbar__link--active': isActiveLink(link) }"
         >
           {{ link.label }}
         </RouterLink>
@@ -154,7 +158,7 @@ function isActiveLink(href) {
           v-if="isRouterHref(link.href)"
           :to="resolveRouterTarget(link.href)"
           class="navbar__mobile-link"
-          :class="{ 'navbar__mobile-link--active': isActiveLink(link.href) }"
+          :class="{ 'navbar__mobile-link--active': isActiveLink(link) }"
           @click="closeMenu"
         >
           {{ link.label }}

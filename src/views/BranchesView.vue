@@ -210,9 +210,6 @@ onMounted(() => {
             <BaseButton @click="openCreateModal">
               Crear sucursal
             </BaseButton>
-            <BaseButton variant="ghost" @click="fetchBranches">
-              Actualizar
-            </BaseButton>
           </div>
         </section>
 
@@ -252,16 +249,6 @@ onMounted(() => {
 
           <aside class="branches-side">
             <article v-reveal="100" class="branches-side__card">
-              <span class="branches-panel__eyebrow">Cuenta</span>
-              <h3>{{ authStore.workspace?.nombre ?? "Cuenta AGENDO" }}</h3>
-              <p>{{ authStore.workspace?.clinicName ?? "Clinica principal" }}</p>
-              <div class="branches-side__chips">
-                <span>{{ activeBranches.length }} activas</span>
-                <span>{{ branches.length }} totales</span>
-              </div>
-            </article>
-
-            <article v-reveal="140" class="branches-side__card">
               <span class="branches-panel__eyebrow">Sucursal destacada</span>
               <template v-if="principalBranch">
                 <h3>{{ principalBranch.nombre }}</h3>
@@ -276,15 +263,6 @@ onMounted(() => {
                 <h3>No hay sucursal principal visible</h3>
                 <p>Crea la primera sede o actualiza la migracion de la cuenta.</p>
               </template>
-            </article>
-
-            <article v-reveal="180" class="branches-side__card">
-              <span class="branches-panel__eyebrow">Reglas</span>
-              <ul class="branches-side__list">
-                <li>El codigo se normaliza en minusculas para mantenerlo consistente.</li>
-                <li>No se puede desactivar la unica sucursal activa de la cuenta.</li>
-                <li>Una sucursal con salas activas debe reorganizarse antes de inactivarse.</li>
-              </ul>
             </article>
           </aside>
         </section>
@@ -459,14 +437,6 @@ onMounted(() => {
   border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
   text-transform: capitalize;
-}
-
-.branches-side__list {
-  margin: 0.9rem 0 0;
-  padding-left: 1rem;
-  color: var(--text-soft);
-  display: grid;
-  gap: 0.7rem;
 }
 
 @media (max-width: 980px) {

@@ -32,6 +32,10 @@ const props = defineProps({
         type: String,
         default: "solo_sala"
     },
+    pricingPolicy: {
+        type: String,
+        default: "bloqueado"
+    },
     canWaive: {
         type: Boolean,
         default: false
@@ -75,6 +79,10 @@ const pricingModeLabels = {
     sala_mas_insumos: "Sala mas insumos"
 };
 
+const isPricingModeLocked = computed(() => props.pricingPolicy === "bloqueado");
+const activePricingModeLabel = computed(
+    () => pricingModeLabels[form.pricingMode] ?? form.pricingMode
+);
 const shouldShowRoomCharge = computed(() => form.pricingMode !== "solo_insumos");
 const shouldShowSupplies = computed(() => form.pricingMode !== "solo_sala");
 const suppliesTotal = computed(() =>
@@ -196,9 +204,11 @@ function handleSupplyItemChange(index) {
 }
 
 function formatReservationLabel(reservation) {
-    return `${reservation.fecha} · ${
+    return `${
         reservation.pacienteNombre || `Paciente #${reservation.pacienteId}`
-    } · ${reservation.tipoConsulta}`;
+    } · ${reservation.fecha} · ${reservation.salaNombre || `Sala #${reservation.salaId}`} · ${
+        reservation.tipoConsulta
+    }`;
 }
 
 function handleSubmit() {
@@ -236,8 +246,11 @@ function handleSubmit() {
       <select
         v-model="form.reservationId"
         class="finance-charge-form__select"
-        :disabled="props.mode === 'edit'"
+        :disabled="props.mode === 'edit' || !props.reservationOptions.length"
       >
+        <option :value="null" disabled>
+          {{ props.reservationOptions.length ? "Selecciona un procedimiento" : "No hay procedimientos listos para facturar" }}
+        </option>
         <option
           v-for="reservation in props.reservationOptions"
           :key="reservation.id"
@@ -256,9 +269,13 @@ function handleSubmit() {
         :required="true"
         @update:model-value="form.procedureName = $event"
       />
-      <label class="finance-charge-form__field">
-        <span class="finance-charge-form__label">Modalidad</span>
-        <select v-model="form.pricingMode" class="finance-charge-form__select">
+      <div class="finance-charge-form__field">
+        <span class="finance-charge-form__label">Modalidad aplicada</span>
+        <div v-if="isPricingModeLocked" class="finance-charge-form__policy-card">
+          <strong>{{ activePricingModeLabel }}</strong>
+          <p>La cuenta define esta modalidad desde Configuraciones y recepcion solo registra el cierre del caso.</p>
+        </div>
+        <select v-else v-model="form.pricingMode" class="finance-charge-form__select">
           <option
             v-for="(label, key) in pricingModeLabels"
             :key="key"
@@ -267,7 +284,7 @@ function handleSubmit() {
             {{ label }}
           </option>
         </select>
-      </label>
+      </div>
       <BaseInput
         v-if="shouldShowRoomCharge"
         :model-value="form.roomChargeAmount"
@@ -340,7 +357,7 @@ function handleSubmit() {
       <div class="finance-charge-form__supplies-header">
         <div>
           <h3>Equipo e insumos usados</h3>
-          <p>Selecciona lo utilizado y ajusta cantidades, costo y precio cobrado.</p>
+          <p>Selecciona desde inventario lo que recepcion recibio como consumo real del procedimiento.</p>
         </div>
         <BaseButton
           variant="ghost"
@@ -462,10 +479,10 @@ function handleSubmit() {
 
     <BaseInput
       :model-value="form.notes"
-      label="Notas operativas"
+      label="Observaciones para el bill"
       as="textarea"
       :rows="3"
-      placeholder="Dato contable o administrativo"
+      placeholder="Observacion administrativa o detalle para impresion"
       @update:model-value="form.notes = $event"
     />
 
@@ -478,7 +495,7 @@ function handleSubmit() {
         Cancelar
       </BaseButton>
       <BaseButton type="submit" :disabled="props.submitting">
-        {{ props.mode === "edit" ? "Guardar reporte" : "Registrar reporte" }}
+        {{ props.mode === "edit" ? "Guardar facturacion" : "Registrar facturacion" }}
       </BaseButton>
     </div>
   </form>
@@ -517,6 +534,25 @@ function handleSubmit() {
   color: var(--text);
   padding: 0.8rem 0.9rem;
   outline: none;
+}
+
+.finance-charge-form__policy-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.finance-charge-form__policy-card strong {
+  color: var(--primary-dark);
+}
+
+.finance-charge-form__policy-card p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
 }
 
 .finance-charge-form__supplies,

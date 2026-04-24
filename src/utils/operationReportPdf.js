@@ -75,7 +75,7 @@ export function downloadOperationReportPdf(report) {
         <html lang="es">
           <head>
             <meta charset="utf-8" />
-            <title>Reporte operativo #${escapeHtml(report.id)}</title>
+            <title>Bill procedural #${escapeHtml(report.id)}</title>
             <style>
               body {
                 font-family: Arial, sans-serif;
@@ -169,7 +169,7 @@ export function downloadOperationReportPdf(report) {
             <div class="sheet">
               <div class="hero">
                 <div>
-                  <span class="eyebrow">Reporte operativo</span>
+                  <span class="eyebrow">Bill procedural</span>
                   <h1>${escapeHtml(report.procedureName)}</h1>
                   <p>Reserva #${escapeHtml(report.reservationId)} · ${escapeHtml(report.reservationDate)} · ${escapeHtml(report.reservationStartTime)} - ${escapeHtml(report.reservationEndTime)}</p>
                 </div>
@@ -239,7 +239,11 @@ export function downloadOperationReportPdf(report) {
                     <tbody>${supplyRows}</tbody>
                   </table>
                 `
-                      : `<p>No se registraron insumos para esta operacion.</p>`
+                      : `<p>${
+                            report.pricingMode === "solo_sala"
+                                ? "Este caso se cobro bajo cargo fijo de sala, por lo que no se desglosan insumos en este bill."
+                                : "No se registraron insumos para esta operacion."
+                        }</p>`
               }
 
               <h2 class="section-title">Observaciones</h2>
@@ -254,6 +258,22 @@ export function downloadOperationReportPdf(report) {
                 `
                       : ""
               }
+
+              <h2 class="section-title">Firmas</h2>
+              <div class="totals">
+                <div class="card" style="min-height: 96px; display: flex; flex-direction: column; justify-content: end;">
+                  <h3>Firma del paciente</h3>
+                  <div style="margin-top: 42px; border-top: 1px solid #c7d8df;"></div>
+                </div>
+                <div class="card" style="min-height: 96px; display: flex; flex-direction: column; justify-content: end;">
+                  <h3>Firma de recepcion</h3>
+                  <div style="margin-top: 42px; border-top: 1px solid #c7d8df;"></div>
+                </div>
+                <div class="card" style="min-height: 96px; display: flex; flex-direction: column; justify-content: end; grid-column: 1 / -1;">
+                  <h3>Validacion / sello del centro</h3>
+                  <div style="margin-top: 42px; border-top: 1px solid #c7d8df;"></div>
+                </div>
+              </div>
 
               <div class="footer">
                 Pago registrado: ${escapeHtml(formatDateTime(report.paidAt))} · Metodo: ${escapeHtml(report.paymentMethod || "otro")}

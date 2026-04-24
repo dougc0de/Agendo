@@ -201,8 +201,11 @@ function countLabel(summary) {
             @click="emit('select-appointment', appointment)"
           >
             <span>{{ appointment.horaInicio }} - {{ appointment.horaFin }}</span>
+            <small class="appointment-calendar__appointment-room">
+              {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
+            </small>
             <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
-            <small>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</small>
+            <small>{{ appointment.tipoConsulta }}</small>
           </button>
         </div>
 
@@ -239,6 +242,9 @@ function countLabel(summary) {
         >
           <div>
             <span>{{ appointment.horaInicio }} - {{ appointment.horaFin }}</span>
+            <small class="appointment-calendar__appointment-room">
+              {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
+            </small>
             <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
           </div>
           <small>{{ appointment.tipoConsulta }}</small>
@@ -480,6 +486,7 @@ function countLabel(summary) {
   text-align: left;
   cursor: pointer;
   color: var(--text);
+  box-shadow: inset 4px 0 0 rgba(17, 184, 159, 0.14);
 }
 
 .appointment-calendar__appointment-card span,
@@ -496,6 +503,11 @@ function countLabel(summary) {
 .appointment-calendar__appointment-card small,
 .appointment-calendar__day-item small {
   color: var(--text-soft);
+}
+
+.appointment-calendar__appointment-room {
+  color: var(--primary-dark) !important;
+  font-weight: 600;
 }
 
 .appointment-calendar__day-mode {

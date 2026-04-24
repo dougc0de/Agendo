@@ -35,25 +35,25 @@ const navLinks = [
 const serviceItems = [
     {
         title: "Crear salas",
-        description: "Registra espacios disponibles con la informacion necesaria para operar mejor.",
+        description: "Registra espacios disponibles y dejalos listos para reservar sin friccion.",
         image: crear,
         visualClass: "service-card__visual--one"
     },
     {
         title: "Reservar salas",
-        description: "Asigna horarios y recursos sin tener que repartir la informacion en varios canales.",
+        description: "Asigna horarios y recursos desde una sola vista, sin repartir informacion.",
         image: reservar,
         visualClass: "service-card__visual--two"
     },
     {
         title: "Ver disponibilidad",
-        description: "Detecta huecos libres y cruces de agenda antes de que afecten la operacion.",
+        description: "Detecta huecos libres y cruces de agenda antes de afectar la operacion.",
         image: revisar,
         visualClass: "service-card__visual--three"
     },
     {
         title: "Actualizar registros",
-        description: "Mantén la agenda viva con cambios rapidos, visibles y ordenados para todo el equipo.",
+        description: "Mantiene la agenda al dia con cambios visibles y ordenados para todo el equipo.",
         image: eliminar,
         visualClass: "service-card__visual--four"
     }
@@ -177,8 +177,7 @@ function submitContact() {
             <div class="about-intro">
               <h2>Sobre AGENDO</h2>
               <p class="textinfo">
-                AGENDO nace como una solucion para facilitar la organizacion de salas dentro
-                de entornos clinicos y mejorar la claridad operativa del dia a dia.
+                AGENDO nace para ordenar salas, disponibilidad y operacion diaria en entornos clinicos.
               </p>
             </div>
           </div>
@@ -187,11 +186,8 @@ function submitContact() {
             <article v-reveal class="info-panel">
               <h3>Nuestra mision</h3>
               <p class="textinfo">
-                AGENDO tiene como mision facilitar la gestion de salas dentro de entornos
-                clinicos mediante una experiencia clara, ordenada y funcional. Busca
-                optimizar la reserva de espacios, la consulta de disponibilidad y el control
-                de uso diario, ayudando a reducir cruces de horario y mejorar la
-                organizacion interna.
+                Facilitar la gestion de salas con una experiencia clara, ordenada y funcional
+                que reduzca cruces de horario y mejore la organizacion interna.
               </p>
             </article>
 
@@ -216,10 +212,8 @@ function submitContact() {
               <div class="vision-strip__copy">
                 <h3>Nuestra vision</h3>
                 <p class="textinfo">
-                  AGENDO evoluciona hacia una herramienta adaptable, escalable y confiable
-                  para la organizacion y reserva de espacios, comenzando en el entorno
-                  clinico y proyectandose hacia otros contextos donde la planificacion y la
-                  coordinacion sean esenciales.
+                  Convertirse en una herramienta adaptable, escalable y confiable para la
+                  organizacion de espacios donde la planificacion y la coordinacion son clave.
                 </p>
               </div>
             </article>
@@ -228,11 +222,8 @@ function submitContact() {
               <div class="founder-card__copy">
                 <h3>Quien esta detras</h3>
                 <p class="textinfo">
-                  AGENDO es una solucion orientada a optimizar la gestion de citas y
-                  reservas de espacios fisicos mediante una experiencia clara, eficiente y
-                  centrada en el usuario. Su valor esta en reducir errores de coordinacion,
-                  evitar conflictos de horario y garantizar un uso mas inteligente del
-                  tiempo y de los recursos disponibles.
+                  AGENDO busca reducir errores de coordinacion, evitar conflictos de horario
+                  y asegurar un uso mas inteligente del tiempo y de los recursos disponibles.
                 </p>
               </div>
               <div class="founder-card__profile">

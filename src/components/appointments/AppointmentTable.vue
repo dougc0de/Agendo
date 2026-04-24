@@ -41,48 +41,96 @@ function appointmentTimeRange(appointment) {
       {{ props.emptyMessage }}
     </div>
 
-    <table v-else class="appointment-table__table">
-      <thead>
-        <tr>
-          <th>Sala</th>
-          <th>Fecha</th>
-          <th>Tiempo de reserva</th>
-          <th>Paciente</th>
-          <th v-if="props.showUser">Usuario</th>
-          <th>Tipo</th>
-          <th>Estado</th>
-          <th v-if="props.showActions">Opciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="appointment in props.appointments" :key="appointment.id">
-          <td>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</td>
-          <td>{{ appointment.fecha }}</td>
-          <td>{{ appointmentTimeRange(appointment) }}</td>
-          <td>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</td>
-          <td v-if="props.showUser">{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</td>
-          <td>{{ appointment.tipoConsulta }}</td>
-          <td>
+    <div v-else class="appointment-table__content">
+      <div class="appointment-table__cards">
+        <article
+          v-for="appointment in props.appointments"
+          :key="`card-${appointment.id}`"
+          class="appointment-table__card"
+        >
+          <div class="appointment-table__card-order">
+            <span class="appointment-table__chip appointment-table__chip--time">
+              {{ appointment.fecha }}
+            </span>
+            <span class="appointment-table__chip appointment-table__chip--time">
+              {{ appointmentTimeRange(appointment) }}
+            </span>
+            <span class="appointment-table__chip">
+              {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
+            </span>
+          </div>
+
+          <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
+          <p>{{ appointment.tipoConsulta }}</p>
+
+          <div class="appointment-table__card-meta">
+            <span v-if="props.showUser">
+              {{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}
+            </span>
             <span
               class="appointment-table__badge"
               :class="`appointment-table__badge--${appointment.estado}`"
             >
               {{ appointment.estado }}
             </span>
-          </td>
-          <td v-if="props.showActions" class="appointment-table__actions-cell">
-            <div class="appointment-table__actions">
-              <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
-                Editar
-              </BaseButton>
-              <BaseButton size="sm" variant="danger" @click="$emit('delete', appointment)">
-                Eliminar
-              </BaseButton>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          </div>
+
+          <div v-if="props.showActions" class="appointment-table__card-actions">
+            <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
+              Editar
+            </BaseButton>
+            <BaseButton size="sm" variant="danger" @click="$emit('delete', appointment)">
+              Eliminar
+            </BaseButton>
+          </div>
+        </article>
+      </div>
+
+      <div class="appointment-table__scroll">
+        <table class="appointment-table__table">
+          <thead>
+            <tr>
+              <th>Paciente</th>
+              <th>Fecha</th>
+              <th>Sala</th>
+              <th>Tiempo de reserva</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th v-if="props.showUser">Usuario</th>
+              <th v-if="props.showActions">Opciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="appointment in props.appointments" :key="appointment.id">
+              <td>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</td>
+              <td>{{ appointment.fecha }}</td>
+              <td>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</td>
+              <td>{{ appointmentTimeRange(appointment) }}</td>
+              <td>{{ appointment.tipoConsulta }}</td>
+              <td>
+                <span
+                  class="appointment-table__badge"
+                  :class="`appointment-table__badge--${appointment.estado}`"
+                >
+                  {{ appointment.estado }}
+                </span>
+              </td>
+              <td v-if="props.showUser">{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</td>
+              <td v-if="props.showActions" class="appointment-table__actions-cell">
+                <div class="appointment-table__actions">
+                  <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
+                    Editar
+                  </BaseButton>
+                  <BaseButton size="sm" variant="danger" @click="$emit('delete', appointment)">
+                    Eliminar
+                  </BaseButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -93,10 +141,80 @@ function appointmentTimeRange(appointment) {
   overflow: hidden;
 }
 
+.appointment-table__content {
+  display: flex;
+  flex-direction: column;
+}
+
 .appointment-table__state {
   padding: 2rem 1.2rem;
   text-align: center;
   color: var(--text-soft);
+}
+
+.appointment-table__cards {
+  display: none;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.appointment-table__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: #f9fcfd;
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  box-shadow: inset 4px 0 0 rgba(17, 184, 159, 0.16);
+}
+
+.appointment-table__card strong {
+  color: var(--primary-dark);
+}
+
+.appointment-table__card p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.appointment-table__card-order,
+.appointment-table__card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.appointment-table__card-meta {
+  justify-content: space-between;
+}
+
+.appointment-table__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.appointment-table__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.38rem 0.68rem;
+  border-radius: 999px;
+  background: #f4f8fa;
+  border: 1px solid rgba(17, 184, 159, 0.1);
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.appointment-table__chip--time {
+  background: #edf5fb;
+  color: var(--primary-dark);
+}
+
+.appointment-table__scroll {
+  overflow-x: auto;
 }
 
 .appointment-table__table {
@@ -156,12 +274,22 @@ function appointmentTimeRange(appointment) {
 }
 
 @media (max-width: 920px) {
-  .appointment-table {
-    overflow-x: auto;
-  }
-
   .appointment-table__table {
     min-width: 780px;
+  }
+}
+
+@media (max-width: 760px) {
+  .appointment-table__cards {
+    display: flex;
+  }
+
+  .appointment-table__scroll {
+    display: none;
+  }
+
+  .appointment-table__card-actions :deep(.base-button) {
+    flex: 1 1 160px;
   }
 }
 </style>

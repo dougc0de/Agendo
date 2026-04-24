@@ -71,7 +71,7 @@ async function fetchPastAppointments() {
         error.value =
             requestError.response?.msg ||
             requestError.message ||
-            "No fue posible cargar las reservas pasadas.";
+            "No fue posible cargar el historial de reservas.";
     } finally {
         loading.value = false;
     }
@@ -139,8 +139,8 @@ onMounted(() => {
       <main class="past-appointments-main section-shell">
         <section v-reveal class="past-appointments-hero">
           <div>
-            <span class="past-appointments-eyebrow">Historico</span>
-            <h1>Reservas pasadas</h1>
+            <span class="past-appointments-eyebrow">Historial</span>
+            <h1>Historial de Reservas</h1>
             <p>
               Consulta lo que ya ocurrio en la cuenta sin mezclarlo con la agenda operativa del dia.
             </p>
@@ -148,10 +148,7 @@ onMounted(() => {
 
           <div class="past-appointments-hero__actions">
             <BaseButton variant="ghost" @click="router.push('/appointments')">
-              Volver a reservas activas
-            </BaseButton>
-            <BaseButton variant="ghost" @click="fetchPastAppointments">
-              Actualizar
+              Volver a Reservas
             </BaseButton>
           </div>
         </section>
@@ -238,7 +235,7 @@ onMounted(() => {
             :loading="loading"
             :show-actions="false"
             :show-user="canFilterByUser"
-            empty-message="No encontramos reservas pasadas con esos filtros."
+            empty-message="No encontramos reservas en el historial con esos filtros."
           />
         </section>
       </main>

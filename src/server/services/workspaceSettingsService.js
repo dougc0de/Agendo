@@ -7,10 +7,14 @@ import {
 
 const DEFAULT_CONSULTATION_DURATION = 30;
 const DEFAULT_PROCEDURE_DURATION = 60;
+const DEFAULT_CONSULTATION_DURATION_ENABLED = false;
+const DEFAULT_PROCEDURE_DURATION_ENABLED = false;
 const DEFAULT_OPEN_TIME = "08:00";
 const DEFAULT_CLOSE_TIME = "17:00";
 const DEFAULT_TIME_ZONE = "America/Costa_Rica";
+const DEFAULT_PROCEDURE_PRICING_POLICY = "bloqueado";
 const DEFAULT_PROCEDURE_PRICING_MODE = "solo_sala";
+const PROCEDURE_PRICING_POLICIES = ["bloqueado"];
 const PROCEDURE_PRICING_MODES = ["solo_sala", "solo_insumos", "sala_mas_insumos"];
 
 function resolveWorkspaceId(auth) {
@@ -34,8 +38,14 @@ function sanitizeSettings(row) {
     return {
         id: row.id,
         workspaceId: row.workspace_id,
+        consultationDurationEnabled: Boolean(
+            row.consultation_duration_enabled ?? DEFAULT_CONSULTATION_DURATION_ENABLED
+        ),
         consultationDurationMinutes: Number(
             row.consultation_duration_minutes ?? DEFAULT_CONSULTATION_DURATION
+        ),
+        procedureDurationEnabled: Boolean(
+            row.procedure_duration_enabled ?? DEFAULT_PROCEDURE_DURATION_ENABLED
         ),
         procedureDurationMinutes: Number(
             row.procedure_duration_minutes ?? DEFAULT_PROCEDURE_DURATION
@@ -57,6 +67,9 @@ function sanitizeSettings(row) {
             : normalizeTime(row.procedure_close_time, DEFAULT_CLOSE_TIME),
         procedureNoClosing: Boolean(row.procedure_no_closing),
         timeZone: String(row.time_zone ?? DEFAULT_TIME_ZONE),
+        procedurePricingPolicy: String(
+            row.procedure_pricing_policy ?? DEFAULT_PROCEDURE_PRICING_POLICY
+        ),
         defaultProcedurePricingMode: String(
             row.default_procedure_pricing_mode ?? DEFAULT_PROCEDURE_PRICING_MODE
         ),
@@ -78,6 +91,34 @@ function normalizeDuration(value, fallback) {
     }
 
     return duration;
+}
+
+function resolveReferenceDuration({
+    value,
+    fallback,
+    enabled,
+    label
+}) {
+    const duration = normalizeDuration(value, fallback);
+
+    if (!Number.isInteger(duration) || duration < 5 || duration > 480) {
+        if (!enabled) {
+            return {
+                ok: true,
+                data: fallback
+            };
+        }
+
+        return {
+            ok: false,
+            msg: `El tiempo de referencia de ${label} debe estar entre 5 y 480 minutos.`
+        };
+    }
+
+    return {
+        ok: true,
+        data: duration
+    };
 }
 
 function normalizeBoolean(value) {
@@ -154,7 +195,9 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
     return crearWorkspaceSettings(
         {
             workspaceId,
+            consultationDurationEnabled: DEFAULT_CONSULTATION_DURATION_ENABLED,
             consultationDurationMinutes: DEFAULT_CONSULTATION_DURATION,
+            procedureDurationEnabled: DEFAULT_PROCEDURE_DURATION_ENABLED,
             procedureDurationMinutes: DEFAULT_PROCEDURE_DURATION,
             consultationOpenTime: DEFAULT_OPEN_TIME,
             consultationCloseTime: DEFAULT_CLOSE_TIME,
@@ -163,6 +206,7 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
             procedureCloseTime: DEFAULT_CLOSE_TIME,
             procedureNoClosing: false,
             timeZone: DEFAULT_TIME_ZONE,
+            procedurePricingPolicy: DEFAULT_PROCEDURE_PRICING_POLICY,
             defaultProcedurePricingMode: DEFAULT_PROCEDURE_PRICING_MODE
         },
         executor
@@ -221,49 +265,60 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             };
         }
 
-        const consultationDurationMinutes = normalizeDuration(
-            payload?.consultationDurationMinutes,
-            NaN
+        const currentSettings = sanitizeSettings(await ensureWorkspaceSettings(workspaceId));
+        const consultationDurationEnabled = normalizeBoolean(
+            payload?.consultationDurationEnabled ?? currentSettings.consultationDurationEnabled
         );
-        const procedureDurationMinutes = normalizeDuration(
-            payload?.procedureDurationMinutes,
-            NaN
+        const procedureDurationEnabled = normalizeBoolean(
+            payload?.procedureDurationEnabled ?? currentSettings.procedureDurationEnabled
         );
         const consultationNoClosing = normalizeBoolean(payload?.consultationNoClosing);
         const procedureNoClosing = normalizeBoolean(payload?.procedureNoClosing);
-        const timeZone = String(payload?.timeZone ?? DEFAULT_TIME_ZONE).trim();
+        const timeZone = String(payload?.timeZone ?? currentSettings.timeZone).trim();
+        const procedurePricingPolicy = String(
+            payload?.procedurePricingPolicy ?? currentSettings.procedurePricingPolicy
+        )
+            .trim()
+            .toLowerCase();
         const defaultProcedurePricingMode = String(
-            payload?.defaultProcedurePricingMode ?? DEFAULT_PROCEDURE_PRICING_MODE
+            payload?.defaultProcedurePricingMode ?? currentSettings.defaultProcedurePricingMode
         )
             .trim()
             .toLowerCase();
 
-        if (
-            !Number.isInteger(consultationDurationMinutes) ||
-            consultationDurationMinutes < 5 ||
-            consultationDurationMinutes > 480
-        ) {
-            return {
-                ok: false,
-                msg: "La duracion base de consultas debe estar entre 5 y 480 minutos."
-            };
+        const consultationDurationResult = resolveReferenceDuration({
+            value: payload?.consultationDurationMinutes,
+            fallback: currentSettings.consultationDurationMinutes,
+            enabled: consultationDurationEnabled,
+            label: "consultas"
+        });
+
+        if (!consultationDurationResult.ok) {
+            return consultationDurationResult;
         }
 
-        if (
-            !Number.isInteger(procedureDurationMinutes) ||
-            procedureDurationMinutes < 5 ||
-            procedureDurationMinutes > 480
-        ) {
-            return {
-                ok: false,
-                msg: "La duracion base de procedimientos debe estar entre 5 y 480 minutos."
-            };
+        const procedureDurationResult = resolveReferenceDuration({
+            value: payload?.procedureDurationMinutes,
+            fallback: currentSettings.procedureDurationMinutes,
+            enabled: procedureDurationEnabled,
+            label: "procedimientos"
+        });
+
+        if (!procedureDurationResult.ok) {
+            return procedureDurationResult;
         }
 
         if (!timeZone) {
             return {
                 ok: false,
                 msg: "La zona horaria es obligatoria."
+            };
+        }
+
+        if (!PROCEDURE_PRICING_POLICIES.includes(procedurePricingPolicy)) {
+            return {
+                ok: false,
+                msg: "La politica procedural no es valida."
             };
         }
 
@@ -298,11 +353,11 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             return procedureSchedule;
         }
 
-        await ensureWorkspaceSettings(workspaceId);
-
         const updatedSettings = await actualizarWorkspaceSettings(workspaceId, {
-            consultationDurationMinutes,
-            procedureDurationMinutes,
+            consultationDurationEnabled,
+            consultationDurationMinutes: consultationDurationResult.data,
+            procedureDurationEnabled,
+            procedureDurationMinutes: procedureDurationResult.data,
             consultationOpenTime: consultationSchedule.data.openTime,
             consultationCloseTime: consultationSchedule.data.closeTime,
             consultationNoClosing: consultationSchedule.data.noClosing,
@@ -310,6 +365,7 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             procedureCloseTime: procedureSchedule.data.closeTime,
             procedureNoClosing: procedureSchedule.data.noClosing,
             timeZone,
+            procedurePricingPolicy,
             defaultProcedurePricingMode
         });
 

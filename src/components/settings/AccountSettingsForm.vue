@@ -22,7 +22,9 @@ const emit = defineEmits(["submit"]);
 
 function createDefaultForm() {
     return {
+        consultationDurationEnabled: false,
         consultationDurationMinutes: 30,
+        procedureDurationEnabled: false,
         procedureDurationMinutes: 60,
         consultationOpenTime: "08:00",
         consultationCloseTime: "17:00",
@@ -31,6 +33,7 @@ function createDefaultForm() {
         procedureCloseTime: "17:00",
         procedureNoClosing: false,
         timeZone: "America/Costa_Rica",
+        procedurePricingPolicy: "bloqueado",
         defaultProcedurePricingMode: "solo_sala"
     };
 }
@@ -47,7 +50,9 @@ watch(
 
 function handleSubmit() {
     emit("submit", {
+        consultationDurationEnabled: Boolean(form.consultationDurationEnabled),
         consultationDurationMinutes: Number(form.consultationDurationMinutes),
+        procedureDurationEnabled: Boolean(form.procedureDurationEnabled),
         procedureDurationMinutes: Number(form.procedureDurationMinutes),
         consultationOpenTime: form.consultationOpenTime,
         consultationCloseTime: form.consultationNoClosing ? null : form.consultationCloseTime,
@@ -56,6 +61,7 @@ function handleSubmit() {
         procedureCloseTime: form.procedureNoClosing ? null : form.procedureCloseTime,
         procedureNoClosing: Boolean(form.procedureNoClosing),
         timeZone: form.timeZone,
+        procedurePricingPolicy: form.procedurePricingPolicy,
         defaultProcedurePricingMode: form.defaultProcedurePricingMode
     });
 }
@@ -66,18 +72,26 @@ function handleSubmit() {
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
         <h3>Consulta</h3>
-        <p>Define la duracion base y el horario operativo para consultas.</p>
+        <p>Decide si quieres guardar un tiempo de referencia para consultas o dejar que cada reserva lo defina libremente.</p>
       </div>
 
       <div class="account-settings-form__grid">
+        <label class="account-settings-form__checkbox">
+          <input
+            v-model="form.consultationDurationEnabled"
+            type="checkbox"
+          >
+          <span>Usar tiempo de referencia para consultas</span>
+        </label>
         <BaseInput
           :model-value="form.consultationDurationMinutes"
-          label="Duracion base de consultas"
+          label="Tiempo de referencia de consultas"
           type="number"
           min="5"
           max="480"
           placeholder="30"
-          :required="true"
+          :required="form.consultationDurationEnabled"
+          :disabled="!form.consultationDurationEnabled"
           @update:model-value="form.consultationDurationMinutes = $event"
         />
         <BaseInput
@@ -108,18 +122,26 @@ function handleSubmit() {
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
         <h3>Procedimiento</h3>
-        <p>Configura un horario distinto cuando los procedimientos requieren otra operacion.</p>
+        <p>Los procedimientos respetan la ventana operativa, pero el tiempo real lo define el doctor al reservar.</p>
       </div>
 
       <div class="account-settings-form__grid">
+        <label class="account-settings-form__checkbox">
+          <input
+            v-model="form.procedureDurationEnabled"
+            type="checkbox"
+          >
+          <span>Guardar tiempo de referencia para procedimientos</span>
+        </label>
         <BaseInput
           :model-value="form.procedureDurationMinutes"
-          label="Duracion base de procedimientos"
+          label="Tiempo de referencia de procedimientos"
           type="number"
           min="5"
           max="480"
           placeholder="60"
-          :required="true"
+          :required="form.procedureDurationEnabled"
+          :disabled="!form.procedureDurationEnabled"
           @update:model-value="form.procedureDurationMinutes = $event"
         />
         <BaseInput
@@ -145,7 +167,17 @@ function handleSubmit() {
           <span>Sin cierre para procedimientos</span>
         </label>
         <label class="account-settings-form__field">
-          <span class="account-settings-form__label">Modalidad por defecto</span>
+          <span class="account-settings-form__label">Politica procedural</span>
+          <select
+            v-model="form.procedurePricingPolicy"
+            class="account-settings-form__select"
+            disabled
+          >
+            <option value="bloqueado">Modalidad bloqueada por cuenta</option>
+          </select>
+        </label>
+        <label class="account-settings-form__field">
+          <span class="account-settings-form__label">Modalidad aplicada a procedimientos</span>
           <select
             v-model="form.defaultProcedurePricingMode"
             class="account-settings-form__select"
@@ -181,7 +213,8 @@ function handleSubmit() {
 
     <div class="account-settings-form__tips">
       <p>Las reservas activas se calculan segun la hora final y la zona horaria de la cuenta.</p>
-      <p>Si activas "sin cierre", la atencion solo respetara la hora de apertura en ese mismo dia.</p>
+      <p>Los tiempos de referencia no se aplican automaticamente en reservas; solo sirven como politica interna si tu clinica decide usarlos.</p>
+      <p>La recepcion ejecuta la modalidad procedural definida aqui y luego genera el bill imprimible desde Finanzas.</p>
     </div>
 
     <p v-if="props.errorMessage" class="account-settings-form__error">

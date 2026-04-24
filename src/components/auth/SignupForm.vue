@@ -59,6 +59,7 @@ function handleSubmit() {
   <form class="signup-form" @submit.prevent="handleSubmit">
     <section class="signup-form__section">
       <div class="signup-form__section-heading">
+        <span class="signup-form__step">Paso 1</span>
         <h2>Crear cuenta</h2>
         <p>Registra tu clinica, elige tu plan y entra directo al dashboard.</p>
       </div>
@@ -91,6 +92,7 @@ function handleSubmit() {
 
     <section class="signup-form__section">
       <div class="signup-form__section-heading">
+        <span class="signup-form__step">Paso 2</span>
         <h3>Datos de la clinica</h3>
         <p>Usaremos esta informacion para crear tu cuenta inicial.</p>
       </div>
@@ -143,6 +145,7 @@ function handleSubmit() {
 
     <section class="signup-form__section">
       <div class="signup-form__section-heading">
+        <span class="signup-form__step">Paso 3</span>
         <h3>Elige tu plan</h3>
         <p>Enterprise quedara para venta asistida; aqui eliges Basico o Premium.</p>
       </div>
@@ -196,6 +199,20 @@ function handleSubmit() {
 .signup-form__section-heading h2,
 .signup-form__section-heading h3 {
   margin: 0;
+}
+
+.signup-form__step {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: var(--hero-chip-bg);
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .signup-form__section-heading p {

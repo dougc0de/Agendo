@@ -7,22 +7,24 @@ import {
 function buildPrivateNavLinks({ membershipRole, userRole } = {}) {
     const links = [
         { label: "Dashboard", href: "/dashboard" },
-        { label: "Sucursales", href: "/branches" },
         { label: "Reservas", href: "/appointments" },
-        { label: "Reservas pasadas", href: "/appointments/past" },
-        { label: "Pacientes", href: "/patients" }
+        { label: "Pacientes", href: "/patients" },
+        { label: "Sucursales", href: "/branches" }
     ];
 
     if (canAccessFinance({ membershipRole, userRole })) {
         links.push({ label: "Finanzas", href: "/finance" });
     }
 
-    if (canManageInternalUsers({ membershipRole, userRole })) {
-        links.push({ label: "Usuarios", href: "/users" });
-    }
-
-    if (isAdministrativeUser({ membershipRole, userRole })) {
-        links.push({ label: "Configuraciones", href: "/settings" });
+    if (
+        canManageInternalUsers({ membershipRole, userRole }) ||
+        isAdministrativeUser({ membershipRole, userRole })
+    ) {
+        links.push({
+            label: "Administracion",
+            href: "/settings",
+            matchPaths: ["/settings", "/users"]
+        });
     }
 
     return links;

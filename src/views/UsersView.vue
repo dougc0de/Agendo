@@ -216,11 +216,17 @@ onMounted(() => {
             <BaseButton @click="openCreateModal">
               Crear usuario
             </BaseButton>
-            <BaseButton variant="ghost" @click="fetchUsers">
-              Actualizar
-            </BaseButton>
           </div>
         </section>
+
+        <nav v-reveal="40" class="users-admin-switch">
+          <RouterLink to="/settings" class="users-admin-switch__link">
+            Configuraciones
+          </RouterLink>
+          <RouterLink to="/users" class="users-admin-switch__link users-admin-switch__link--active">
+            Usuarios
+          </RouterLink>
+        </nav>
 
         <section class="users-stats stats-strip">
           <article
@@ -238,7 +244,7 @@ onMounted(() => {
           <article v-reveal class="users-panel">
             <div class="users-panel__header">
               <div>
-                <span class="users-panel__eyebrow">Acceso</span>
+                <span class="users-panel__eyebrow">Equipo</span>
                 <h2>Gestion interna</h2>
                 <p>Administra rol, sucursal principal y estado del equipo.</p>
               </div>
@@ -303,17 +309,6 @@ onMounted(() => {
               </table>
             </div>
           </article>
-
-          <aside class="users-side">
-            <article v-reveal="100" class="users-side__card">
-              <span class="users-panel__eyebrow">Roles</span>
-              <ul class="users-side__list">
-                <li><strong>Admin:</strong> controla configuraciones, usuarios y finanzas.</li>
-                <li><strong>Recepcionista:</strong> maneja agenda, historico y cobros.</li>
-                <li><strong>Doctor:</strong> trabaja la agenda y su historico propio.</li>
-              </ul>
-            </article>
-          </aside>
         </section>
       </main>
 
@@ -347,8 +342,7 @@ onMounted(() => {
 }
 
 .users-hero,
-.users-panel,
-.users-side__card {
+.users-panel {
   border-radius: 26px;
   border: 1px solid rgba(17, 184, 159, 0.12);
   background: var(--hero-surface);
@@ -384,8 +378,7 @@ onMounted(() => {
 }
 
 .users-hero h1,
-.users-panel__header h2,
-.users-side__card h3 {
+.users-panel__header h2 {
   margin: 0.7rem 0 0;
 }
 
@@ -399,6 +392,31 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
+}
+
+.users-admin-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.users-admin-switch__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.7rem;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 184, 159, 0.14);
+  background: var(--hero-surface);
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.users-admin-switch__link--active {
+  background: var(--primary-dark);
+  color: #fff;
+  border-color: transparent;
 }
 
 .users-stats {
@@ -425,13 +443,11 @@ onMounted(() => {
 
 .users-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.85fr);
+  grid-template-columns: 1fr;
   gap: 1rem;
-  align-items: start;
 }
 
-.users-panel,
-.users-side__card {
+.users-panel {
   padding: 1.2rem;
 }
 
@@ -521,29 +537,18 @@ onMounted(() => {
   text-transform: capitalize;
 }
 
-.users-side {
-  display: grid;
-  gap: 1rem;
-}
-
-.users-side__list {
-  margin: 0.9rem 0 0;
-  padding-left: 1rem;
-  display: grid;
-  gap: 0.7rem;
-  color: var(--text-soft);
-}
-
-@media (max-width: 980px) {
-  .users-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 760px) {
   .users-hero {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .users-admin-switch {
+    width: 100%;
+  }
+
+  .users-admin-switch__link {
+    flex: 1 1 180px;
   }
 
   .users-hero__actions :deep(.base-button) {
