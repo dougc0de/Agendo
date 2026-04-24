@@ -458,6 +458,7 @@ onMounted(() => {
   gap: 1.25rem;
   padding: 1.5rem;
   background: var(--hero-surface-strong);
+  background: #b8392d;
 }
 
 .dashboard-hero__copy {

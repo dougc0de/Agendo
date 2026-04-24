@@ -343,7 +343,8 @@ export async function signupWorkspaceOwner(payload) {
                     procedureOpenTime: clinic.horaApertura,
                     procedureCloseTime: clinic.horaCierre,
                     procedureNoClosing: false,
-                    timeZone: "America/Costa_Rica"
+                    timeZone: "America/Costa_Rica",
+                    defaultProcedurePricingMode: "solo_sala"
                 },
                 client
             );

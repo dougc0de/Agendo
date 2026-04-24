@@ -28,9 +28,10 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
                     procedure_open_time,
                     procedure_close_time,
                     procedure_no_closing,
-                    time_zone
+                    time_zone,
+                    default_procedure_pricing_mode
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
         `,
         [
@@ -43,7 +44,8 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
             datosSettings.procedureOpenTime,
             datosSettings.procedureCloseTime,
             datosSettings.procedureNoClosing,
-            datosSettings.timeZone
+            datosSettings.timeZone,
+            datosSettings.defaultProcedurePricingMode
         ]
     );
 
@@ -63,7 +65,8 @@ export async function actualizarWorkspaceSettings(workspaceId, datosSettings, ex
                 procedure_open_time = $7,
                 procedure_close_time = $8,
                 procedure_no_closing = $9,
-                time_zone = $10
+                time_zone = $10,
+                default_procedure_pricing_mode = $11
             WHERE workspace_id = $1
             RETURNING *
         `,
@@ -77,7 +80,8 @@ export async function actualizarWorkspaceSettings(workspaceId, datosSettings, ex
             datosSettings.procedureOpenTime,
             datosSettings.procedureCloseTime,
             datosSettings.procedureNoClosing,
-            datosSettings.timeZone
+            datosSettings.timeZone,
+            datosSettings.defaultProcedurePricingMode
         ]
     );
 

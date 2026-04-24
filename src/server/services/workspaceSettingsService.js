@@ -10,6 +10,8 @@ const DEFAULT_PROCEDURE_DURATION = 60;
 const DEFAULT_OPEN_TIME = "08:00";
 const DEFAULT_CLOSE_TIME = "17:00";
 const DEFAULT_TIME_ZONE = "America/Costa_Rica";
+const DEFAULT_PROCEDURE_PRICING_MODE = "solo_sala";
+const PROCEDURE_PRICING_MODES = ["solo_sala", "solo_insumos", "sala_mas_insumos"];
 
 function resolveWorkspaceId(auth) {
     const workspaceId = Number(auth?.workspaceId);
@@ -55,6 +57,9 @@ function sanitizeSettings(row) {
             : normalizeTime(row.procedure_close_time, DEFAULT_CLOSE_TIME),
         procedureNoClosing: Boolean(row.procedure_no_closing),
         timeZone: String(row.time_zone ?? DEFAULT_TIME_ZONE),
+        defaultProcedurePricingMode: String(
+            row.default_procedure_pricing_mode ?? DEFAULT_PROCEDURE_PRICING_MODE
+        ),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
@@ -157,7 +162,8 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
             procedureOpenTime: DEFAULT_OPEN_TIME,
             procedureCloseTime: DEFAULT_CLOSE_TIME,
             procedureNoClosing: false,
-            timeZone: DEFAULT_TIME_ZONE
+            timeZone: DEFAULT_TIME_ZONE,
+            defaultProcedurePricingMode: DEFAULT_PROCEDURE_PRICING_MODE
         },
         executor
     );
@@ -226,6 +232,11 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
         const consultationNoClosing = normalizeBoolean(payload?.consultationNoClosing);
         const procedureNoClosing = normalizeBoolean(payload?.procedureNoClosing);
         const timeZone = String(payload?.timeZone ?? DEFAULT_TIME_ZONE).trim();
+        const defaultProcedurePricingMode = String(
+            payload?.defaultProcedurePricingMode ?? DEFAULT_PROCEDURE_PRICING_MODE
+        )
+            .trim()
+            .toLowerCase();
 
         if (
             !Number.isInteger(consultationDurationMinutes) ||
@@ -253,6 +264,13 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             return {
                 ok: false,
                 msg: "La zona horaria es obligatoria."
+            };
+        }
+
+        if (!PROCEDURE_PRICING_MODES.includes(defaultProcedurePricingMode)) {
+            return {
+                ok: false,
+                msg: "La modalidad por defecto de procedimientos no es valida."
             };
         }
 
@@ -291,7 +309,8 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             procedureOpenTime: procedureSchedule.data.openTime,
             procedureCloseTime: procedureSchedule.data.closeTime,
             procedureNoClosing: procedureSchedule.data.noClosing,
-            timeZone
+            timeZone,
+            defaultProcedurePricingMode
         });
 
         return {

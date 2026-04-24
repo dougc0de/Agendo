@@ -25,7 +25,8 @@ const settings = ref({
     procedureOpenTime: "08:00",
     procedureCloseTime: "17:00",
     procedureNoClosing: false,
-    timeZone: "America/Costa_Rica"
+    timeZone: "America/Costa_Rica",
+    defaultProcedurePricingMode: "solo_sala"
 });
 
 const isAdminUser = computed(() =>
@@ -62,6 +63,15 @@ const statCards = computed(() => [
         value: settings.value.procedureNoClosing
             ? `Desde ${settings.value.procedureOpenTime ?? "08:00"}`
             : `${settings.value.procedureOpenTime ?? "08:00"} - ${settings.value.procedureCloseTime ?? "17:00"}`
+    },
+    {
+        label: "Cobro procedural base",
+        value:
+            {
+                solo_sala: "Solo sala",
+                solo_insumos: "Solo insumos",
+                sala_mas_insumos: "Sala + insumos"
+            }[settings.value.defaultProcedurePricingMode] ?? "Solo sala"
     }
 ]);
 
@@ -82,7 +92,9 @@ async function fetchSettings() {
             procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
             procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
             procedureNoClosing: Boolean(response.data?.procedureNoClosing),
-            timeZone: response.data?.timeZone ?? "America/Costa_Rica"
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica",
+            defaultProcedurePricingMode:
+                response.data?.defaultProcedurePricingMode ?? "solo_sala"
         };
     } catch (requestError) {
         error.value =
@@ -98,7 +110,8 @@ async function fetchSettings() {
             procedureOpenTime: "08:00",
             procedureCloseTime: "17:00",
             procedureNoClosing: false,
-            timeZone: "America/Costa_Rica"
+            timeZone: "America/Costa_Rica",
+            defaultProcedurePricingMode: "solo_sala"
         };
     } finally {
         loading.value = false;
@@ -123,7 +136,9 @@ async function handleSaveSettings(payload) {
             procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
             procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
             procedureNoClosing: Boolean(response.data?.procedureNoClosing),
-            timeZone: response.data?.timeZone ?? "America/Costa_Rica"
+            timeZone: response.data?.timeZone ?? "America/Costa_Rica",
+            defaultProcedurePricingMode:
+                response.data?.defaultProcedurePricingMode ?? "solo_sala"
         };
         feedback.value = response.msg;
     } catch (requestError) {

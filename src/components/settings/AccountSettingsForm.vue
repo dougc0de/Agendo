@@ -30,7 +30,8 @@ function createDefaultForm() {
         procedureOpenTime: "08:00",
         procedureCloseTime: "17:00",
         procedureNoClosing: false,
-        timeZone: "America/Costa_Rica"
+        timeZone: "America/Costa_Rica",
+        defaultProcedurePricingMode: "solo_sala"
     };
 }
 
@@ -54,7 +55,8 @@ function handleSubmit() {
         procedureOpenTime: form.procedureOpenTime,
         procedureCloseTime: form.procedureNoClosing ? null : form.procedureCloseTime,
         procedureNoClosing: Boolean(form.procedureNoClosing),
-        timeZone: form.timeZone
+        timeZone: form.timeZone,
+        defaultProcedurePricingMode: form.defaultProcedurePricingMode
     });
 }
 </script>
@@ -141,6 +143,17 @@ function handleSubmit() {
             type="checkbox"
           >
           <span>Sin cierre para procedimientos</span>
+        </label>
+        <label class="account-settings-form__field">
+          <span class="account-settings-form__label">Modalidad por defecto</span>
+          <select
+            v-model="form.defaultProcedurePricingMode"
+            class="account-settings-form__select"
+          >
+            <option value="solo_sala">Solo uso de sala</option>
+            <option value="solo_insumos">Solo insumos o equipo usado</option>
+            <option value="sala_mas_insumos">Sala mas insumos</option>
+          </select>
         </label>
       </div>
     </div>
