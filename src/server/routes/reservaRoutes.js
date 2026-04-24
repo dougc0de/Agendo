@@ -7,6 +7,7 @@ import {
     buscarReservaPorId,
     crearReserva,
     editarReserva,
+    actualizarEstadoReserva,
     eliminarReserva
 } from "../services/reservaService.js";
 
@@ -76,6 +77,17 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
     const { id } = req.params;
     const resultado = await editarReserva(id, req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveReservaStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.patch("/:id/estado", async (req, res) => {
+    const { id } = req.params;
+    const resultado = await actualizarEstadoReserva(id, req.body?.estado, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveReservaStatus(resultado, 400)).json(resultado);

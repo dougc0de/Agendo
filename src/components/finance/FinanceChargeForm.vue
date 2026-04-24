@@ -2,6 +2,10 @@
 import { computed, reactive, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
+import {
+    DEFAULT_CURRENCY_CODE,
+    LATAM_CURRENCY_OPTIONS
+} from "../../shared/currencies.js";
 
 const props = defineProps({
     initialValue: {
@@ -32,6 +36,10 @@ const props = defineProps({
         type: String,
         default: "solo_sala"
     },
+    defaultCurrencyCode: {
+        type: String,
+        default: DEFAULT_CURRENCY_CODE
+    },
     pricingPolicy: {
         type: String,
         default: "bloqueado"
@@ -47,6 +55,7 @@ const emit = defineEmits(["submit", "cancel"]);
 function createDefaultSupply() {
     return {
         inventoryItemId: "",
+        searchQuery: "",
         quantity: 1,
         unitCost: 0,
         unitPrice: 0,
@@ -60,9 +69,9 @@ function createDefaultForm() {
         procedureName: "",
         pricingMode: props.defaultPricingMode || "solo_sala",
         roomChargeAmount: 0,
-        currencyCode: "CRC",
+        currencyCode: props.defaultCurrencyCode || DEFAULT_CURRENCY_CODE,
         paymentStatus: "pendiente",
-        paymentMethod: "otro",
+        paymentMethod: null,
         paidAt: "",
         notes: "",
         chargeDecision: "cobrable",
@@ -85,6 +94,16 @@ const activePricingModeLabel = computed(
 );
 const shouldShowRoomCharge = computed(() => form.pricingMode !== "solo_insumos");
 const shouldShowSupplies = computed(() => form.pricingMode !== "solo_sala");
+const displayPaymentStatus = computed(() => {
+    if (form.chargeDecision === "exonerado") {
+        return "anulado";
+    }
+
+    return form.paymentStatus || "pendiente";
+});
+const showCurrencyReminder = computed(
+    () => form.currencyCode !== (props.defaultCurrencyCode || DEFAULT_CURRENCY_CODE)
+);
 const suppliesTotal = computed(() =>
     form.supplies.reduce(
         (sum, supply) => sum + Number(supply.quantity || 0) * Number(supply.unitPrice || 0),
@@ -112,6 +131,7 @@ function syncIncomingValue(value) {
         waiverReason: value?.waiverReason ?? value?.waiver_reason ?? "",
         supplies: (value?.supplies ?? []).map((supply) => ({
             inventoryItemId: supply.inventoryItemId ?? supply.inventory_item_id ?? "",
+            searchQuery: supply.itemNameSnapshot ?? supply.item_name_snapshot ?? "",
             quantity: supply.quantity ?? 1,
             unitCost: supply.unitCost ?? supply.unit_cost ?? 0,
             unitPrice: supply.unitPrice ?? supply.unit_price ?? 0,
@@ -156,20 +176,10 @@ watch(
 );
 
 watch(
-    () => form.chargeDecision,
+    () => props.defaultCurrencyCode,
     (value) => {
-        if (value === "exonerado") {
-            form.paymentStatus = "anulado";
-            form.paidAt = "";
-        }
-    }
-);
-
-watch(
-    () => form.paymentStatus,
-    (value) => {
-        if (value !== "pagado") {
-            form.paidAt = "";
+        if (props.mode === "create" && !props.initialValue?.id) {
+            form.currencyCode = value || DEFAULT_CURRENCY_CODE;
         }
     }
 );
@@ -201,6 +211,36 @@ function handleSupplyItemChange(index) {
     if (!Number(supply.unitPrice)) {
         supply.unitPrice = inventoryItem.precioSugerido ?? 0;
     }
+
+    if (!supply.searchQuery) {
+        supply.searchQuery = inventoryItem.nombre ?? "";
+    }
+}
+
+function getVisibleInventoryOptions(searchQuery, selectedItemId) {
+    const normalizedQuery = String(searchQuery ?? "").trim().toLowerCase();
+
+    return props.inventoryOptions.filter((item) => {
+        const isSelected = Number(item.id) === Number(selectedItemId);
+        const isActive = item.estado === "activo";
+
+        if (!isSelected && !isActive) {
+            return false;
+        }
+
+        if (isSelected) {
+            return true;
+        }
+
+        if (!normalizedQuery) {
+            return true;
+        }
+
+        return [item.nombre, item.categoria, item.unidad]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedQuery);
+    });
 }
 
 function formatReservationLabel(reservation) {
@@ -218,9 +258,6 @@ function handleSubmit() {
         pricingMode: form.pricingMode,
         roomChargeAmount: Number(form.roomChargeAmount || 0),
         currencyCode: form.currencyCode,
-        paymentStatus: form.paymentStatus,
-        paymentMethod: form.paymentMethod,
-        paidAt: form.paidAt || null,
         notes: form.notes,
         chargeDecision: form.chargeDecision,
         waiverReason: form.chargeDecision === "exonerado" ? form.waiverReason : null,
@@ -298,38 +335,30 @@ function handleSubmit() {
       <label class="finance-charge-form__field">
         <span class="finance-charge-form__label">Moneda</span>
         <select v-model="form.currencyCode" class="finance-charge-form__select">
-          <option value="CRC">CRC</option>
-          <option value="USD">USD</option>
+          <option
+            v-for="currency in LATAM_CURRENCY_OPTIONS"
+            :key="currency.code"
+            :value="currency.code"
+          >
+            {{ currency.label }}
+          </option>
         </select>
       </label>
-      <label class="finance-charge-form__field">
-        <span class="finance-charge-form__label">Estado del cobro</span>
-        <select
-          v-model="form.paymentStatus"
-          class="finance-charge-form__select"
-          :disabled="form.chargeDecision === 'exonerado'"
-        >
-          <option value="pendiente">Pendiente</option>
-          <option value="pagado">Pagado</option>
-          <option value="anulado">Anulado</option>
-        </select>
-      </label>
-      <label class="finance-charge-form__field">
-        <span class="finance-charge-form__label">Metodo de pago</span>
-        <select v-model="form.paymentMethod" class="finance-charge-form__select">
-          <option value="efectivo">Efectivo</option>
-          <option value="tarjeta">Tarjeta</option>
-          <option value="transferencia">Transferencia</option>
-          <option value="otro">Otro</option>
-        </select>
-      </label>
-      <BaseInput
-        :model-value="form.paidAt"
-        label="Fecha y hora de pago"
-        type="datetime-local"
-        :disabled="form.paymentStatus !== 'pagado' || form.chargeDecision === 'exonerado'"
-        @update:model-value="form.paidAt = $event"
-      />
+      <div class="finance-charge-form__field">
+        <span class="finance-charge-form__label">Estado del bill</span>
+        <div class="finance-charge-form__policy-card">
+          <strong>{{ displayPaymentStatus }}</strong>
+          <p>
+            {{
+              displayPaymentStatus === "pagado"
+                ? "El pago ya fue confirmado en recepcion."
+                : displayPaymentStatus === "anulado"
+                  ? "Este caso quedo anulado por decision administrativa."
+                  : "El bill se emite primero y el pago se confirma despues."
+            }}
+          </p>
+        </div>
+      </div>
       <label
         v-if="props.canWaive"
         class="finance-charge-form__field"
@@ -341,6 +370,10 @@ function handleSubmit() {
         </select>
       </label>
     </div>
+
+    <p v-if="showCurrencyReminder" class="finance-charge-form__hint">
+      Esta operacion usa una moneda distinta a la base de la cuenta. Ajusta los montos manualmente porque AGENDO no convierte divisas automaticamente.
+    </p>
 
     <BaseInput
       v-if="props.canWaive && form.chargeDecision === 'exonerado'"
@@ -378,6 +411,12 @@ function handleSubmit() {
         class="finance-charge-form__supply-card"
       >
         <div class="finance-charge-form__supply-grid">
+          <BaseInput
+            :model-value="supply.searchQuery"
+            label="Buscar en inventario"
+            placeholder="Ej. Hilos, agujas o paquetes"
+            @update:model-value="supply.searchQuery = $event"
+          />
           <label class="finance-charge-form__field">
             <span class="finance-charge-form__label">Insumo</span>
             <select
@@ -387,11 +426,11 @@ function handleSubmit() {
             >
               <option value="">Selecciona un insumo</option>
               <option
-                v-for="item in props.inventoryOptions"
+                v-for="item in getVisibleInventoryOptions(supply.searchQuery, supply.inventoryItemId)"
                 :key="item.id"
                 :value="item.id"
               >
-                {{ item.nombre }} · {{ item.categoria || "General" }}
+                {{ item.nombre }} · {{ item.categoria || "General" }} · {{ item.unidad }}
               </option>
             </select>
           </label>
@@ -495,7 +534,7 @@ function handleSubmit() {
         Cancelar
       </BaseButton>
       <BaseButton type="submit" :disabled="props.submitting">
-        {{ props.mode === "edit" ? "Guardar facturacion" : "Registrar facturacion" }}
+        {{ props.mode === "edit" ? "Guardar bill" : "Emitir bill" }}
       </BaseButton>
     </div>
   </form>
@@ -553,6 +592,15 @@ function handleSubmit() {
   margin: 0;
   color: var(--text-soft);
   font-size: 0.9rem;
+}
+
+.finance-charge-form__hint {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  background: rgba(255, 189, 97, 0.14);
+  border: 1px solid rgba(255, 189, 97, 0.28);
+  color: #7d4d0b;
 }
 
 .finance-charge-form__supplies,

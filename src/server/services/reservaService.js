@@ -5,6 +5,7 @@ import {
     buscarReservasPorSalaYFecha as buscarReservasPorSalaYFechaRepository,
     listarReservas as listarReservasRepository,
     actualizarReserva as actualizarReservaRepository,
+    actualizarEstadoReserva as actualizarEstadoReservaRepository,
     eliminarReserva as eliminarReservaRepository
 } from "../repositories/reservaRepository.js";
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
@@ -915,6 +916,77 @@ export async function editarReserva(id, datosReserva, auth) {
         return {
             ok: false,
             msg: `Error al editar la reserva: ${error.message}`
+        };
+    }
+}
+
+export async function actualizarEstadoReserva(id, estado, auth) {
+    try {
+        const workspaceId = resolveWorkspaceId(auth);
+        const usuarioId = resolveUserId(auth);
+        const normalizedStatus = normalizarTexto(estado).toLowerCase();
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        if (!usuarioId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el usuario de sesion."
+            };
+        }
+
+        if (!esIdValido(id)) {
+            return {
+                ok: false,
+                msg: "El id de la reserva no es valido."
+            };
+        }
+
+        if (!ESTADOS_RESERVA_PERMITIDOS.includes(normalizedStatus)) {
+            return {
+                ok: false,
+                msg: "El estado de la reserva no es valido."
+            };
+        }
+
+        const filaReservaActual = await buscarReservaPorIdRepository(id, workspaceId);
+
+        if (!filaReservaActual) {
+            return {
+                ok: false,
+                msg: "Reserva no encontrada."
+            };
+        }
+
+        const result = await actualizarEstadoReservaRepository(
+            id,
+            normalizedStatus,
+            workspaceId
+        );
+
+        if (result.affectedRows === 0) {
+            return {
+                ok: false,
+                msg: "No se pudo actualizar el estado de la reserva."
+            };
+        }
+
+        const filaReservaActualizada = await buscarReservaPorIdRepository(id, workspaceId);
+
+        return {
+            ok: true,
+            msg: "Estado de la reserva actualizado correctamente.",
+            data: formatearReservaSalida(filaReservaActualizada)
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            msg: `Error al actualizar el estado de la reserva: ${error.message}`
         };
     }
 }

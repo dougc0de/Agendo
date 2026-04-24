@@ -41,6 +41,13 @@ export async function updateAppointment(id, payload) {
     });
 }
 
+export async function updateAppointmentStatus(id, estado) {
+    return apiRequest(`/reservas/${id}/estado`, {
+        method: "PATCH",
+        body: { estado }
+    });
+}
+
 export async function deleteAppointment(id) {
     return apiRequest(`/reservas/${id}`, {
         method: "DELETE"

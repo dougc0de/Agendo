@@ -4,6 +4,11 @@ import {
     buscarWorkspaceSettingsPorWorkspaceId,
     crearWorkspaceSettings
 } from "../repositories/workspaceSettingsRepository.js";
+import {
+    DEFAULT_CURRENCY_CODE,
+    normalizeSupportedCurrencyCode,
+    SUPPORTED_CURRENCY_CODES
+} from "../../shared/currencies.js";
 
 const DEFAULT_CONSULTATION_DURATION = 30;
 const DEFAULT_PROCEDURE_DURATION = 60;
@@ -72,6 +77,10 @@ function sanitizeSettings(row) {
         ),
         defaultProcedurePricingMode: String(
             row.default_procedure_pricing_mode ?? DEFAULT_PROCEDURE_PRICING_MODE
+        ),
+        defaultCurrencyCode: normalizeSupportedCurrencyCode(
+            row.default_currency_code,
+            DEFAULT_CURRENCY_CODE
         ),
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -207,7 +216,8 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
             procedureNoClosing: false,
             timeZone: DEFAULT_TIME_ZONE,
             procedurePricingPolicy: DEFAULT_PROCEDURE_PRICING_POLICY,
-            defaultProcedurePricingMode: DEFAULT_PROCEDURE_PRICING_MODE
+            defaultProcedurePricingMode: DEFAULT_PROCEDURE_PRICING_MODE,
+            defaultCurrencyCode: DEFAULT_CURRENCY_CODE
         },
         executor
     );
@@ -285,6 +295,10 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
         )
             .trim()
             .toLowerCase();
+        const defaultCurrencyCode = normalizeSupportedCurrencyCode(
+            payload?.defaultCurrencyCode ?? currentSettings.defaultCurrencyCode,
+            ""
+        );
 
         const consultationDurationResult = resolveReferenceDuration({
             value: payload?.consultationDurationMinutes,
@@ -329,6 +343,13 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             };
         }
 
+        if (!SUPPORTED_CURRENCY_CODES.includes(defaultCurrencyCode)) {
+            return {
+                ok: false,
+                msg: "La moneda por defecto de la cuenta no es valida."
+            };
+        }
+
         const consultationSchedule = validateScheduleBlock({
             openTime: payload?.consultationOpenTime,
             closeTime: payload?.consultationCloseTime,
@@ -366,7 +387,8 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             procedureNoClosing: procedureSchedule.data.noClosing,
             timeZone,
             procedurePricingPolicy,
-            defaultProcedurePricingMode
+            defaultProcedurePricingMode,
+            defaultCurrencyCode
         });
 
         return {

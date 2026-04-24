@@ -160,6 +160,22 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
     };
 }
 
+export async function actualizarEstadoReserva(id, estado, workspaceId, executor = pool) {
+    const result = await executor.query(
+        `
+            UPDATE reservas
+            SET estado = $3
+            WHERE id = $1
+              AND workspace_id = $2
+        `,
+        [id, workspaceId, estado]
+    );
+
+    return {
+        affectedRows: result.rowCount
+    };
+}
+
 export async function eliminarReserva(id, workspaceId, executor = pool) {
     const result = await executor.query(
         `

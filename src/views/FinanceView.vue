@@ -5,11 +5,13 @@ import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
 import BaseModal from "../components/base/BaseModal.vue";
 import FinanceChargeForm from "../components/finance/FinanceChargeForm.vue";
+import FinancePaymentForm from "../components/finance/FinancePaymentForm.vue";
 import InventoryItemForm from "../components/finance/InventoryItemForm.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { getAppointments, getPastAppointments } from "../services/appointmentApi.js";
 import {
+    confirmFinanceOperationReportPayment,
     createFinanceInventoryItem,
     createFinanceOperationReport,
     getFinanceInventory,
@@ -23,6 +25,7 @@ import { getInternalUsers } from "../services/internalUserApi.js";
 import { getRooms } from "../services/roomApi.js";
 import { getAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
+import { DEFAULT_CURRENCY_CODE } from "../shared/currencies.js";
 import { canAccessFinance, isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { downloadOperationReportPdf } from "../utils/operationReportPdf.js";
@@ -51,21 +54,26 @@ const loading = ref(false);
 const inventoryLoading = ref(false);
 const reportModalOpen = ref(false);
 const inventoryModalOpen = ref(false);
+const paymentModalOpen = ref(false);
 const reportModalMode = ref("create");
 const inventoryModalMode = ref("create");
 const reportModalError = ref("");
 const inventoryModalError = ref("");
+const paymentModalError = ref("");
 const savingReport = ref(false);
 const savingInventory = ref(false);
+const savingPayment = ref(false);
 const currentReport = ref({});
 const currentInventoryItem = ref({});
+const currentPaymentReport = ref({});
 const userOptions = ref([]);
 const roomOptions = ref([]);
 const reservationOptions = ref([]);
 const settings = ref({
     timeZone: "America/Costa_Rica",
     procedurePricingPolicy: "bloqueado",
-    defaultProcedurePricingMode: "solo_sala"
+    defaultProcedurePricingMode: "solo_sala",
+    defaultCurrencyCode: DEFAULT_CURRENCY_CODE
 });
 const filters = ref({
     from: "",
@@ -110,7 +118,7 @@ const heroTitle = computed(() =>
 const heroDescription = computed(() =>
     ({
         cobros:
-            "Recepcion cierra el procedimiento, carga lo usado desde inventario y genera el bill imprimible segun la modalidad definida por la cuenta.",
+            "Recepcion emite primero el bill del procedimiento, lo imprime y confirma el pago despues cuando el paciente ya cancelo.",
         inventario:
             "Mantiene un catalogo reusable de hilos, agujas, equipos y cualquier insumo propio de la clinica.",
         reportes:
@@ -120,8 +128,8 @@ const heroDescription = computed(() =>
 
 const reportModalTitle = computed(() =>
     reportModalMode.value === "edit"
-        ? "Editar facturacion procedural"
-        : "Registrar facturacion procedural"
+        ? "Editar bill procedural"
+        : "Emitir bill procedural"
 );
 
 const inventoryModalTitle = computed(() =>
@@ -149,8 +157,15 @@ const summaryCards = computed(() => [
 
 const topRooms = computed(() => summary.value.rooms?.slice(0, 5) ?? []);
 const topUsers = computed(() => summary.value.users?.slice(0, 5) ?? []);
+const reportCurrencies = computed(() =>
+    [...new Set(reports.value.map((report) => report.currencyCode).filter(Boolean))]
+);
+const hasMixedCurrencies = computed(() => reportCurrencies.value.length > 1);
 
-function formatCurrency(value, currencyCode = "CRC") {
+function formatCurrency(
+    value,
+    currencyCode = settings.value.defaultCurrencyCode || DEFAULT_CURRENCY_CODE
+) {
     return new Intl.NumberFormat("es-CR", {
         style: "currency",
         currency: currencyCode,
@@ -268,13 +283,16 @@ async function fetchSettings() {
             timeZone: response.data?.timeZone ?? "America/Costa_Rica",
             procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
-                response.data?.defaultProcedurePricingMode ?? "solo_sala"
+                response.data?.defaultProcedurePricingMode ?? "solo_sala",
+            defaultCurrencyCode:
+                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE
         };
     } catch {
         settings.value = {
             timeZone: "America/Costa_Rica",
             procedurePricingPolicy: "bloqueado",
-            defaultProcedurePricingMode: "solo_sala"
+            defaultProcedurePricingMode: "solo_sala",
+            defaultCurrencyCode: DEFAULT_CURRENCY_CODE
         };
     }
 }
@@ -391,6 +409,18 @@ function closeInventoryModal() {
     currentInventoryItem.value = {};
 }
 
+function openPaymentModal(report) {
+    currentPaymentReport.value = { ...report };
+    paymentModalError.value = "";
+    paymentModalOpen.value = true;
+}
+
+function closePaymentModal() {
+    paymentModalOpen.value = false;
+    paymentModalError.value = "";
+    currentPaymentReport.value = {};
+}
+
 async function handleSaveReport(payload) {
     savingReport.value = true;
     reportModalError.value = "";
@@ -434,6 +464,29 @@ async function handleSaveInventoryItem(payload) {
             "No fue posible guardar el insumo.";
     } finally {
         savingInventory.value = false;
+    }
+}
+
+async function handleConfirmPayment(payload) {
+    savingPayment.value = true;
+    paymentModalError.value = "";
+
+    try {
+        const response = await confirmFinanceOperationReportPayment(
+            currentPaymentReport.value.id,
+            payload
+        );
+
+        feedback.value = response.msg;
+        closePaymentModal();
+        await fetchFinanceData();
+    } catch (requestError) {
+        paymentModalError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible confirmar el pago.";
+    } finally {
+        savingPayment.value = false;
     }
 }
 
@@ -506,7 +559,7 @@ onMounted(() => {
               v-if="activeTab === 'cobros'"
               @click="openCreateReportModal"
             >
-              Registrar facturacion
+              Emitir bill
             </BaseButton>
             <BaseButton
               v-else-if="activeTab === 'inventario'"
@@ -562,10 +615,14 @@ onMounted(() => {
                   <h2>Facturacion por procedimiento</h2>
                   <p class="finance-panel__copy">
                     Modalidad actual de la cuenta: {{ formatPricingMode(settings.defaultProcedurePricingMode) }}.
-                    Recepcion la ejecuta tal como fue definida por administracion.
+                    Recepcion emite el bill segun esta regla y luego confirma el pago por separado.
                   </p>
                 </div>
               </div>
+
+              <p v-if="hasMixedCurrencies" class="finance-warning">
+                Hay bills en varias monedas dentro de este filtro. Los totales agregados no convierten divisas automaticamente.
+              </p>
 
               <form class="finance-filters" @submit.prevent="fetchFinanceData">
                 <BaseInput
@@ -646,7 +703,7 @@ onMounted(() => {
                       <th>Sala</th>
                       <th>Modalidad</th>
                       <th>Total</th>
-                      <th>Cobro</th>
+                      <th>Pago</th>
                       <th>Decision</th>
                       <th>Acciones</th>
                     </tr>
@@ -691,14 +748,21 @@ onMounted(() => {
                           variant="warning"
                           @click="openEditReportModal(report)"
                         >
-                          Editar
+                          Editar bill
                         </BaseButton>
                         <BaseButton
                           size="sm"
                           variant="ghost"
                           @click="handleDownloadPdf(report)"
                         >
-                          Bill PDF
+                          Imprimir bill
+                        </BaseButton>
+                        <BaseButton
+                          v-if="report.paymentStatus === 'pendiente' && report.chargeDecision === 'cobrable'"
+                          size="sm"
+                          @click="openPaymentModal(report)"
+                        >
+                          Confirmar pago
                         </BaseButton>
                       </td>
                     </tr>
@@ -865,6 +929,7 @@ onMounted(() => {
         :mode="reportModalMode"
         :pricing-policy="settings.procedurePricingPolicy"
         :default-pricing-mode="settings.defaultProcedurePricingMode"
+        :default-currency-code="settings.defaultCurrencyCode"
         :can-waive="canWaive"
         @submit="handleSaveReport"
         @cancel="closeReportModal"
@@ -884,6 +949,21 @@ onMounted(() => {
         :mode="inventoryModalMode"
         @submit="handleSaveInventoryItem"
         @cancel="closeInventoryModal"
+      />
+    </BaseModal>
+
+    <BaseModal
+      :open="paymentModalOpen"
+      title="Confirmar pago"
+      description="Registra cuando el paciente ya cancelo el bill emitido previamente."
+      @close="closePaymentModal"
+    >
+      <FinancePaymentForm
+        :report="currentPaymentReport"
+        :submitting="savingPayment"
+        :error-message="paymentModalError"
+        @submit="handleConfirmPayment"
+        @cancel="closePaymentModal"
       />
     </BaseModal>
   </div>
@@ -978,6 +1058,7 @@ onMounted(() => {
 
 .finance-feedback,
 .finance-error,
+.finance-warning,
 .finance-state {
   margin: 0;
   padding: 0.95rem 1rem;
@@ -992,6 +1073,11 @@ onMounted(() => {
 .finance-error {
   background: rgba(235, 85, 69, 0.12);
   color: #b8392d;
+}
+
+.finance-warning {
+  background: rgba(255, 189, 97, 0.14);
+  color: #7d4d0b;
 }
 
 .finance-state {

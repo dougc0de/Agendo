@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { withTransaction } from "../db/connection.js";
+import { DEFAULT_CURRENCY_CODE } from "../../shared/currencies.js";
 import {
     buscarUsuarioPorCorreo,
     crearUsuario
@@ -335,7 +336,9 @@ export async function signupWorkspaceOwner(payload) {
             await crearWorkspaceSettings(
                 {
                     workspaceId: workspace.id,
+                    consultationDurationEnabled: false,
                     consultationDurationMinutes: 30,
+                    procedureDurationEnabled: false,
                     procedureDurationMinutes: 60,
                     consultationOpenTime: clinic.horaApertura,
                     consultationCloseTime: clinic.horaCierre,
@@ -344,7 +347,9 @@ export async function signupWorkspaceOwner(payload) {
                     procedureCloseTime: clinic.horaCierre,
                     procedureNoClosing: false,
                     timeZone: "America/Costa_Rica",
-                    defaultProcedurePricingMode: "solo_sala"
+                    procedurePricingPolicy: "bloqueado",
+                    defaultProcedurePricingMode: "solo_sala",
+                    defaultCurrencyCode: DEFAULT_CURRENCY_CODE
                 },
                 client
             );

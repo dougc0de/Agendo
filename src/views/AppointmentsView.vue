@@ -44,6 +44,7 @@ const {
     fetchAppointments,
     createAppointment,
     updateAppointment,
+    updateAppointmentStatus,
     deleteAppointment
 } = useAppointments();
 
@@ -547,6 +548,41 @@ function closeCalendarDetail() {
     calendarDetailModalOpen.value = false;
 }
 
+function normalizeComparableAppointment(source = {}) {
+    return {
+        fecha: String(source.fecha ?? "").trim(),
+        horaInicio: String(source.horaInicio ?? "").slice(0, 5),
+        horaFin: String(source.horaFin ?? "").slice(0, 5),
+        descripcion: String(source.descripcion ?? "").trim(),
+        tipoAtencion: String(source.tipoAtencion ?? "consulta").trim().toLowerCase(),
+        tipoConsulta: String(source.tipoConsulta ?? "").trim(),
+        pacienteId: Number(source.pacienteId ?? 0) || null,
+        salaId: Number(source.salaId ?? 0) || null,
+        estado: String(source.estado ?? "pendiente").trim().toLowerCase()
+    };
+}
+
+function shouldUseStatusOnlyUpdate(nextPayload) {
+    if (modalMode.value !== "edit" || !currentAppointment.value.id) {
+        return false;
+    }
+
+    const currentComparable = normalizeComparableAppointment(currentAppointment.value);
+    const nextComparable = normalizeComparableAppointment(nextPayload);
+
+    return (
+        currentComparable.estado !== nextComparable.estado &&
+        currentComparable.fecha === nextComparable.fecha &&
+        currentComparable.horaInicio === nextComparable.horaInicio &&
+        currentComparable.horaFin === nextComparable.horaFin &&
+        currentComparable.descripcion === nextComparable.descripcion &&
+        currentComparable.tipoAtencion === nextComparable.tipoAtencion &&
+        currentComparable.tipoConsulta === nextComparable.tipoConsulta &&
+        currentComparable.pacienteId === nextComparable.pacienteId &&
+        currentComparable.salaId === nextComparable.salaId
+    );
+}
+
 function openAppointmentFromCalendar(appointment) {
     calendarDetailModalOpen.value = false;
     openEditModal(appointment);
@@ -597,9 +633,15 @@ async function handleSaveAppointment(payload) {
         salaId: Number(payload.salaId)
     };
 
+    const isStatusOnlyUpdate = shouldUseStatusOnlyUpdate(appointmentPayload);
     const result =
         modalMode.value === "edit" && currentAppointment.value.id
-            ? await updateAppointment(currentAppointment.value.id, appointmentPayload)
+            ? isStatusOnlyUpdate
+                ? await updateAppointmentStatus(
+                      currentAppointment.value.id,
+                      appointmentPayload.estado
+                  )
+                : await updateAppointment(currentAppointment.value.id, appointmentPayload)
             : await createAppointment(appointmentPayload);
 
     if (result.ok) {

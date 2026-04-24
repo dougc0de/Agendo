@@ -3,7 +3,8 @@ import {
     createAppointment as createAppointmentRequest,
     deleteAppointment as deleteAppointmentRequest,
     getAppointments,
-    updateAppointment as updateAppointmentRequest
+    updateAppointment as updateAppointmentRequest,
+    updateAppointmentStatus as updateAppointmentStatusRequest
 } from "../services/appointmentApi.js";
 
 export function useAppointments() {
@@ -85,6 +86,29 @@ export function useAppointments() {
         }
     }
 
+    async function updateAppointmentStatus(id, estado) {
+        saving.value = true;
+        error.value = "";
+
+        try {
+            const response = await updateAppointmentStatusRequest(id, estado);
+
+            if (response.ok) {
+                await fetchAppointments();
+            }
+
+            return response;
+        } catch (requestError) {
+            error.value = requestError.message;
+            return {
+                ok: false,
+                msg: requestError.message
+            };
+        } finally {
+            saving.value = false;
+        }
+    }
+
     async function deleteAppointment(id) {
         saving.value = true;
         error.value = "";
@@ -118,6 +142,7 @@ export function useAppointments() {
         fetchAppointments,
         createAppointment,
         updateAppointment,
+        updateAppointmentStatus,
         deleteAppointment
     };
 }

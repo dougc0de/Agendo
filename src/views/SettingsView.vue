@@ -6,6 +6,7 @@ import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { getAccountSettings, updateAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
+import { DEFAULT_CURRENCY_CODE, getCurrencyLabel } from "../shared/currencies.js";
 import { isAdministrativeUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 
@@ -28,7 +29,8 @@ const settings = ref({
     procedureNoClosing: false,
     timeZone: "America/Costa_Rica",
     procedurePricingPolicy: "bloqueado",
-    defaultProcedurePricingMode: "solo_sala"
+    defaultProcedurePricingMode: "solo_sala",
+    defaultCurrencyCode: DEFAULT_CURRENCY_CODE
 });
 
 const isAdminUser = computed(() =>
@@ -75,6 +77,10 @@ const statCards = computed(() => [
             : `${settings.value.consultationOpenTime ?? "08:00"} - ${settings.value.consultationCloseTime ?? "17:00"}`
     },
     {
+        label: "Moneda base",
+        value: getCurrencyLabel(settings.value.defaultCurrencyCode)
+    },
+    {
         label: "Facturacion procedural",
         value: `${formatPricingMode(settings.value.defaultProcedurePricingMode)} · bloqueada`
     }
@@ -102,7 +108,9 @@ async function fetchSettings() {
             timeZone: response.data?.timeZone ?? "America/Costa_Rica",
             procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
-                response.data?.defaultProcedurePricingMode ?? "solo_sala"
+                response.data?.defaultProcedurePricingMode ?? "solo_sala",
+            defaultCurrencyCode:
+                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE
         };
     } catch (requestError) {
         error.value =
@@ -122,7 +130,8 @@ async function fetchSettings() {
             procedureNoClosing: false,
             timeZone: "America/Costa_Rica",
             procedurePricingPolicy: "bloqueado",
-            defaultProcedurePricingMode: "solo_sala"
+            defaultProcedurePricingMode: "solo_sala",
+            defaultCurrencyCode: DEFAULT_CURRENCY_CODE
         };
     } finally {
         loading.value = false;
@@ -152,7 +161,9 @@ async function handleSaveSettings(payload) {
             timeZone: response.data?.timeZone ?? "America/Costa_Rica",
             procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
-                response.data?.defaultProcedurePricingMode ?? "solo_sala"
+                response.data?.defaultProcedurePricingMode ?? "solo_sala",
+            defaultCurrencyCode:
+                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE
         };
         feedback.value = response.msg;
     } catch (requestError) {
@@ -210,7 +221,7 @@ onMounted(() => {
               <span class="settings-eyebrow">Control administrativo</span>
               <h1>Configuraciones de atencion</h1>
               <p>
-              Define tiempos de referencia opcionales, horario operativo y la modalidad procedural que ejecutara recepcion.
+              Define tiempos de referencia opcionales, horario operativo, moneda base y la modalidad procedural que ejecutara recepcion.
               </p>
             </div>
         </section>

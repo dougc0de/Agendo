@@ -1,6 +1,7 @@
 import { withTransaction } from "../db/connection.js";
 import {
     actualizarCobro as actualizarCobroRepository,
+    actualizarPagoCobro as actualizarPagoCobroRepository,
     actualizarItemInventario as actualizarItemInventarioRepository,
     buscarCobroPorId,
     buscarCobroPorReservaId,
@@ -19,13 +20,17 @@ import {
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
 import { canAccessFinance, isAdministrativeUser } from "../../shared/roles.js";
 import { obtenerConfiguracionOperativaNormalizada } from "./workspaceSettingsService.js";
+import {
+    DEFAULT_CURRENCY_CODE,
+    normalizeSupportedCurrencyCode,
+    SUPPORTED_CURRENCY_CODES
+} from "../../shared/currencies.js";
 
 const ESTADOS_COBRO = ["pendiente", "pagado", "anulado"];
 const METODOS_PAGO = ["efectivo", "tarjeta", "transferencia", "otro"];
 const ESTADOS_INVENTARIO = ["activo", "inactivo"];
 const MODOS_COBRO = ["solo_sala", "solo_insumos", "sala_mas_insumos"];
 const DECISIONES_COBRO = ["cobrable", "exonerado"];
-const DEFAULT_CURRENCY_CODE = "CRC";
 const DEFAULT_PRICING_POLICY = "bloqueado";
 const DEFAULT_PRICING_MODE = "solo_sala";
 
@@ -74,7 +79,8 @@ function normalizarEstadoCobro(valor) {
 }
 
 function normalizarMetodoPago(valor) {
-    return normalizarTexto(valor).toLowerCase() || "otro";
+    const normalized = normalizarTexto(valor).toLowerCase();
+    return normalized || null;
 }
 
 function normalizarMonto(valor, fallback = NaN) {
@@ -87,7 +93,7 @@ function normalizarMonto(valor, fallback = NaN) {
 }
 
 function normalizarMoneda(valor) {
-    return normalizarTexto(valor).toUpperCase() || DEFAULT_CURRENCY_CODE;
+    return normalizeSupportedCurrencyCode(valor, DEFAULT_CURRENCY_CODE);
 }
 
 function normalizarModoCobro(valor, fallback = DEFAULT_PRICING_MODE) {
@@ -497,15 +503,10 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
             Number(existingCharge?.roomChargeAmount ?? existingCharge?.room_charge_amount ?? 0)
         )
     );
-    const paymentStatus = normalizarEstadoCobro(
-        payload?.paymentStatus ?? existingCharge?.paymentStatus ?? existingCharge?.payment_status
-    );
-    const paymentMethod = normalizarMetodoPago(
-        payload?.paymentMethod ?? existingCharge?.paymentMethod ?? existingCharge?.payment_method
-    );
     const currencyCode = normalizarMoneda(
         payload?.currencyCode ?? existingCharge?.currencyCode ?? existingCharge?.currency_code
     );
+    const requestedCurrencyCode = normalizarTexto(payload?.currencyCode).toUpperCase();
     const procedureName = normalizarTexto(
         payload?.procedureName ?? existingCharge?.procedureName ?? existingCharge?.procedure_name
     );
@@ -531,6 +532,13 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
         };
     }
 
+    if (requestedCurrencyCode && !SUPPORTED_CURRENCY_CODES.includes(requestedCurrencyCode)) {
+        return {
+            ok: false,
+            msg: "La moneda del bill no es valida."
+        };
+    }
+
     if (pricingPolicy !== DEFAULT_PRICING_POLICY) {
         return {
             ok: false,
@@ -549,20 +557,6 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
         return {
             ok: false,
             msg: "La modalidad de cobro no es valida."
-        };
-    }
-
-    if (!ESTADOS_COBRO.includes(paymentStatus)) {
-        return {
-            ok: false,
-            msg: "El estado del cobro no es valido."
-        };
-    }
-
-    if (!METODOS_PAGO.includes(paymentMethod)) {
-        return {
-            ok: false,
-            msg: "El metodo de pago no es valido."
         };
     }
 
@@ -645,7 +639,27 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
     }
 
     const totalBilledAmount = roundMoney(roomChargeAmount + suppliesTotalAmount);
-    const normalizedPaymentStatus = chargeDecision === "exonerado" ? "anulado" : paymentStatus;
+
+    let normalizedPaymentStatus = "pendiente";
+    let paymentMethod = null;
+    let paidAt = null;
+
+    if (chargeDecision === "exonerado") {
+        normalizedPaymentStatus = "anulado";
+    } else if (
+        existingCharge?.chargeDecision === "exonerado" ||
+        existingCharge?.charge_decision === "exonerado"
+    ) {
+        normalizedPaymentStatus = "pendiente";
+    } else if (existingCharge) {
+        normalizedPaymentStatus = normalizarEstadoCobro(
+            existingCharge?.paymentStatus ?? existingCharge?.payment_status
+        );
+        paymentMethod = normalizarMetodoPago(
+            existingCharge?.paymentMethod ?? existingCharge?.payment_method
+        );
+        paidAt = existingCharge?.paidAt ?? existingCharge?.paid_at ?? null;
+    }
 
     if (chargeDecision === "exonerado" && !waiverReason) {
         return {
@@ -667,17 +681,40 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
             totalBilledAmount,
             paymentStatus: normalizedPaymentStatus,
             paymentMethod,
-            paidAt:
-                chargeDecision === "exonerado"
-                    ? null
-                    : normalizarPaidAt(
-                          payload?.paidAt ?? existingCharge?.paidAt ?? existingCharge?.paid_at,
-                          normalizedPaymentStatus
-                      ),
+            paidAt: chargeDecision === "exonerado" ? null : paidAt,
             notes,
             chargeDecision,
             waivedByUserId: chargeDecision === "exonerado" ? registeredByUserId : null,
             waiverReason: chargeDecision === "exonerado" ? waiverReason : null
+        }
+    };
+}
+
+function normalizarPayloadPago(payload = {}) {
+    const paymentMethod = normalizarMetodoPago(payload.paymentMethod);
+
+    if (!METODOS_PAGO.includes(paymentMethod)) {
+        return {
+            ok: false,
+            msg: "El metodo de pago no es valido."
+        };
+    }
+
+    const paidAt = normalizarPaidAt(payload.paidAt, "pagado");
+
+    if (!paidAt) {
+        return {
+            ok: false,
+            msg: "La fecha y hora de pago no es valida."
+        };
+    }
+
+    return {
+        ok: true,
+        data: {
+            paymentStatus: "pagado",
+            paymentMethod,
+            paidAt
         }
     };
 }
@@ -1011,6 +1048,98 @@ export async function actualizarCobro(id, payload, auth) {
         return {
             ok: false,
             msg: `Error al actualizar el reporte operativo: ${error.message}`
+        };
+    }
+}
+
+export async function confirmarPagoCobro(id, payload, auth) {
+    try {
+        const workspaceId = resolveWorkspaceId(auth);
+        const registeredByUserId = resolveUserId(auth);
+        const chargeId = Number(id);
+
+        if (!workspaceId || !registeredByUserId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de la cuenta."
+            };
+        }
+
+        if (!hasFinanceAccess(auth)) {
+            return {
+                ok: false,
+                msg: "No autorizado. No tienes acceso al modulo financiero."
+            };
+        }
+
+        if (!Number.isInteger(chargeId) || chargeId <= 0) {
+            return {
+                ok: false,
+                msg: "El reporte indicado no es valido."
+            };
+        }
+
+        const charge = await buscarCobroPorId(chargeId, workspaceId);
+
+        if (!charge) {
+            return {
+                ok: false,
+                msg: "El reporte indicado no existe en esta cuenta."
+            };
+        }
+
+        if (charge.charge_decision === "exonerado") {
+            return {
+                ok: false,
+                msg: "Un caso exonerado no puede confirmarse como pagado."
+            };
+        }
+
+        if (charge.payment_status === "anulado") {
+            return {
+                ok: false,
+                msg: "Este bill esta anulado y no puede confirmarse como pagado."
+            };
+        }
+
+        if (charge.payment_status === "pagado") {
+            return {
+                ok: true,
+                msg: "El pago ya estaba confirmado.",
+                data: formatearCobroSalida(charge)
+            };
+        }
+
+        const normalizedPayment = normalizarPayloadPago(payload);
+
+        if (!normalizedPayment.ok) {
+            return normalizedPayment;
+        }
+
+        await actualizarPagoCobroRepository(
+            chargeId,
+            workspaceId,
+            {
+                ...normalizedPayment.data,
+                registeredByUserId
+            }
+        );
+
+        const updatedCharge = await buscarCobroPorId(chargeId, workspaceId);
+        const [formattedReport] = await enriquecerCobrosConLineas(
+            [updatedCharge],
+            workspaceId
+        );
+
+        return {
+            ok: true,
+            msg: "Pago confirmado correctamente.",
+            data: formattedReport
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            msg: `Error al confirmar el pago: ${error.message}`
         };
     }
 }

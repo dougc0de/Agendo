@@ -2,6 +2,10 @@
 import { reactive, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
+import {
+    DEFAULT_CURRENCY_CODE,
+    LATAM_CURRENCY_OPTIONS
+} from "../../shared/currencies.js";
 
 const props = defineProps({
     initialValue: {
@@ -34,7 +38,8 @@ function createDefaultForm() {
         procedureNoClosing: false,
         timeZone: "America/Costa_Rica",
         procedurePricingPolicy: "bloqueado",
-        defaultProcedurePricingMode: "solo_sala"
+        defaultProcedurePricingMode: "solo_sala",
+        defaultCurrencyCode: DEFAULT_CURRENCY_CODE
     };
 }
 
@@ -62,7 +67,8 @@ function handleSubmit() {
         procedureNoClosing: Boolean(form.procedureNoClosing),
         timeZone: form.timeZone,
         procedurePricingPolicy: form.procedurePricingPolicy,
-        defaultProcedurePricingMode: form.defaultProcedurePricingMode
+        defaultProcedurePricingMode: form.defaultProcedurePricingMode,
+        defaultCurrencyCode: form.defaultCurrencyCode
     });
 }
 </script>
@@ -192,6 +198,29 @@ function handleSubmit() {
 
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
+        <h3>Moneda base</h3>
+        <p>La cuenta define una moneda principal para sus bills, pero cada caso puede ajustarse si la clinica lo necesita.</p>
+      </div>
+
+      <label class="account-settings-form__field">
+        <span class="account-settings-form__label">Moneda por defecto</span>
+        <select
+          v-model="form.defaultCurrencyCode"
+          class="account-settings-form__select"
+        >
+          <option
+            v-for="currency in LATAM_CURRENCY_OPTIONS"
+            :key="currency.code"
+            :value="currency.code"
+          >
+            {{ currency.label }}
+          </option>
+        </select>
+      </label>
+    </div>
+
+    <div class="account-settings-form__section">
+      <div class="account-settings-form__section-header">
         <h3>Zona horaria</h3>
         <p>Se usa para decidir que reservas ya pasaron y para los cierres mensuales.</p>
       </div>
@@ -215,6 +244,7 @@ function handleSubmit() {
       <p>Las reservas activas se calculan segun la hora final y la zona horaria de la cuenta.</p>
       <p>Los tiempos de referencia no se aplican automaticamente en reservas; solo sirven como politica interna si tu clinica decide usarlos.</p>
       <p>La recepcion ejecuta la modalidad procedural definida aqui y luego genera el bill imprimible desde Finanzas.</p>
+      <p>Si un bill usa una moneda distinta a la base de la cuenta, recepcion puede ajustarla manualmente para ese caso.</p>
     </div>
 
     <p v-if="props.errorMessage" class="account-settings-form__error">

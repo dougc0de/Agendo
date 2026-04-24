@@ -51,6 +51,13 @@ export async function updateFinanceOperationReport(id, payload) {
     });
 }
 
+export async function confirmFinanceOperationReportPayment(id, payload) {
+    return apiRequest(`/finanzas/reportes-operacion/${id}/pago`, {
+        method: "PATCH",
+        body: payload
+    });
+}
+
 export async function getFinanceOperationReportPdf(id) {
     return apiRequest(`/finanzas/reportes-operacion/${id}/pdf`);
 }

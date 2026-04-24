@@ -181,6 +181,32 @@ export async function actualizarCobro(id, workspaceId, datosCobro, executor = po
     return rows[0];
 }
 
+export async function actualizarPagoCobro(id, workspaceId, datosPago, executor = pool) {
+    const { rows } = await executor.query(
+        `
+            UPDATE reservation_charges
+            SET
+                payment_status = $3,
+                payment_method = $4,
+                paid_at = $5,
+                registered_by_user_id = $6
+            WHERE id = $1
+              AND workspace_id = $2
+            RETURNING id
+        `,
+        [
+            id,
+            workspaceId,
+            datosPago.paymentStatus,
+            datosPago.paymentMethod,
+            datosPago.paidAt,
+            datosPago.registeredByUserId
+        ]
+    );
+
+    return rows[0];
+}
+
 export async function listarLineasInsumosPorChargeIds(chargeIds, workspaceId, executor = pool) {
     if (!chargeIds.length) {
         return [];

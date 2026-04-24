@@ -32,6 +32,24 @@ function formatDateTime(value) {
     }).format(date);
 }
 
+function buildPaymentFooter(report) {
+    if (report.chargeDecision === "exonerado") {
+        return "Caso exonerado por autorizacion administrativa.";
+    }
+
+    if (report.paymentStatus === "pagado") {
+        return `Pago confirmado: ${escapeHtml(formatDateTime(report.paidAt))} · Metodo: ${escapeHtml(
+            report.paymentMethod || "sin metodo"
+        )}`;
+    }
+
+    if (report.paymentStatus === "anulado") {
+        return "Bill anulado. No procede confirmacion de pago.";
+    }
+
+    return "Bill emitido y pendiente de pago en recepcion.";
+}
+
 export function downloadOperationReportPdf(report) {
     if (typeof window === "undefined") {
         throw new Error("La descarga del PDF solo esta disponible en el navegador.");
@@ -276,7 +294,7 @@ export function downloadOperationReportPdf(report) {
               </div>
 
               <div class="footer">
-                Pago registrado: ${escapeHtml(formatDateTime(report.paidAt))} · Metodo: ${escapeHtml(report.paymentMethod || "otro")}
+                ${buildPaymentFooter(report)}
               </div>
             </div>
           </body>

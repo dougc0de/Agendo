@@ -2,6 +2,7 @@ import express from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import {
     actualizarCobro,
+    confirmarPagoCobro,
     actualizarItemInventario,
     crearCobro,
     crearItemInventario,
@@ -115,6 +116,26 @@ router.put("/cobros/:id", async (req, res) => {
 
 router.put("/reportes-operacion/:id", async (req, res) => {
     const resultado = await actualizarCobro(req.params.id, req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.patch("/cobros/:id/pago", async (req, res) => {
+    const resultado = await confirmarPagoCobro(req.params.id, req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.patch("/reportes-operacion/:id/pago", async (req, res) => {
+    const resultado = await confirmarPagoCobro(req.params.id, req.body, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
