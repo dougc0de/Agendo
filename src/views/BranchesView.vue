@@ -14,6 +14,7 @@ import {
     updateBranchStatus
 } from "../services/branchApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
+import { isAdministrativeUser, isDoctorUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 
 const router = useRouter();
@@ -37,20 +38,64 @@ const modalOpen = ref(false);
 const modalMode = ref("create");
 const currentBranch = ref({});
 
+const isAdminUser = computed(() =>
+    isAdministrativeUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+
+const isDoctorLogged = computed(() =>
+    isDoctorUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+
+const assignedBranchId = computed(() => Number(authStore.branch?.id ?? 0) || null);
+const canManageBranches = computed(() => isAdminUser.value);
+const displayedBranches = computed(() => {
+    if (isDoctorLogged.value) {
+        if (!assignedBranchId.value) {
+            return [];
+        }
+
+        return branches.value.filter((branch) => Number(branch.id) === assignedBranchId.value);
+    }
+
+    return branches.value;
+});
+
+const heroTitle = computed(() =>
+    isDoctorLogged.value ? "Sucursal donde operas" : "Sucursales de la cuenta"
+);
+
+const heroDescription = computed(() => {
+    if (isDoctorLogged.value) {
+        return "Consulta la sucursal donde operas y su contexto operativo. Los cambios administrativos de sedes se gestionan con un admin.";
+    }
+
+    if (!canManageBranches.value) {
+        return "Consulta salas y equipo por sede con una vista de referencia. Los cambios estructurales de sucursales quedan reservados al admin.";
+    }
+
+    return "Organiza salas y equipo por sede, con una vista clara para crear, editar y controlar el estado operativo de cada sucursal.";
+});
+
 const modalTitle = computed(() =>
     modalMode.value === "edit" ? "Editar sucursal" : "Nueva sucursal"
 );
 
 const activeBranches = computed(() =>
-    branches.value.filter((branch) => branch.estado === "activa")
+    displayedBranches.value.filter((branch) => branch.estado === "activa")
 );
 
 const summaryCards = computed(() => {
-    const totalRooms = branches.value.reduce(
+    const totalRooms = displayedBranches.value.reduce(
         (accumulator, branch) => accumulator + Number(branch.roomsCount ?? 0),
         0
     );
-    const totalUsers = branches.value.reduce(
+    const totalUsers = displayedBranches.value.reduce(
         (accumulator, branch) => accumulator + Number(branch.usersCount ?? 0),
         0
     );
@@ -58,7 +103,7 @@ const summaryCards = computed(() => {
     return [
         {
             label: "Sucursales",
-            value: branches.value.length
+            value: displayedBranches.value.length
         },
         {
             label: "Activas",
@@ -76,8 +121,14 @@ const summaryCards = computed(() => {
 });
 
 const principalBranch = computed(
-    () => branches.value.find((branch) => branch.codigo === "principal") ?? null
+    () => displayedBranches.value.find((branch) => branch.codigo === "principal") ?? null
 );
+
+const assignedBranch = computed(() =>
+    displayedBranches.value.find((branch) => Number(branch.id) === assignedBranchId.value) ?? null
+);
+
+const featuredBranch = computed(() => assignedBranch.value ?? principalBranch.value ?? displayedBranches.value[0] ?? null);
 
 async function fetchBranches() {
     loading.value = true;
@@ -98,6 +149,10 @@ async function fetchBranches() {
 }
 
 function openCreateModal() {
+    if (!canManageBranches.value) {
+        return;
+    }
+
     modalMode.value = "create";
     modalError.value = "";
     currentBranch.value = {};
@@ -105,6 +160,10 @@ function openCreateModal() {
 }
 
 function openEditModal(branch) {
+    if (!canManageBranches.value) {
+        return;
+    }
+
     modalMode.value = "edit";
     modalError.value = "";
     currentBranch.value = {
@@ -120,6 +179,11 @@ function closeModal() {
 }
 
 async function handleSaveBranch(payload) {
+    if (!canManageBranches.value) {
+        modalError.value = "Solo un administrador puede guardar cambios de sucursales.";
+        return;
+    }
+
     saving.value = true;
     modalError.value = "";
 
@@ -143,6 +207,11 @@ async function handleSaveBranch(payload) {
 }
 
 async function handleToggleStatus(branch) {
+    if (!canManageBranches.value) {
+        error.value = "Solo un administrador puede cambiar el estado de las sucursales.";
+        return;
+    }
+
     changingStatusId.value = branch.id;
     error.value = "";
 
@@ -199,14 +268,13 @@ onMounted(() => {
         <section v-reveal class="branches-hero">
           <div>
             <span class="branches-eyebrow">Organizacion territorial</span>
-            <h1>Sucursales de la cuenta</h1>
+            <h1>{{ heroTitle }}</h1>
             <p>
-              Organiza salas y equipo por sede, con una vista clara para crear, editar y
-              controlar el estado operativo de cada sucursal.
+              {{ heroDescription }}
             </p>
           </div>
 
-          <div class="branches-hero__actions">
+          <div v-if="canManageBranches" class="branches-hero__actions">
             <BaseButton @click="openCreateModal">
               Crear sucursal
             </BaseButton>
@@ -239,9 +307,10 @@ onMounted(() => {
             <p v-if="error" class="branches-error">{{ error }}</p>
 
             <BranchTable
-              :branches="branches"
+              :branches="displayedBranches"
               :loading="loading"
               :changing-status-id="changingStatusId"
+              :show-actions="canManageBranches"
               @edit="openEditModal"
               @toggle-status="handleToggleStatus"
             />
@@ -250,13 +319,13 @@ onMounted(() => {
           <aside class="branches-side">
             <article v-reveal="100" class="branches-side__card">
               <span class="branches-panel__eyebrow">Sucursal destacada</span>
-              <template v-if="principalBranch">
-                <h3>{{ principalBranch.nombre }}</h3>
-                <p>{{ principalBranch.direccion || "Sin direccion registrada" }}</p>
+              <template v-if="featuredBranch">
+                <h3>{{ featuredBranch.nombre }}</h3>
+                <p>{{ featuredBranch.direccion || "Sin direccion registrada" }}</p>
                 <div class="branches-side__chips">
-                  <span>{{ principalBranch.roomsCount }} salas</span>
-                  <span>{{ principalBranch.usersCount }} usuarios</span>
-                  <span>{{ principalBranch.estado }}</span>
+                  <span>{{ featuredBranch.roomsCount }} salas</span>
+                  <span>{{ featuredBranch.usersCount }} usuarios</span>
+                  <span>{{ featuredBranch.estado }}</span>
                 </div>
               </template>
               <template v-else>

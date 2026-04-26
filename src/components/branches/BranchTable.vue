@@ -17,6 +17,10 @@ const props = defineProps({
     changingStatusId: {
         type: Number,
         default: null
+    },
+    showActions: {
+        type: Boolean,
+        default: true
     }
 });
 
@@ -60,7 +64,7 @@ const emit = defineEmits(["edit", "toggle-status"]);
             <span>{{ branch.usersCount }} usuarios</span>
           </div>
 
-          <div class="branch-table__actions branch-table__actions--card">
+          <div v-if="props.showActions" class="branch-table__actions branch-table__actions--card">
             <BaseButton size="sm" variant="ghost" @click="emit('edit', branch)">
               Editar
             </BaseButton>
@@ -91,7 +95,7 @@ const emit = defineEmits(["edit", "toggle-status"]);
               <th>Salas</th>
               <th>Usuarios</th>
               <th>Estado</th>
-              <th>Opciones</th>
+              <th v-if="props.showActions">Opciones</th>
             </tr>
           </thead>
           <tbody>
@@ -126,7 +130,7 @@ const emit = defineEmits(["edit", "toggle-status"]);
                   {{ branch.estado }}
                 </span>
               </td>
-              <td>
+              <td v-if="props.showActions">
                 <div class="branch-table__actions actions-stack">
                   <BaseButton size="sm" variant="ghost" @click="emit('edit', branch)">
                     Editar

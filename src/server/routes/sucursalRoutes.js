@@ -13,7 +13,7 @@ router.use(requireAuth);
 
 function resolveSucursalStatus(resultado, fallbackStatus) {
     if (String(resultado?.msg ?? "").startsWith("No autorizado")) {
-        return 401;
+        return 403;
     }
 
     return fallbackStatus;

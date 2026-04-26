@@ -8,6 +8,7 @@ import {
     crearSucursal as crearSucursalRepository,
     listarSucursalesPorWorkspaceId
 } from "../repositories/sucursalRepository.js";
+import { isAdministrativeUser, isDoctorUser } from "../../shared/roles.js";
 
 function normalizarTexto(valor) {
     return String(valor ?? "").trim();
@@ -27,6 +28,25 @@ function resolveWorkspaceId(auth) {
     }
 
     return workspaceId;
+}
+
+function resolveBranchId(auth) {
+    const branchId = Number(auth?.branchId);
+    return Number.isInteger(branchId) && branchId > 0 ? branchId : null;
+}
+
+function tieneAccesoAdmin(auth) {
+    return isAdministrativeUser({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+}
+
+function esDoctor(auth) {
+    return isDoctorUser({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
 }
 
 function formatearSucursalSalida(filaSucursal) {
@@ -76,12 +96,18 @@ export async function listarSucursales(auth) {
             };
         }
 
+        const branchId = resolveBranchId(auth);
         const filasSucursales = await listarSucursalesPorWorkspaceId(workspaceId);
+        const scopedRows = esDoctor(auth)
+            ? filasSucursales.filter(
+                  (filaSucursal) => Number(filaSucursal.id) === branchId
+              )
+            : filasSucursales;
 
         return {
             ok: true,
             msg: "Sucursales listadas correctamente.",
-            data: filasSucursales.map((filaSucursal) => formatearSucursalSalida(filaSucursal))
+            data: scopedRows.map((filaSucursal) => formatearSucursalSalida(filaSucursal))
         };
     } catch (error) {
         return {
@@ -99,6 +125,13 @@ export async function crearSucursal(datosSucursal, auth) {
             return {
                 ok: false,
                 msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        if (!tieneAccesoAdmin(auth)) {
+            return {
+                ok: false,
+                msg: "No autorizado. Solo el admin del workspace puede crear sucursales."
             };
         }
 
@@ -160,6 +193,13 @@ export async function editarSucursal(id, datosSucursal, auth) {
             return {
                 ok: false,
                 msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        if (!tieneAccesoAdmin(auth)) {
+            return {
+                ok: false,
+                msg: "No autorizado. Solo el admin del workspace puede editar sucursales."
             };
         }
 
@@ -239,6 +279,13 @@ export async function cambiarEstadoSucursal(id, estado, auth) {
             return {
                 ok: false,
                 msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        if (!tieneAccesoAdmin(auth)) {
+            return {
+                ok: false,
+                msg: "No autorizado. Solo el admin del workspace puede cambiar el estado de las sucursales."
             };
         }
 
