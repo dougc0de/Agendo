@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import BaseButton from "../base/BaseButton.vue";
 import { usePricingSelection } from "../../composables/usePricingSelection.js";
 import {
@@ -28,7 +28,6 @@ const props = defineProps({
 });
 
 const router = useRouter();
-const route = useRoute();
 const plans = getPublicPlans();
 const {
     addonEnabled,
@@ -41,17 +40,39 @@ const {
     selection,
     setAddonEnabled,
     toggleAddon
-} = usePricingSelection(DEFAULT_PRICING_PLAN_CODE);
+} = usePricingSelection(DEFAULT_PRICING_PLAN_CODE, {
+    selectionSource: "pricing"
+});
 
 const comparisonRows = computed(() => [
     {
-        label: "Usuarios incluidos",
+        label: "Operacion diaria",
+        values: plans.map((plan) => plan.featureSummary.operations)
+    },
+    {
+        label: "Finanzas operativas",
+        values: plans.map((plan) => plan.featureSummary.finances)
+    },
+    {
+        label: "Inventario y consumos",
+        values: plans.map((plan) => plan.featureSummary.inventory)
+    },
+    {
+        label: "Reportes y lectura",
+        values: plans.map((plan) => plan.featureSummary.reporting)
+    },
+    {
+        label: "WhatsApp",
+        values: plans.map((plan) => plan.featureSummary.whatsapp)
+    },
+    {
+        label: "Usuarios",
         values: plans.map((plan) =>
             plan.code === "enterprise" ? "Capacidad ampliada" : `${plan.maxUsers}`
         )
     },
     {
-        label: "Salas incluidas",
+        label: "Salas",
         values: plans.map((plan) =>
             plan.code === "enterprise" ? "Capacidad ampliada" : `${plan.maxRooms}`
         )
@@ -66,17 +87,7 @@ const comparisonRows = computed(() => [
     },
     {
         label: "Trial",
-        values: plans.map((plan) =>
-            plan.trialDays > 0 ? `${plan.trialDays} dias` : "Asistido"
-        )
-    },
-    {
-        label: "WhatsApp",
-        values: plans.map((plan) =>
-            canPlanUseAddon(plan.code, WHATSAPP_ADDON_CODE)
-                ? "Disponible"
-                : "Desde Premium"
-        )
+        values: plans.map((plan) => `${plan.trialDays} dias`)
     }
 ]);
 
@@ -86,14 +97,14 @@ const addonAvailabilityMessage = computed(() => {
     }
 
     if (selectedPlan.value.code === "basic") {
-        return "Disponible desde Premium";
+        return "Este add-on se habilita desde Premium porque Basico cuida la operacion central sin sumar otra capa de automatizacion.";
     }
 
     if (selectedPlan.value.code === "enterprise") {
-        return "Puede agregarse al plan o negociarse dentro del acuerdo comercial.";
+        return "Puedes activarlo desde el inicio o dejarlo como parte de una configuracion mas negociada.";
     }
 
-    return "Activelo cuando recepcion ya necesite bajar llamadas repetitivas.";
+    return "Activalo cuando recepcion ya necesite quitarse confirmaciones repetitivas, cancelaciones y consultas basicas de cita.";
 });
 
 const selectionSummaryLines = computed(() => {
@@ -102,14 +113,14 @@ const selectionSummaryLines = computed(() => {
     }
 
     const lines = [
-        selectedPlan.value.isStartingPrice
-            ? "Configuracion comercial asistida"
-            : "Incluye trial de 14 dias"
+        `${selectedPlan.value.trialDays} dias de trial`,
+        `${selectedPlan.value.maxUsers === 9999 ? "Capacidad ampliada" : `${selectedPlan.value.maxUsers} usuarios`} y ${selectedPlan.value.maxRooms === 9999 ? "capacidad ampliada" : `${selectedPlan.value.maxRooms} salas`}`,
+        selectedPlan.value.upgradeValue
     ];
 
     if (selection.value.addonEnabled && selectedAddon.value) {
         lines.push(
-            `${selectedAddon.value.includedMessages} mensajes incluidos al mes`
+            `${selectedAddon.value.includedMessages} mensajes incluidos y USD ${selectedAddon.value.overagePricePerMessage} por mensaje adicional`
         );
     }
 
@@ -120,33 +131,21 @@ const primaryActionLabel = computed(() => selectedPlan.value?.ctaLabel ?? "Empez
 
 const faqItems = [
     {
-        question: "Que plan conviene para una clinica que apenas esta ordenando su operacion?",
+        question: "Que cambia realmente entre Basico y Premium?",
         answer:
-            "Basico funciona bien para empezar con salas, pacientes, reservas y una recepcion mas clara sin subir de golpe la complejidad."
+            "Basico ordena la operacion diaria. Premium suma finanzas, facturacion procedural, inventario y reportes para que la clinica no solo trabaje mejor, sino que tambien cierre y lea mejor el negocio."
     },
     {
-        question: "Cuando vale la pena activar el asistente de citas por WhatsApp?",
+        question: "Cuando vale la pena activar WhatsApp?",
         answer:
-            "Cuando la clinica ya mueve mas citas al dia, recibe confirmaciones repetitivas y necesita bajar carga operativa sin depender de mas llamadas."
+            "Cuando la clinica ya mueve mas citas por dia y recepcion necesita bajar llamadas repetitivas, confirmaciones manuales y solicitudes simples de reprogramacion."
     },
     {
-        question: "Como se maneja Enterprise?",
+        question: "Enterprise tambien entra por signup?",
         answer:
-            "Enterprise se trabaja con acompanamiento comercial para ajustar capacidad, necesidades operativas y la forma de activar complementos como WhatsApp."
+            "Si. Puedes iniciar tu prueba desde signup y luego trabajar el onboarding asistido, la configuracion mas negociada y el alcance de crecimiento con el equipo."
     }
 ];
-
-function formatPlanMeta(plan, fieldName, suffix) {
-    if (!plan) {
-        return "";
-    }
-
-    if (plan.code === "enterprise") {
-        return "Capacidad ampliada";
-    }
-
-    return `${plan[fieldName]} ${suffix}`;
-}
 
 function isSelectedPlan(planCode) {
     return selectedPlanCode.value === planCode;
@@ -160,44 +159,18 @@ function buildSelectionForPlan(planCode) {
     const shouldKeepAddon =
         addonEnabled.value && canPlanUseAddon(planCode, WHATSAPP_ADDON_CODE);
 
-    return buildPricingSelection(planCode, shouldKeepAddon);
-}
-
-function scrollToContact() {
-    window.setTimeout(() => {
-        document.getElementById("contacto")?.scrollIntoView({
-            behavior: "smooth",
-            block: "start"
-        });
-    }, 60);
+    return buildPricingSelection(planCode, shouldKeepAddon, "pricing");
 }
 
 function routeFromSelection(nextSelection) {
-    const query = buildSignupQuery(nextSelection);
-
-    if (nextSelection.plan?.ctaMode === "sales") {
-        router.push({
-            path: "/",
-            query,
-            hash: "#contacto"
-        }).then(() => {
-            if (route.path === "/") {
-                scrollToContact();
-            }
-        });
-
-        return;
-    }
-
     router.push({
         path: "/signup",
-        query
+        query: buildSignupQuery(nextSelection)
     });
 }
 
 function handlePlanCta(planCode) {
-    const nextSelection = buildSelectionForPlan(planCode);
-    routeFromSelection(nextSelection);
+    routeFromSelection(buildSelectionForPlan(planCode));
 }
 
 function handlePrimaryCta() {
@@ -223,10 +196,11 @@ function handleAddonToggle() {
   >
     <div class="pricing-section__header section-heading">
       <span class="section-label">Precios</span>
-      <h2>Planes claros para clinicas que quieren ordenar recepcion, reservas y operacion diaria</h2>
+      <h2>Planes claros para clinicas que quieren ordenar recepcion, operacion y control del negocio</h2>
       <p>
-        Empieza con una base simple, gana control operativo y suma capacidad cuando tu
-        clinica necesita mas salas, mas personal y menos trabajo manual.
+        Basico resuelve la operacion central. Premium suma finanzas e inventario para
+        cerrar mejor la clinica. Enterprise toma todo eso y lo empuja hacia mas escala,
+        lectura ejecutiva y acompanamiento.
       </p>
     </div>
 
@@ -267,16 +241,33 @@ function handleAddonToggle() {
           </p>
 
           <ul class="pricing-plan__meta">
-            <li>{{ formatPlanMeta(plan, "maxUsers", "usuarios") }}</li>
-            <li>{{ formatPlanMeta(plan, "maxRooms", "salas") }}</li>
-            <li>{{ formatPlanMeta(plan, "maxReservationsPerMonth", "reservas por mes") }}</li>
+            <li>{{ plan.code === "enterprise" ? "Capacidad ampliada" : `${plan.maxUsers} usuarios` }}</li>
+            <li>{{ plan.code === "enterprise" ? "Capacidad ampliada" : `${plan.maxRooms} salas` }}</li>
+            <li>
+              {{ plan.code === "enterprise" ? "Capacidad ampliada" : `${plan.maxReservationsPerMonth} reservas por mes` }}
+            </li>
+            <li>{{ plan.trialDays }} dias de trial</li>
           </ul>
 
-          <ul class="pricing-plan__benefits">
-            <li v-for="benefit in plan.benefits" :key="benefit">
-              {{ benefit }}
-            </li>
-          </ul>
+          <div class="pricing-plan__feature-groups">
+            <div>
+              <h3>Incluye</h3>
+              <ul class="pricing-plan__benefits">
+                <li v-for="benefit in plan.benefits" :key="benefit">
+                  {{ benefit }}
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="plan.excludedFeatures.length" class="pricing-plan__excludes">
+              <h3>No incluye</h3>
+              <ul class="pricing-plan__excludes-list">
+                <li v-for="feature in plan.excludedFeatures.slice(0, 3)" :key="feature">
+                  {{ feature }}
+                </li>
+              </ul>
+            </div>
+          </div>
 
           <p class="pricing-plan__availability">
             {{ plan.addonAvailabilityLabel }}
@@ -327,13 +318,16 @@ function handleAddonToggle() {
 
     <div v-reveal="130" class="pricing-compare">
       <div class="pricing-compare__header">
-        <h3>Comparativa resumida</h3>
-        <p>Limites claros para que la clinica entienda que gana al subir de plan.</p>
+        <h3>Que se lleva cada plan</h3>
+        <p>
+          La diferencia no esta en romper la operacion base. Esta en cuanto control,
+          cierre y lectura del negocio gana la clinica cuando sube de plan.
+        </p>
       </div>
 
       <div class="pricing-compare__table" role="table" aria-label="Comparativa de planes">
         <div class="pricing-compare__row pricing-compare__row--head" role="row">
-          <span role="columnheader">Incluye</span>
+          <span role="columnheader">Valor</span>
           <span role="columnheader">Basico</span>
           <span role="columnheader">Premium</span>
           <span role="columnheader">Enterprise</span>
@@ -345,7 +339,11 @@ function handleAddonToggle() {
           role="row"
         >
           <span class="pricing-compare__label" role="rowheader">{{ row.label }}</span>
-          <span v-for="value in row.values" :key="`${row.label}-${value}`" role="cell">
+          <span
+            v-for="(value, index) in row.values"
+            :key="`${row.label}-${index}`"
+            role="cell"
+          >
             {{ value }}
           </span>
         </div>
@@ -355,11 +353,11 @@ function handleAddonToggle() {
     <div v-reveal="160" class="pricing-addon">
       <div class="pricing-addon__copy">
         <span class="pricing-addon__label">Add-on opcional</span>
-        <h3>WhatsApp para confirmar, mover y ordenar citas sin cargar mas a recepcion</h3>
+        <h3>Asistente Operativo de Citas por WhatsApp</h3>
         <p>
-          Pensado para clinicas con mas movimiento diario que quieren automatizar
-          confirmaciones, cancelaciones, solicitudes de reprogramacion y consultas
-          basicas de cita sin convertir esto en un chatbot confuso.
+          Pensado para clinicas que quieren confirmar citas, procesar cancelaciones,
+          recibir solicitudes de reprogramacion y responder consultas basicas sin cargar
+          mas a recepcion.
         </p>
 
         <ul class="pricing-addon__capabilities">
@@ -393,7 +391,7 @@ function handleAddonToggle() {
 
         <div class="pricing-addon__meter">
           <span>Incluye {{ selectedAddon?.includedMessages }} mensajes al mes</span>
-          <strong>USD {{ selectedAddon?.overagePricePerMessage }} por mensaje extra</strong>
+          <strong>USD {{ selectedAddon?.overagePricePerMessage }} por mensaje enviado o recibido adicional</strong>
         </div>
 
         <p class="pricing-addon__hint">
@@ -404,10 +402,11 @@ function handleAddonToggle() {
 
     <div v-if="props.showFinalCta" v-reveal="190" class="pricing-cta">
       <div>
-        <h3>Empieza con un plan claro y suma WhatsApp solo cuando de verdad te ayude</h3>
+        <h3>Empieza con una operacion clara y sube de plan cuando ya necesites cerrar y leer mejor la clinica</h3>
         <p>
-          La idea no es venderte mas por venderte mas. Es darte una operacion mas
-          ordenada y dejar listo el siguiente paso cuando la clinica lo necesite.
+          La idea no es quitarte herramientas absurdamente. Es dejarte trabajar bien
+          desde el primer plan y mostrarte con claridad cuando ya vale la pena sumar
+          finanzas, inventario, KPIs y WhatsApp.
         </p>
       </div>
 
@@ -538,7 +537,8 @@ function handleAddonToggle() {
 .pricing-plan__meta,
 .pricing-plan__benefits,
 .pricing-summary__notes,
-.pricing-addon__capabilities {
+.pricing-addon__capabilities,
+.pricing-plan__excludes-list {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -549,7 +549,8 @@ function handleAddonToggle() {
 .pricing-plan__meta li,
 .pricing-plan__benefits li,
 .pricing-summary__notes li,
-.pricing-addon__capabilities li {
+.pricing-addon__capabilities li,
+.pricing-plan__excludes-list li {
   position: relative;
   padding-left: 1.1rem;
   color: var(--text);
@@ -558,7 +559,8 @@ function handleAddonToggle() {
 .pricing-plan__meta li::before,
 .pricing-plan__benefits li::before,
 .pricing-summary__notes li::before,
-.pricing-addon__capabilities li::before {
+.pricing-addon__capabilities li::before,
+.pricing-plan__excludes-list li::before {
   content: "";
   position: absolute;
   left: 0;
@@ -567,6 +569,18 @@ function handleAddonToggle() {
   height: 0.4rem;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--secondary), var(--accent));
+}
+
+.pricing-plan__feature-groups {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.pricing-plan__feature-groups h3,
+.pricing-plan__excludes h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+  color: var(--primary-dark);
 }
 
 .pricing-plan__availability {
@@ -648,14 +662,14 @@ function handleAddonToggle() {
 .pricing-compare__table {
   display: grid;
   gap: 0.75rem;
-  min-width: 640px;
+  min-width: 760px;
 }
 
 .pricing-compare__row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.2fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(180px, 0.9fr) repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
-  align-items: center;
+  align-items: start;
   padding: 0.8rem 0.95rem;
   border-radius: 16px;
   background: var(--hero-surface-alt);

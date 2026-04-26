@@ -23,7 +23,7 @@ import {
     isPublicSignupPlan
 } from "../../shared/plans.js";
 
-const TRIAL_DURATION_DAYS = 14;
+const DEFAULT_TRIAL_DURATION_DAYS = 10;
 
 function normalizeText(value) {
     return String(value ?? "").trim();
@@ -273,8 +273,9 @@ export async function signupWorkspaceOwner(payload) {
 
         const plan = getPlanDefinition(planCode);
         const now = new Date();
+        const trialDurationDays = Number(plan?.trialDays ?? DEFAULT_TRIAL_DURATION_DAYS);
         const trialEndsAt = new Date(
-            now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000
+            now.getTime() + trialDurationDays * 24 * 60 * 60 * 1000
         );
 
         const result = await withTransaction(async (client) => {

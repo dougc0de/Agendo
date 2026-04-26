@@ -1,64 +1,190 @@
-import {
-    PLAN_DEFINITIONS,
-    PUBLIC_SIGNUP_PLAN_CODES,
-    isPublicSignupPlan
-} from "./plans.js";
-
 const DEFAULT_PRICING_PLAN_CODE = "premium";
 const DEFAULT_SIGNUP_PLAN_CODE = "basic";
 const DEFAULT_CURRENCY_CODE = "USD";
 const WHATSAPP_ADDON_CODE = "whatsapp_assistant";
-
 const PLAN_DISPLAY_ORDER = ["basic", "premium", "enterprise"];
+const PUBLIC_SIGNUP_PLAN_CODES = ["basic", "premium", "enterprise"];
+const DEFAULT_TRIAL_DAYS = 10;
 
-const PLAN_PRICING_META = {
+const PLAN_CATALOG = {
     basic: {
-        headline: "Operacion clara para clinicas que quieren empezar con orden.",
-        idealFor: "Clinicas pequenas con recepcion activa y una operacion en crecimiento.",
+        code: "basic",
+        name: "Basico",
+        description:
+            "Orden operativo para clinicas que necesitan trabajar mejor antes de sumar finanzas e inventario.",
+        headline:
+            "Reservas, recepcion, salas y pacientes en una sola base operativa clara.",
+        idealFor:
+            "Clinicas pequenas que quieren dejar atras el desorden sin romper su trabajo diario.",
         monthlyPrice: 39,
         isStartingPrice: false,
-        trialDays: 14,
+        trialDays: DEFAULT_TRIAL_DAYS,
         isPopular: false,
         ctaLabel: "Empezar prueba",
         ctaMode: "signup",
-        addonAvailabilityLabel: "WhatsApp disponible desde Premium",
+        priceLabel: "Operacion central",
+        eligibleAddonCodes: [],
+        limits: {
+            maxUsers: 3,
+            maxRooms: 3,
+            maxReservationsPerMonth: 500
+        },
         benefits: [
-            "Agenda y reservas mas ordenadas",
-            "Pacientes, salas y sucursales en una sola cuenta",
-            "Base lista para operar sin hojas sueltas"
-        ]
+            "Reservas completas con validacion de choques y horarios",
+            "Calendario, historial de reservas y pacientes en una sola cuenta",
+            "Usuarios internos, salas y sucursal principal listas para operar"
+        ],
+        includedFeatures: [
+            "Reservas completas",
+            "Calendario",
+            "Historial de reservas",
+            "Pacientes",
+            "Salas",
+            "Usuarios internos",
+            "Sucursal principal",
+            "Configuraciones base",
+            "Dashboard operativo simple",
+            "Validacion de choques y horarios"
+        ],
+        excludedFeatures: [
+            "Finanzas operativas completas",
+            "Facturacion procedural",
+            "PDF imprimible",
+            "Inventario con stock y movimientos",
+            "KPIs gerenciales",
+            "Reportes financieros operativos",
+            "Asistente Operativo de Citas por WhatsApp"
+        ],
+        featureSummary: {
+            operations:
+                "Reservas, calendario, historial, pacientes, salas, usuarios internos y configuraciones base.",
+            finances:
+                "No incluye finanzas operativas completas ni facturacion procedural.",
+            inventory:
+                "No incluye inventario con stock, movimientos ni consumo automatico.",
+            reporting:
+                "Dashboard operativo simple para agenda, choques y lectura diaria basica.",
+            whatsapp:
+                "No disponible en este plan. Se habilita desde Premium."
+        },
+        upgradeValue:
+            "Cuando la clinica ya necesita cobrar mejor, imprimir facturas y leer el negocio con mas control, Premium suma finanzas, inventario y reportes."
     },
     premium: {
-        headline: "Mas capacidad para clinicas con mas movimiento diario.",
-        idealFor: "Equipos con mas salas, mas personal y una recepcion que necesita respirar mejor.",
+        code: "premium",
+        name: "Premium",
+        description:
+            "La version que ya resuelve la clinica de verdad con operacion, finanzas e inventario conectados.",
+        headline:
+            "Operacion diaria mas finanzas, inventario y control real para cerrar mejor el negocio.",
+        idealFor:
+            "Clinicas con mas citas al dia, mas recepcion activa y necesidad de trabajar con menos friccion manual.",
         monthlyPrice: 89,
         isStartingPrice: false,
-        trialDays: 14,
+        trialDays: DEFAULT_TRIAL_DAYS,
         isPopular: true,
-        ctaLabel: "Elegir Premium",
+        ctaLabel: "Empezar prueba",
         ctaMode: "signup",
-        addonAvailabilityLabel: "Listo para sumar WhatsApp cuando haga falta",
+        priceLabel: "Mas recomendado",
+        eligibleAddonCodes: [WHATSAPP_ADDON_CODE],
+        limits: {
+            maxUsers: 10,
+            maxRooms: 10,
+            maxReservationsPerMonth: 3000
+        },
         benefits: [
-            "Mas usuarios, salas y reservas por mes",
-            "Mejor preparado para recepcion con mayor carga operativa",
-            "Compatible con el asistente por WhatsApp"
-        ]
+            "Finanzas operativas, facturacion procedural y PDF imprimible",
+            "Historial pagado y no pagado con confirmacion posterior de pago",
+            "Inventario con stock, movimientos y consumo automatico en procedimientos"
+        ],
+        includedFeatures: [
+            "Todo lo de Basico",
+            "Finanzas operativas completas",
+            "Facturacion procedural",
+            "Confirmacion posterior de pago",
+            "Historial pagado / no pagado",
+            "PDF imprimible",
+            "Moneda por cuenta y por caso",
+            "Inventario con stock",
+            "Movimientos de inventario",
+            "Consumo automatico en procedimientos",
+            "Reportes financieros operativos",
+            "Dashboard con KPIs para admin y recepcion",
+            "Acceso al add-on de WhatsApp"
+        ],
+        excludedFeatures: [
+            "Comparativas profundas entre sedes",
+            "Onboarding asistido",
+            "Acompanamiento comercial y tecnico continuo"
+        ],
+        featureSummary: {
+            operations:
+                "Incluye toda la operacion central y la mantiene estable mientras la clinica crece.",
+            finances:
+                "Finanzas operativas completas, facturacion procedural, confirmacion de pago e historial pagado/no pagado.",
+            inventory:
+                "Inventario con stock, movimientos y consumo automatico ligado a procedimientos.",
+            reporting:
+                "Reportes financieros operativos y dashboard con KPIs para admin y recepcion.",
+            whatsapp:
+                "Puede activar el Asistente Operativo de Citas por WhatsApp como complemento opcional."
+        },
+        upgradeValue:
+            "Ya no solo trabajas mejor: tambien puedes cerrar pagos, leer cobros, controlar insumos y reducir trabajo manual."
     },
     enterprise: {
-        headline: "Configuracion comercial asistida para operaciones mas exigentes.",
-        idealFor: "Clinicas con varias sedes o necesidades de capacidad y acompanamiento comercial.",
+        code: "enterprise",
+        name: "Enterprise",
+        description:
+            "Todo Premium, mas escala, lectura ejecutiva reforzada y acompanamiento para operaciones con mas exigencia.",
+        headline:
+            "Escala con mas capacidad, lectura ejecutiva y configuracion comercial mas acompanada.",
+        idealFor:
+            "Clinicas con varias sedes, mas personal o necesidad de acompanamiento para una operacion con mas capas.",
         monthlyPrice: 149,
         isStartingPrice: true,
-        trialDays: 0,
+        trialDays: DEFAULT_TRIAL_DAYS,
         isPopular: false,
-        ctaLabel: "Hablar con ventas",
-        ctaMode: "sales",
-        addonAvailabilityLabel: "Disponible para agregar o negociar dentro del acuerdo",
+        ctaLabel: "Empezar prueba",
+        ctaMode: "signup",
+        priceLabel: "Escala y acompanamiento",
+        eligibleAddonCodes: [WHATSAPP_ADDON_CODE],
+        limits: {
+            maxUsers: 9999,
+            maxRooms: 9999,
+            maxReservationsPerMonth: 999999
+        },
         benefits: [
-            "Capacidad ampliada para equipos mas grandes",
-            "Ruta comercial asistida para necesidades especiales",
-            "WhatsApp disponible como complemento operativo"
-        ]
+            "Mayor capacidad para usuarios, salas y reservas sin frenar la operacion",
+            "Lectura ejecutiva reforzada y comparativas mas profundas entre sedes",
+            "Onboarding asistido, acompanamiento comercial y configuracion mas negociada"
+        ],
+        includedFeatures: [
+            "Todo lo de Premium",
+            "Mayor capacidad de usuarios, salas y reservas",
+            "Enfoque multi-sucursal mas fuerte",
+            "Comparativas mas profundas entre sedes",
+            "Lectura ejecutiva reforzada",
+            "Onboarding asistido",
+            "Acompanamiento comercial y tecnico",
+            "Configuracion mas negociada",
+            "Add-on de WhatsApp opcional o negociable"
+        ],
+        excludedFeatures: [],
+        featureSummary: {
+            operations:
+                "Mantiene toda la base operativa y la lleva mejor a entornos con mas sedes y movimiento.",
+            finances:
+                "Incluye el mismo cierre financiero de Premium y suma mejor lectura ejecutiva para direccion.",
+            inventory:
+                "Incluye inventario operativo y espacio para procesos de mayor escala.",
+            reporting:
+                "Comparativas mas profundas por sede y lectura ejecutiva reforzada para direccion.",
+            whatsapp:
+                "Puede sumarse como add-on o negociarse como parte de la configuracion comercial."
+        },
+        upgradeValue:
+            "Enterprise no rompe la operacion base: la amplia con mas lectura ejecutiva, mas acompanamiento y mejor margen para crecer."
     }
 };
 
@@ -68,28 +194,29 @@ const ADDON_CATALOG = {
         code: WHATSAPP_ADDON_CODE,
         name: "Asistente Operativo de Citas por WhatsApp",
         description:
-            "Una capa operativa para confirmar, mover y ordenar citas sin cargar mas a recepcion.",
+            "Un complemento operativo para confirmar, mover y ordenar citas sin convertir la recepcion en un call center manual.",
         monthlyPrice: 19,
         includedMessages: 500,
         overagePricePerMessage: 0.04,
         eligiblePlanCodes: ["premium", "enterprise"],
         status: "active",
         capabilities: [
-            "Confirmar cita",
-            "Cancelar cita",
-            "Solicitar reprogramacion",
-            "Consultar fecha y hora",
-            "Consultar ubicacion u horario",
-            "Derivar a recepcion cuando haga falta"
+            "Confirmacion de citas",
+            "Cancelacion guiada",
+            "Consulta basica de cita",
+            "Solicitud de reprogramacion",
+            "Hasta 500 mensajes por mes",
+            "Fallback a email cuando aplique"
         ],
         commercialMeta: {
-            positioning: "Mejora operativa opcional para clinicas con mas citas al dia.",
+            positioning:
+                "Asistente operativo para clinicas que quieren bajar llamadas repetitivas y reducir ausencias evitables.",
             audience:
-                "Centros que quieren bajar llamadas repetitivas y reducir ausencias evitables."
+                "Equipos con mas citas diarias, mas carga en recepcion o necesidad de ordenar confirmaciones."
         },
         technicalMeta: {
             billingScope: "workspace",
-            activationMode: "commercial",
+            activationMode: "commercial_selection",
             usageType: "sent_and_received_messages"
         }
     }
@@ -108,36 +235,53 @@ function formatUsdMonthly(amount, { isStartingPrice = false } = {}) {
     return `${prefix}${DEFAULT_CURRENCY_CODE} ${Number(amount ?? 0)}/mes`;
 }
 
-function getPricingPlan(planCode) {
-    const normalizedPlanCode = normalizePlanCode(planCode);
-    const plan = PLAN_DEFINITIONS[normalizedPlanCode];
-    const meta = PLAN_PRICING_META[normalizedPlanCode];
-
-    if (!plan || !meta) {
+function decoratePlan(plan) {
+    if (!plan) {
         return null;
     }
 
     return {
         ...plan,
-        ...meta,
         currencyCode: DEFAULT_CURRENCY_CODE,
-        formattedMonthlyPrice: formatUsdMonthly(meta.monthlyPrice, {
-            isStartingPrice: meta.isStartingPrice
+        maxUsers: plan.limits.maxUsers,
+        maxRooms: plan.limits.maxRooms,
+        maxReservationsPerMonth: plan.limits.maxReservationsPerMonth,
+        formattedMonthlyPrice: formatUsdMonthly(plan.monthlyPrice, {
+            isStartingPrice: plan.isStartingPrice
         }),
-        formattedTrialLabel: meta.trialDays > 0
-            ? `${meta.trialDays} dias de trial`
-            : "Configuracion comercial asistida",
-        supportsPublicSignup: PUBLIC_SIGNUP_PLAN_CODES.includes(normalizedPlanCode),
-        eligibleAddonCodes: Object.values(ADDON_CATALOG)
-            .filter((addon) => addon.eligiblePlanCodes.includes(normalizedPlanCode))
-            .map((addon) => addon.code)
+        formattedTrialLabel: `${plan.trialDays} dias de trial`,
+        supportsPublicSignup: PUBLIC_SIGNUP_PLAN_CODES.includes(plan.code),
+        addonAvailabilityLabel: plan.eligibleAddonCodes.includes(WHATSAPP_ADDON_CODE)
+            ? plan.code === "enterprise"
+                ? "WhatsApp opcional o negociable dentro del plan"
+                : "Listo para sumar WhatsApp cuando recepcion ya necesita mas aire"
+            : "WhatsApp disponible desde Premium"
     };
 }
 
-function getPublicPlans() {
+function getPlanDefinition(planCode) {
+    const normalizedPlanCode = normalizePlanCode(planCode);
+    return decoratePlan(PLAN_CATALOG[normalizedPlanCode] ?? null);
+}
+
+const PLAN_DEFINITIONS = Object.freeze(
+    Object.fromEntries(
+        PLAN_DISPLAY_ORDER.map((planCode) => [planCode, getPlanDefinition(planCode)])
+    )
+);
+
+function getPublicSignupPlans() {
     return PLAN_DISPLAY_ORDER
-        .map((planCode) => getPricingPlan(planCode))
-        .filter(Boolean);
+        .map((planCode) => getPlanDefinition(planCode))
+        .filter((plan) => plan && plan.supportsPublicSignup);
+}
+
+function getPublicPlans() {
+    return getPublicSignupPlans();
+}
+
+function isPublicSignupPlan(planCode) {
+    return PUBLIC_SIGNUP_PLAN_CODES.includes(normalizePlanCode(planCode));
 }
 
 function getAddonByCode(addonCode) {
@@ -168,7 +312,7 @@ function calculateAddonOverage(messageCount, addonCode = WHATSAPP_ADDON_CODE) {
 }
 
 function calculateEstimatedMonthlyTotal(selection = {}) {
-    const plan = getPricingPlan(selection.planCode);
+    const plan = getPlanDefinition(selection.planCode);
 
     if (!plan) {
         return {
@@ -201,9 +345,13 @@ function calculateEstimatedMonthlyTotal(selection = {}) {
     };
 }
 
-function buildPricingSelection(planCode = DEFAULT_PRICING_PLAN_CODE, addonEnabled = false) {
-    const normalizedPlanCode = getPricingPlan(planCode)?.code ?? DEFAULT_PRICING_PLAN_CODE;
-    const plan = getPricingPlan(normalizedPlanCode);
+function buildPricingSelection(
+    planCode = DEFAULT_PRICING_PLAN_CODE,
+    addonEnabled = false,
+    selectionSource = "pricing"
+) {
+    const normalizedPlanCode = getPlanDefinition(planCode)?.code ?? DEFAULT_PRICING_PLAN_CODE;
+    const plan = getPlanDefinition(normalizedPlanCode);
     const addon = getAddonByCode(WHATSAPP_ADDON_CODE);
     const isAddonAvailable = canPlanUseAddon(normalizedPlanCode, WHATSAPP_ADDON_CODE);
     const normalizedAddonEnabled = Boolean(addonEnabled && isAddonAvailable);
@@ -222,6 +370,8 @@ function buildPricingSelection(planCode = DEFAULT_PRICING_PLAN_CODE, addonEnable
         isAddonAvailable,
         billingInterval: "monthly",
         currencyCode: DEFAULT_CURRENCY_CODE,
+        trialDays: plan?.trialDays ?? DEFAULT_TRIAL_DAYS,
+        selectionSource,
         ...totals
     };
 }
@@ -251,13 +401,17 @@ function resolveSignupIntentQuery(query = {}) {
     const addon = canPlanUseAddon(planCode, requestedAddonCode)
         ? getAddonByCode(requestedAddonCode)
         : null;
+    const addonRequested = Boolean(requestedAddonCode);
 
     return {
         planCode,
         addonCode: addon?.code ?? null,
+        selectedAddonCodes: addon ? [addon.code] : [],
         addonInterestMessage: addon
-            ? `Seleccionaste interes en el ${addon.name}. La activacion se coordina durante la configuracion comercial.`
-            : ""
+            ? `Seleccionaste el ${addon.name}. Puedes mantenerlo en tu seleccion comercial y activarlo luego desde la configuracion de la cuenta.`
+            : addonRequested
+                ? "El Asistente Operativo de Citas por WhatsApp se habilita desde Premium."
+                : ""
     };
 }
 
@@ -266,6 +420,10 @@ export {
     DEFAULT_CURRENCY_CODE,
     DEFAULT_PRICING_PLAN_CODE,
     DEFAULT_SIGNUP_PLAN_CODE,
+    PLAN_CATALOG,
+    PLAN_DEFINITIONS,
+    PLAN_DISPLAY_ORDER,
+    PUBLIC_SIGNUP_PLAN_CODES,
     WHATSAPP_ADDON_CODE,
     buildPricingSelection,
     buildSignupQuery,
@@ -274,7 +432,9 @@ export {
     canPlanUseAddon,
     formatUsdMonthly,
     getAddonByCode,
-    getPricingPlan,
+    getPlanDefinition,
     getPublicPlans,
+    getPublicSignupPlans,
+    isPublicSignupPlan,
     resolveSignupIntentQuery
 };

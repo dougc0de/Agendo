@@ -7,9 +7,13 @@ import {
     canPlanUseAddon
 } from "../shared/pricingCatalog.js";
 
-export function usePricingSelection(initialPlanCode = DEFAULT_PRICING_PLAN_CODE) {
+export function usePricingSelection(
+    initialPlanCode = DEFAULT_PRICING_PLAN_CODE,
+    options = {}
+) {
     const selectedPlanCode = ref(initialPlanCode);
-    const addonEnabled = ref(false);
+    const addonEnabled = ref(Boolean(options.addonEnabled));
+    const selectionSource = options.selectionSource ?? "pricing";
 
     watch(
         selectedPlanCode,
@@ -22,7 +26,11 @@ export function usePricingSelection(initialPlanCode = DEFAULT_PRICING_PLAN_CODE)
     );
 
     const selection = computed(() =>
-        buildPricingSelection(selectedPlanCode.value, addonEnabled.value)
+        buildPricingSelection(
+            selectedPlanCode.value,
+            addonEnabled.value,
+            selectionSource
+        )
     );
 
     const selectedPlan = computed(() => selection.value.plan);

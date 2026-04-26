@@ -53,24 +53,25 @@ async function submitSignup(payload) {
       <main class="signup-main" :style="{ '--signup-bg': `url(${heroBackground})` }">
         <section v-reveal class="signup-copy">
           <span class="signup-copy__eyebrow">AGENDO SaaS</span>
-          <h1>Activa tu clinica y empieza a ordenar salas, pacientes y reservas.</h1>
+          <h1>Empieza con orden operativo y sube a control financiero cuando tu clinica lo necesite.</h1>
           <p>
-            Crea tu cuenta, elige un plan y entra con una administracion lista
-            para crecer.
+            Desde el primer acceso puedes ordenar reservas, pacientes y salas. Luego
+            eliges si quieres quedarte con la operacion central, sumar finanzas e
+            inventario o avanzar hacia una lectura ejecutiva mas fuerte.
           </p>
 
           <div class="signup-copy__highlights">
             <article>
-              <strong>Un solo acceso</strong>
-              <span>Tu usuario inicial queda listo como administrador de la cuenta.</span>
+              <strong>Operacion base lista para trabajar</strong>
+              <span>Reservas, calendario, historial, pacientes, salas y usuarios internos desde el arranque.</span>
             </article>
             <article>
-              <strong>Trial inmediato</strong>
-              <span>La cuenta nace en trial y con limites claros por plan.</span>
+              <strong>Upgrade con sentido</strong>
+              <span>Premium suma finanzas, facturacion procedural, inventario y lectura mas clara del negocio.</span>
             </article>
             <article>
-              <strong>Base lista para SaaS</strong>
-              <span>Preparado para suscripciones, aliados comped y mas usuarios.</span>
+              <strong>Escala sin rehacer la cuenta</strong>
+              <span>Enterprise mantiene la misma base y agrega mas capacidad, comparativas y acompanamiento.</span>
             </article>
           </div>
         </section>
@@ -78,6 +79,7 @@ async function submitSignup(payload) {
         <section v-reveal="120" class="signup-card">
           <SignupForm
             :initial-plan-code="signupIntent.planCode"
+            :initial-addon-code="signupIntent.addonCode"
             :addon-interest-message="signupIntent.addonInterestMessage"
             :submitting="signupLoading"
             :error-message="signupError"
