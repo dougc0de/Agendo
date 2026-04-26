@@ -1,8 +1,9 @@
 <script setup>
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import { getPublicSignupPlans } from "../../shared/plans.js";
+import { isPublicSignupPlan } from "../../shared/plans.js";
 
 const props = defineProps({
     submitting: {
@@ -10,6 +11,14 @@ const props = defineProps({
         default: false
     },
     errorMessage: {
+        type: String,
+        default: ""
+    },
+    initialPlanCode: {
+        type: String,
+        default: "basic"
+    },
+    addonInterestMessage: {
         type: String,
         default: ""
     }
@@ -28,8 +37,21 @@ const form = reactive({
     clinicHoraApertura: "08:00",
     clinicHoraCierre: "17:00",
     clinicDiasLaborales: "lunes,martes,miercoles,jueves,viernes",
-    planCode: "basic"
+    planCode: isPublicSignupPlan(props.initialPlanCode) ? props.initialPlanCode : "basic"
 });
+
+watch(
+    () => props.initialPlanCode,
+    (nextPlanCode) => {
+        if (!isPublicSignupPlan(nextPlanCode)) {
+            form.planCode = "basic";
+            return;
+        }
+
+        form.planCode = nextPlanCode;
+    },
+    { immediate: true }
+);
 
 function selectPlan(planCode) {
     form.planCode = planCode;
@@ -149,6 +171,10 @@ function handleSubmit() {
         <h3>Elige tu plan</h3>
         <p>Enterprise quedara para venta asistida; aqui eliges Basico o Premium.</p>
       </div>
+
+      <p v-if="props.addonInterestMessage" class="signup-form__addon-note">
+        {{ props.addonInterestMessage }}
+      </p>
 
       <div class="signup-form__plans">
         <button
@@ -274,6 +300,15 @@ function handleSubmit() {
   background: rgba(235, 85, 69, 0.14);
   border: 1px solid rgba(235, 85, 69, 0.22);
   color: #b8392d;
+}
+
+.signup-form__addon-note {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(17, 184, 159, 0.12);
+  border: 1px solid rgba(17, 184, 159, 0.18);
+  color: var(--primary-dark);
 }
 
 @media (max-width: 760px) {

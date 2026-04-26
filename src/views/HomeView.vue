@@ -15,6 +15,7 @@ import founderDouglas from "../assets/founderDouglas.jpg";
 import doctorHero from "../assets/doctorHero.jpg";
 import calend from "../assets/calend.png";
 import Divisor from "./Divisor.vue";
+import PricingSection from "../components/home/PricingSection.vue";
 
 const router = useRouter();
 const contactSent = ref(false);
@@ -27,6 +28,7 @@ const contactForm = reactive({
 
 const navLinks = [
     { label: "Servicios", href: "#servicios" },
+    { label: "Precios", href: "#precios" },
     { label: "Sobre Nosotros", href: "#sobre" },
     { label: "Contacto", href: "#contacto" }
 ];
@@ -168,6 +170,10 @@ function submitContact() {
             </article>
           </div>
         </section>
+
+        <Divisor />
+
+        <PricingSection />
 
         <Divisor />
 

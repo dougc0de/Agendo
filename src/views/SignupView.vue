@@ -1,19 +1,23 @@
 <script setup>
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import SignupForm from "../components/auth/SignupForm.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import { useAuthStore } from "../stores/authStore.js";
 import heroBackground from "../assets/doctorHero.jpg";
+import { resolveSignupIntentQuery } from "../shared/pricingCatalog.js";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const signupError = ref("");
 const signupLoading = ref(false);
+const signupIntent = computed(() => resolveSignupIntentQuery(route.query));
 
 const navLinks = [
     { label: "Sobre Nosotros", href: "/#sobre" },
+    { label: "Precios", href: "/#precios" },
     { label: "Contactanos", href: "/#contacto" },
     { label: "Servicios", href: "/#servicios" }
 ];
@@ -73,6 +77,8 @@ async function submitSignup(payload) {
 
         <section v-reveal="120" class="signup-card">
           <SignupForm
+            :initial-plan-code="signupIntent.planCode"
+            :addon-interest-message="signupIntent.addonInterestMessage"
             :submitting="signupLoading"
             :error-message="signupError"
             @submit="submitSignup"
