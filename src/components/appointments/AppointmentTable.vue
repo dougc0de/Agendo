@@ -20,7 +20,11 @@ const props = defineProps({
     },
     showOutcome: {
         type: Boolean,
-        default: true
+        default: false
+    },
+    showPayment: {
+        type: Boolean,
+        default: false
     },
     showEditAction: {
         type: Boolean,
@@ -59,6 +63,18 @@ function formatOutcome(outcome) {
             cancelada: "Cancelada"
         }[outcome] ?? outcome ?? "Pendiente"
     );
+}
+
+function formatPaymentLabel(appointment) {
+    return appointment.paymentLabel || "No pagado";
+}
+
+function formatPaymentDetail(appointment) {
+    return appointment.paymentDetailLabel || appointment.financialStatus || null;
+}
+
+function paymentBadgeClass(appointment) {
+    return `appointment-table__badge--payment-${appointment.financialStatus || "sin_factura"}`;
 }
 </script>
 
@@ -106,6 +122,13 @@ function formatOutcome(outcome) {
               {{ formatOutcome(appointment.appointmentOutcome) }}
             </span>
             <span
+              v-if="props.showPayment"
+              class="appointment-table__badge appointment-table__badge--payment"
+              :class="paymentBadgeClass(appointment)"
+            >
+              {{ formatPaymentLabel(appointment) }}
+            </span>
+            <span
               class="appointment-table__badge"
               :class="`appointment-table__badge--${appointment.estado}`"
             >
@@ -145,6 +168,7 @@ function formatOutcome(outcome) {
               <th>Tipo</th>
               <th>Estado</th>
               <th v-if="props.showOutcome">Resultado</th>
+              <th v-if="props.showPayment">Pago</th>
               <th v-if="props.showUser">Usuario</th>
               <th v-if="props.showActions">Opciones</th>
             </tr>
@@ -171,6 +195,19 @@ function formatOutcome(outcome) {
                 >
                   {{ formatOutcome(appointment.appointmentOutcome) }}
                 </span>
+              </td>
+              <td v-if="props.showPayment">
+                <div class="appointment-table__payment">
+                  <span
+                    class="appointment-table__badge appointment-table__badge--payment"
+                    :class="paymentBadgeClass(appointment)"
+                  >
+                    {{ formatPaymentLabel(appointment) }}
+                  </span>
+                  <small v-if="formatPaymentDetail(appointment)">
+                    {{ formatPaymentDetail(appointment) }}
+                  </small>
+                </div>
               </td>
               <td v-if="props.showUser">{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</td>
               <td v-if="props.showActions" class="appointment-table__actions-cell">
@@ -362,6 +399,34 @@ function formatOutcome(outcome) {
 
 .appointment-table__actions-cell {
   text-align: center;
+}
+
+.appointment-table__payment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.appointment-table__payment small {
+  color: var(--text-soft);
+  text-transform: capitalize;
+}
+
+.appointment-table__badge--payment-pagado {
+  background: rgba(17, 184, 159, 0.16);
+  color: var(--primary-dark);
+}
+
+.appointment-table__badge--payment-pendiente,
+.appointment-table__badge--payment-sin_factura {
+  background: rgba(242, 159, 56, 0.15);
+  color: #9b6112;
+}
+
+.appointment-table__badge--payment-anulado,
+.appointment-table__badge--payment-exonerado {
+  background: rgba(235, 85, 69, 0.14);
+  color: #b8392d;
 }
 
 @media (max-width: 920px) {

@@ -14,9 +14,9 @@ import { getInternalUsers } from "../services/internalUserApi.js";
 import { getKpiDashboard } from "../services/kpiApi.js";
 import { getRooms } from "../services/roomApi.js";
 import { getAccountSettings } from "../services/settingsApi.js";
+import { KpiAccessPolicy, DASHBOARD_KINDS } from "../shared/kpiAccessPolicy.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { DEFAULT_CURRENCY_CODE } from "../shared/currencies.js";
-import { canAccessFinance, isAdministrativeUser, isDoctorUser } from "../shared/roles.js";
 import { getPlanDefinition } from "../shared/plans.js";
 import { useAuthStore } from "../stores/authStore.js";
 import {
@@ -31,9 +31,6 @@ const {
     appointments,
     loading,
     error,
-    totalAppointments,
-    pendingAppointments,
-    confirmedAppointments,
     fetchAppointments
 } = useAppointments();
 
@@ -97,25 +94,31 @@ const workspaceName = computed(() => authStore.workspace?.nombre ?? "Cuenta AGEN
 const planDefinition = computed(
     () => getPlanDefinition(authStore.subscription?.planCode) ?? null
 );
-const isAdminUser = computed(() =>
-    isAdministrativeUser({
-        membershipRole: authStore.membershipRole,
-        userRole: authStore.user?.rol
-    })
-);
-const isDoctorLogged = computed(() =>
-    isDoctorUser({
-        membershipRole: authStore.membershipRole,
-        userRole: authStore.user?.rol
-    })
-);
-const canSeeManagerialKpis = computed(
+const kpiAccessPolicy = computed(
     () =>
-        canAccessFinance({
+        new KpiAccessPolicy({
             membershipRole: authStore.membershipRole,
-            userRole: authStore.user?.rol
-        }) && !isDoctorLogged.value
+            userRole: authStore.user?.rol,
+            branchId: authStore.branch?.id,
+            branchName: authStore.branch?.nombre,
+            userId: authStore.user?.id
+        })
 );
+const dashboardKind = computed(() => kpiAccessPolicy.value.dashboardKind());
+const isAdminUser = computed(() => kpiAccessPolicy.value.isAdmin());
+const canAccessKpiDashboard = computed(() => kpiAccessPolicy.value.canAccessKpiDashboard());
+const canSeeExecutiveDashboard = computed(
+    () => dashboardKind.value === DASHBOARD_KINDS.EXECUTIVE
+);
+const canSeeOperationalDashboard = computed(
+    () => dashboardKind.value === DASHBOARD_KINDS.OPERATIONS
+);
+const canSeePersonalDashboard = computed(
+    () => dashboardKind.value === DASHBOARD_KINDS.PERSONAL
+);
+const canSelectAnyBranch = computed(() => kpiAccessPolicy.value.canSelectAnyBranch());
+const canFilterByDoctor = computed(() => kpiAccessPolicy.value.canFilterByDoctor());
+const canSeeCollectionsShortcut = computed(() => kpiAccessPolicy.value.canAccessBasicCollections());
 const dashboardLinks = computed(() =>
     buildPrivateNavLinks({
         membershipRole: authStore.membershipRole,
@@ -125,6 +128,13 @@ const dashboardLinks = computed(() =>
 
 function createDefaultDateFilters() {
     const todayKey = getTodayDateKey(dashboardTimeZone.value);
+
+    if (canSeeOperationalDashboard.value) {
+        return {
+            from: todayKey,
+            to: todayKey
+        };
+    }
 
     return {
         from: addDays(todayKey, -29),
@@ -138,7 +148,7 @@ function resetFilters() {
     filters.value = {
         from: defaultRange.from,
         to: defaultRange.to,
-        branchId: isAdminUser.value ? "" : authStore.branch?.id ?? "",
+        branchId: canSelectAnyBranch.value ? "" : authStore.branch?.id ?? "",
         roomId: "",
         doctorUserId: "",
         status: "todos",
@@ -291,12 +301,126 @@ const filteredInternalUsers = computed(() => {
     });
 });
 
+const todayDateKey = computed(() => getTodayDateKey(dashboardTimeZone.value));
+const currentUserId = computed(() => Number(authStore.user?.id ?? 0) || null);
+const currentBranchId = computed(() => Number(authStore.branch?.id ?? 0) || null);
+
+const scopedAppointments = computed(() => {
+    if (canSeePersonalDashboard.value && currentUserId.value) {
+        return appointments.value.filter(
+            (appointment) => Number(appointment.usuarioId ?? 0) === currentUserId.value
+        );
+    }
+
+    if (canSeeOperationalDashboard.value && currentBranchId.value) {
+        return appointments.value.filter(
+            (appointment) => Number(appointment.branchId ?? 0) === currentBranchId.value
+        );
+    }
+
+    return appointments.value;
+});
+
+const todayScopedAppointments = computed(() =>
+    scopedAppointments.value.filter((appointment) => appointment.fecha === todayDateKey.value)
+);
+
+const scopedTotalAppointments = computed(() => scopedAppointments.value.length);
+const scopedPendingAppointments = computed(
+    () => scopedAppointments.value.filter((item) => item.estado === "pendiente").length
+);
+const scopedConfirmedAppointments = computed(
+    () => scopedAppointments.value.filter((item) => item.estado === "confirmada").length
+);
+
+function getCurrentZonedTimeValue(timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+        timeZone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
+    const parts = {};
+
+    for (const part of formatter.formatToParts(new Date())) {
+        if (part.type !== "literal") {
+            parts[part.type] = part.value;
+        }
+    }
+
+    return `${parts.hour ?? "00"}:${parts.minute ?? "00"}`;
+}
+
+function timeToMinutes(timeValue) {
+    const normalized = String(timeValue ?? "").trim().slice(0, 5);
+
+    if (!/^\d{2}:\d{2}$/.test(normalized)) {
+        return null;
+    }
+
+    const [hours, minutes] = normalized.split(":").map(Number);
+    return (hours * 60) + minutes;
+}
+
+const availableRoomsNow = computed(() => {
+    if (!canSeeOperationalDashboard.value) {
+        return [];
+    }
+
+    const scopedBranchId = currentBranchId.value;
+    const currentMinutes = timeToMinutes(getCurrentZonedTimeValue(dashboardTimeZone.value));
+
+    if (currentMinutes === null) {
+        return [];
+    }
+
+    const occupiedRoomIds = new Set(
+        todayScopedAppointments.value
+            .filter((appointment) => appointment.estado !== "cancelada")
+            .filter((appointment) => {
+                const startMinutes = timeToMinutes(appointment.horaInicio);
+                const endMinutes = timeToMinutes(appointment.horaFin);
+
+                if (startMinutes === null || endMinutes === null) {
+                    return false;
+                }
+
+                return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+            })
+            .map((appointment) => Number(appointment.salaId ?? 0))
+            .filter(Boolean)
+    );
+
+    return rooms.value.filter((room) => {
+        const roomId = Number(room.id ?? 0) || null;
+        const roomBranchId = Number(room.sucursalId ?? room.sucursal_id ?? 0) || null;
+        const roomStatus = String(room.estado ?? "").toLowerCase();
+        const availability = String(room.disponibilidad ?? "").toLowerCase();
+
+        if (!roomId || roomStatus !== "activa") {
+            return false;
+        }
+
+        if (scopedBranchId && roomBranchId !== scopedBranchId) {
+            return false;
+        }
+
+        if (availability && availability !== "disponible") {
+            return false;
+        }
+
+        return !occupiedRoomIds.has(roomId);
+    });
+});
+
+const availableRoomsPreview = computed(() => availableRoomsNow.value.slice(0, 3));
+
 const nextSevenDaysAppointments = computed(() => {
     const now = new Date();
     const limit = new Date(now);
     limit.setDate(limit.getDate() + 7);
 
-    return appointments.value.filter((appointment) => {
+    return scopedAppointments.value.filter((appointment) => {
         const appointmentDate = toAppointmentDate(appointment);
 
         return Boolean(
@@ -308,7 +432,7 @@ const nextSevenDaysAppointments = computed(() => {
 });
 
 const upcomingAppointments = computed(() =>
-    [...appointments.value]
+    [...scopedAppointments.value]
         .sort((left, right) => {
             const leftDate = toAppointmentDate(left)?.getTime() ?? 0;
             const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
@@ -324,7 +448,7 @@ const agendaPreviewDays = computed(() => {
 
     return Array.from({ length: 7 }, (_, index) => {
         const dateKey = addDays(todayKey, index);
-        const matchingAppointments = appointments.value.filter(
+        const matchingAppointments = scopedAppointments.value.filter(
             (appointment) => appointment.fecha === dateKey
         );
         const date = parseDateKey(dateKey);
@@ -346,18 +470,37 @@ const agendaPreviewDays = computed(() => {
 const basicStatCards = computed(() => [
     {
         label: "Reservas totales",
-        value: totalAppointments.value
+        value: scopedTotalAppointments.value
     },
     {
         label: "Pendientes",
-        value: pendingAppointments.value
+        value: scopedPendingAppointments.value
     },
     {
         label: "Confirmadas",
-        value: confirmedAppointments.value
+        value: scopedConfirmedAppointments.value
     },
     {
         label: "Esta semana",
+        value: nextSevenDaysAppointments.value
+    }
+]);
+
+const personalStatCards = computed(() => [
+    {
+        label: "Mis citas de hoy",
+        value: todayScopedAppointments.value.length
+    },
+    {
+        label: "Confirmadas",
+        value: todayScopedAppointments.value.filter((item) => item.estado === "confirmada").length
+    },
+    {
+        label: "Pendientes",
+        value: todayScopedAppointments.value.filter((item) => item.estado === "pendiente").length
+    },
+    {
+        label: "Proximas 7 dias",
         value: nextSevenDaysAppointments.value
     }
 ]);
@@ -432,8 +575,77 @@ const executiveCards = computed(() => {
     return cards;
 });
 
+const operationalCards = computed(() => [
+    {
+        label: "Citas del dia",
+        value: String(kpiSummary.value.scheduledCount ?? 0),
+        helper: `${kpiSummary.value.confirmedCount ?? 0} confirmadas`,
+        tone: "default"
+    },
+    {
+        label: "Pendientes",
+        value: String(kpiSummary.value.pendingCount ?? 0),
+        helper: `${kpiSummary.value.cancelledCount ?? 0} canceladas`,
+        tone: cardToneForRate(kpiSummary.value.cancellationRate, {
+            danger: 18,
+            warning: 10
+        })
+    },
+    {
+        label: "No-show",
+        value: formatPercent(kpiSummary.value.noShowRate),
+        helper: `${kpiSummary.value.noShowCount ?? 0} casos cerrados`,
+        tone: cardToneForRate(kpiSummary.value.noShowRate, {
+            danger: 15,
+            warning: 8
+        })
+    },
+    {
+        label: "Ocupacion operativa",
+        value: formatPercent(kpiSummary.value.occupancyRate),
+        helper: `${formatMinutes(kpiSummary.value.bookedMinutes)} ocupados`,
+        tone: cardToneForOccupancy(kpiSummary.value.occupancyRate)
+    },
+    {
+        label: "Cobrado del corte",
+        value: formatCurrency(kpiSummary.value.paidRevenue),
+        helper: `${kpiSummary.value.paidReservationCount ?? 0} reservas pagadas`,
+        tone: "success"
+    },
+    {
+        label: "Pendiente de cobro",
+        value: formatCurrency(kpiSummary.value.pendingRevenue),
+        helper: `${kpiSummary.value.pendingChargeCount ?? 0} facturas pendientes`,
+        tone: "warning"
+    }
+]);
+
+const dashboardKpiCards = computed(() =>
+    canSeeExecutiveDashboard.value ? executiveCards.value : operationalCards.value
+);
+
 const topRooms = computed(() => kpiDashboard.value.breakdowns?.rooms?.slice(0, 5) ?? []);
 const topDoctors = computed(() => kpiDashboard.value.breakdowns?.doctors?.slice(0, 5) ?? []);
+const roomRankingPrimaryMetricKey = computed(() =>
+    canSeeExecutiveDashboard.value ? "paidRevenue" : "scheduledCount"
+);
+const roomRankingPrimaryMetricLabel = computed(() =>
+    canSeeExecutiveDashboard.value ? "Cobrado" : "Reservas"
+);
+const roomRankingSecondaryMetricKey = computed(() =>
+    canSeeExecutiveDashboard.value ? "occupancyRate" : "idleMinutes"
+);
+const roomRankingSecondaryMetricLabel = computed(() =>
+    canSeeExecutiveDashboard.value ? "Ocupacion" : "Tiempo muerto"
+);
+const roomRankingPrimaryFormatter = computed(() =>
+    canSeeExecutiveDashboard.value
+        ? (value) => formatCurrency(value)
+        : (value) => String(Number(value ?? 0))
+);
+const roomRankingSecondaryFormatter = computed(() =>
+    canSeeExecutiveDashboard.value ? formatPercent : formatMinutes
+);
 
 const managerialWarnings = computed(() => {
     const warnings = [];
@@ -446,8 +658,58 @@ const managerialWarnings = computed(() => {
         warnings.push("Algunas metricas financieras estan ocultas por permisos del rol actual.");
     }
 
+    if (canSeeOperationalDashboard.value && kpiMeta.value.strategicFinancialVisible === false) {
+        warnings.push("Este tablero muestra solo KPIs operativos y cobranza basica de tu sucursal.");
+    }
+
     return warnings;
 });
+
+const dashboardHeroDescription = computed(() => {
+    if (canSeeExecutiveDashboard.value) {
+        return "Combina operacion, cobranza y rendimiento para tomar decisiones reales sobre salas, recepcion y productividad.";
+    }
+
+    if (canSeeOperationalDashboard.value) {
+        return "Prioriza la agenda del dia, la ocupacion practica y la cobranza basica de tu sucursal sin ruido estrategico innecesario.";
+    }
+
+    return "Administra tu agenda personal con una vista breve de tus proximas reservas y la carga operativa inmediata.";
+});
+
+const dashboardFilterEyebrow = computed(() =>
+    canSeeExecutiveDashboard.value ? "KPIs gerenciales" : "KPIs operativos"
+);
+
+const dashboardFilterTitle = computed(() =>
+    canSeeExecutiveDashboard.value ? "Filtro ejecutivo" : "Filtro operativo"
+);
+
+const dashboardFilterDescription = computed(() =>
+    canSeeExecutiveDashboard.value
+        ? "Afina el corte por fecha, sede, sala, responsable y moneda antes de interpretar los indicadores."
+        : "Ajusta el corte por fecha, sala, estado y moneda para ordenar la operacion diaria y la cobranza de la sucursal."
+);
+
+const roomRankingTitle = computed(() =>
+    canSeeExecutiveDashboard.value ? "Rendimiento por sala" : "Carga operativa por sala"
+);
+
+const roomRankingDescription = computed(() =>
+    canSeeExecutiveDashboard.value
+        ? "Compara uso, tiempo muerto y dinero generado por las salas del periodo."
+        : "Detecta que salas concentran mas reservas y donde se acumula tiempo muerto en el corte actual."
+);
+
+const collectionsTrendTitle = computed(() =>
+    canSeeExecutiveDashboard.value ? "Cobrado vs pendiente" : "Cobranza basica"
+);
+
+const collectionsTrendDescription = computed(() =>
+    canSeeExecutiveDashboard.value
+        ? "Separa la salud comercial real del dinero que aun no se ha recuperado."
+        : "Muestra lo recuperado y lo pendiente en la sucursal sin abrir comparativas financieras sensibles."
+);
 
 async function fetchDashboardSettings() {
     try {
@@ -459,7 +721,7 @@ async function fetchDashboardSettings() {
 }
 
 async function fetchBranchesForFilters() {
-    if (!canSeeManagerialKpis.value || !isAdminUser.value) {
+    if (!canAccessKpiDashboard.value || !canSelectAnyBranch.value) {
         branches.value = [];
         return;
     }
@@ -473,7 +735,7 @@ async function fetchBranchesForFilters() {
 }
 
 async function fetchRoomsForFilters() {
-    if (!canSeeManagerialKpis.value) {
+    if (!canAccessKpiDashboard.value) {
         rooms.value = [];
         return;
     }
@@ -487,7 +749,7 @@ async function fetchRoomsForFilters() {
 }
 
 async function fetchInternalUsersForFilters() {
-    if (!canSeeManagerialKpis.value || !isAdminUser.value) {
+    if (!canAccessKpiDashboard.value || !canFilterByDoctor.value) {
         internalUsers.value = [];
         return;
     }
@@ -501,7 +763,7 @@ async function fetchInternalUsersForFilters() {
 }
 
 async function fetchKpis() {
-    if (!canSeeManagerialKpis.value) {
+    if (!canAccessKpiDashboard.value) {
         return;
     }
 
@@ -515,7 +777,7 @@ async function fetchKpis() {
         kpiError.value =
             requestError.response?.msg ||
             requestError.message ||
-            "No fue posible cargar los KPI gerenciales.";
+            "No fue posible cargar los indicadores del dashboard.";
     } finally {
         kpiLoading.value = false;
     }
@@ -581,7 +843,7 @@ watch(
             filters.value.doctorUserId = "";
         }
 
-        if (!isAdminUser.value && normalizedBranchId !== Number(authStore.branch?.id ?? 0)) {
+        if (!canSelectAnyBranch.value && normalizedBranchId !== Number(authStore.branch?.id ?? 0)) {
             filters.value.branchId = authStore.branch?.id ?? "";
         }
     }
@@ -609,9 +871,7 @@ onMounted(() => {
             <span class="dashboard-eyebrow">Centro de mando</span>
             <h1>{{ workspaceName }}</h1>
             <p>
-              {{ canSeeManagerialKpis
-                ? "Combina operacion, cobranza y rendimiento para tomar decisiones reales sobre salas, recepcion y productividad."
-                : "Administra la agenda del dia con una vista rapida de reservas, pacientes y disponibilidad." }}
+              {{ dashboardHeroDescription }}
             </p>
 
             <div class="dashboard-hero__actions">
@@ -620,6 +880,13 @@ onMounted(() => {
               </BaseButton>
               <BaseButton variant="ghost" @click="router.push('/appointments/past')">
                 Historial de Reservas
+              </BaseButton>
+              <BaseButton
+                v-if="canSeeCollectionsShortcut"
+                variant="ghost"
+                @click="router.push('/finance')"
+              >
+                Ver cobradas
               </BaseButton>
             </div>
           </div>
@@ -667,9 +934,9 @@ onMounted(() => {
           </div>
         </section>
 
-        <section v-if="!canSeeManagerialKpis" class="dashboard-stats stats-strip">
+        <section v-if="!canAccessKpiDashboard" class="dashboard-stats stats-strip">
           <article
-            v-for="card in basicStatCards"
+            v-for="card in canSeePersonalDashboard ? personalStatCards : basicStatCards"
             :key="card.label"
             v-reveal="{ delay: 60 }"
             class="dashboard-stat-card"
@@ -679,13 +946,13 @@ onMounted(() => {
           </article>
         </section>
 
-        <template v-if="canSeeManagerialKpis">
+        <template v-if="canAccessKpiDashboard">
           <section v-reveal class="dashboard-filters dashboard-panel">
             <div class="dashboard-panel__heading">
               <div>
-                <p class="dashboard-panel__eyebrow">KPIs gerenciales</p>
-                <h2>Filtro ejecutivo</h2>
-                <p>Afina el corte por fecha, sede, sala, responsable y moneda antes de interpretar los indicadores.</p>
+                <p class="dashboard-panel__eyebrow">{{ dashboardFilterEyebrow }}</p>
+                <h2>{{ dashboardFilterTitle }}</h2>
+                <p>{{ dashboardFilterDescription }}</p>
               </div>
             </div>
 
@@ -703,7 +970,7 @@ onMounted(() => {
                 @update:model-value="filters.to = $event"
               />
 
-              <label v-if="isAdminUser" class="dashboard-filter__field">
+              <label v-if="canSelectAnyBranch" class="dashboard-filter__field">
                 <span class="dashboard-filter__label">Sucursal</span>
                 <select v-model="filters.branchId" class="dashboard-filter__select">
                   <option value="">Todas</option>
@@ -733,7 +1000,7 @@ onMounted(() => {
                 </select>
               </label>
 
-              <label v-if="isAdminUser" class="dashboard-filter__field">
+              <label v-if="canFilterByDoctor" class="dashboard-filter__field">
                 <span class="dashboard-filter__label">Medico / responsable</span>
                 <select v-model="filters.doctorUserId" class="dashboard-filter__select">
                   <option value="">Todos</option>
@@ -807,7 +1074,7 @@ onMounted(() => {
 
           <section class="dashboard-kpis">
             <KpiMetricCard
-              v-for="card in executiveCards"
+              v-for="card in dashboardKpiCards"
               :key="card.label"
               :label="card.label"
               :value="card.value"
@@ -830,8 +1097,8 @@ onMounted(() => {
             />
 
             <KpiTrendPanel
-              title="Cobrado vs pendiente"
-              description="Separa la salud comercial real del dinero que aun no se ha recuperado."
+              :title="collectionsTrendTitle"
+              :description="collectionsTrendDescription"
               :series="kpiDashboard.trends"
               primary-key="paidRevenue"
               secondary-key="pendingRevenue"
@@ -842,20 +1109,20 @@ onMounted(() => {
             />
 
             <KpiRankingPanel
-              title="Rendimiento por sala"
-              description="Compara uso, tiempo muerto y dinero generado por las salas del periodo."
+              :title="roomRankingTitle"
+              :description="roomRankingDescription"
               :rows="topRooms"
               label-key="roomName"
-              primary-metric-key="paidRevenue"
-              primary-metric-label="Cobrado"
-              secondary-metric-key="occupancyRate"
-              secondary-metric-label="Ocupacion"
-              :primary-formatter="(value) => formatCurrency(value)"
-              :secondary-formatter="formatPercent"
+              :primary-metric-key="roomRankingPrimaryMetricKey"
+              :primary-metric-label="roomRankingPrimaryMetricLabel"
+              :secondary-metric-key="roomRankingSecondaryMetricKey"
+              :secondary-metric-label="roomRankingSecondaryMetricLabel"
+              :primary-formatter="roomRankingPrimaryFormatter"
+              :secondary-formatter="roomRankingSecondaryFormatter"
             />
 
             <KpiRankingPanel
-              v-if="isAdminUser"
+              v-if="canSeeExecutiveDashboard && isAdminUser"
               title="Rendimiento por medico"
               description="Lectura rapida del ingreso y resultado operativo por responsable de la reserva."
               :rows="topDoctors"
@@ -867,6 +1134,34 @@ onMounted(() => {
               :primary-formatter="(value) => formatCurrency(value)"
               :secondary-formatter="formatPercent"
             />
+
+            <article v-if="canSeeOperationalDashboard" class="dashboard-panel">
+              <div class="dashboard-panel__heading">
+                <div>
+                  <p class="dashboard-panel__eyebrow">Disponibilidad</p>
+                  <h2>Salas disponibles ahora</h2>
+                </div>
+              </div>
+
+              <template v-if="availableRoomsNow.length">
+                <strong class="dashboard-availability-count">
+                  {{ availableRoomsNow.length }} salas listas para recibir pacientes
+                </strong>
+                <div class="dashboard-highlight-card__order">
+                  <span
+                    v-for="room in availableRoomsPreview"
+                    :key="room.id"
+                    class="dashboard-info-chip"
+                  >
+                    {{ room.nombre }}
+                  </span>
+                </div>
+              </template>
+
+              <p v-else class="dashboard-state">
+                Todas las salas activas de tu sucursal estan ocupadas en este momento.
+              </p>
+            </article>
 
             <article class="dashboard-panel">
               <div class="dashboard-panel__heading">
@@ -929,8 +1224,10 @@ onMounted(() => {
             <article v-reveal class="dashboard-panel dashboard-panel--wide">
               <div class="dashboard-panel__heading">
                 <div>
-                  <p class="dashboard-panel__eyebrow">Agenda</p>
-                  <h2>Reservas proximas</h2>
+                  <p class="dashboard-panel__eyebrow">
+                    {{ canSeePersonalDashboard ? "Mi agenda" : "Agenda" }}
+                  </p>
+                  <h2>{{ canSeePersonalDashboard ? "Mis reservas proximas" : "Reservas proximas" }}</h2>
                 </div>
               </div>
 
@@ -1085,7 +1382,8 @@ onMounted(() => {
 }
 
 .dashboard-highlight-card strong,
-.dashboard-plan-card strong {
+.dashboard-plan-card strong,
+.dashboard-availability-count {
   display: block;
   color: var(--primary-dark);
   margin-top: 0.45rem;

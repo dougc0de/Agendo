@@ -909,6 +909,7 @@ onMounted(() => {
                 <AppointmentTable
                   :appointments="filteredAppointments"
                   :loading="loading"
+                  :show-outcome="false"
                   @edit="openEditModal"
                   @delete="handleDeleteAppointment"
                 />

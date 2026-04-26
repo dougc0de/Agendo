@@ -44,6 +44,7 @@ import { downloadOperationReportPdf } from "../utils/operationReportPdf.js";
 const router = useRouter();
 const authStore = useAuthStore();
 const activeTab = ref("cobros");
+const billingView = ref("por_facturar");
 const inventoryTab = ref("catalogo");
 const reports = ref([]);
 const inventoryItems = ref([]);
@@ -117,6 +118,7 @@ const filters = ref({
     patient: "",
     userId: "",
     roomId: "",
+    branchId: "",
     paymentStatus: "todos"
 });
 const inventoryFilters = ref({
@@ -208,6 +210,10 @@ const summaryCards = computed(() => [
     {
         label: "Margen bruto",
         value: formatCurrency(summary.value.margenBrutoAproximado)
+    },
+    {
+        label: "Reservas pagadas",
+        value: summary.value.procedimientosCobrados ?? 0
     }
 ]);
 
@@ -248,6 +254,58 @@ const reportCurrencies = computed(() =>
     [...new Set(reports.value.map((report) => report.currencyCode).filter(Boolean))]
 );
 const hasMixedCurrencies = computed(() => reportCurrencies.value.length > 1);
+const filteredReservationOptions = computed(() => {
+    const patientQuery = String(filters.value.patient ?? "").trim().toLowerCase();
+    const from = String(filters.value.from ?? "").trim();
+    const to = String(filters.value.to ?? "").trim();
+    const userId = Number(filters.value.userId);
+    const roomId = Number(filters.value.roomId);
+    const branchId = Number(filters.value.branchId);
+
+    return reservationOptions.value.filter((reservation) => {
+        if (from && String(reservation.fecha ?? "") < from) {
+            return false;
+        }
+
+        if (to && String(reservation.fecha ?? "") > to) {
+            return false;
+        }
+
+        if (Number.isInteger(userId) && userId > 0 && Number(reservation.usuarioId) !== userId) {
+            return false;
+        }
+
+        if (Number.isInteger(roomId) && roomId > 0 && Number(reservation.salaId) !== roomId) {
+            return false;
+        }
+
+        if (Number.isInteger(branchId) && branchId > 0 && Number(reservation.branchId) !== branchId) {
+            return false;
+        }
+
+        if (!patientQuery) {
+            return true;
+        }
+
+        return [
+            reservation.pacienteNombre,
+            reservation.pacienteTelefono,
+            reservation.pacienteCorreo
+        ]
+            .join(" ")
+            .toLowerCase()
+            .includes(patientQuery);
+    });
+});
+const pendingReports = computed(() =>
+    reports.value.filter((report) => report.financialStatus !== "pagado")
+);
+const paidReports = computed(() =>
+    reports.value.filter((report) => report.financialStatus === "pagado")
+);
+const displayedReports = computed(() =>
+    billingView.value === "pagadas" ? paidReports.value : pendingReports.value
+);
 let reservationRequestToken = 0;
 
 function formatCurrency(
@@ -277,6 +335,18 @@ function formatChargeDecision(decision) {
             cobrable: "Cobrable",
             exonerado: "Exonerado"
         }[decision] ?? decision
+    );
+}
+
+function formatFinancialStatus(status) {
+    return (
+        {
+            sin_factura: "Sin factura",
+            pendiente: "Pendiente",
+            pagado: "Pagado",
+            anulado: "Anulado",
+            exonerado: "Exonerado"
+        }[status] ?? status
     );
 }
 
@@ -355,6 +425,47 @@ function buildReservationSummaryFromReport(report = {}) {
         branchId: report.branchId ?? null,
         branchName: report.branchNameSnapshot ?? null
     };
+}
+
+function getCurrentFinanceDateKey() {
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: settings.value.timeZone ?? "America/Costa_Rica",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    })
+        .format(new Date())
+        .replaceAll("/", "-");
+}
+
+function addDaysToDateKey(dateKey, daysToAdd) {
+    const base = new Date(`${dateKey}T00:00:00`);
+
+    if (Number.isNaN(base.getTime())) {
+        return dateKey;
+    }
+
+    base.setDate(base.getDate() + daysToAdd);
+    return base.toISOString().slice(0, 10);
+}
+
+function applyDatePreset(preset) {
+    const today = getCurrentFinanceDateKey();
+
+    if (preset === "today") {
+        filters.value.from = today;
+        filters.value.to = today;
+        return;
+    }
+
+    if (preset === "week") {
+        filters.value.from = addDaysToDateKey(today, -6);
+        filters.value.to = today;
+        return;
+    }
+
+    filters.value.from = addDaysToDateKey(today, -29);
+    filters.value.to = today;
 }
 
 async function loadSelectedReservation(reservationId, options = {}) {
@@ -638,6 +749,7 @@ function clearFilters() {
         patient: "",
         userId: "",
         roomId: "",
+        branchId: "",
         paymentStatus: "todos"
     };
     fetchFinanceData();
@@ -678,15 +790,27 @@ function clearInventoryReportFilters() {
     fetchInventoryReports();
 }
 
-function openCreateReportModal() {
+function openCreateReportModal(reservation = null) {
     reportModalMode.value = "create";
-    currentReport.value = {};
-    selectedReservation.value = null;
+    currentReport.value = reservation
+        ? {
+              reservationId: reservation.id,
+              procedureName: reservation.tipoConsulta ?? reservation.descripcion ?? ""
+          }
+        : {};
+    selectedReservation.value = reservation ? { ...reservation } : null;
     reservationLoading.value = false;
     reservationError.value = "";
     reportModalError.value = "";
     reportModalOpen.value = true;
     fetchReservationOptions();
+
+    if (reservation?.id) {
+        loadSelectedReservation(reservation.id, {
+            allowFallback: true,
+            fallbackReservation: { ...reservation }
+        });
+    }
 }
 
 function openEditReportModal(report) {
@@ -776,6 +900,10 @@ function closePaymentModal() {
 function handleReportReservationChange(reservationId) {
     reportModalError.value = "";
     loadSelectedReservation(reservationId);
+}
+
+function reportPrimaryActionLabel(report) {
+    return report.financialStatus === "pagado" ? "Ver detalle" : "Editar factura";
 }
 
 async function handleSaveReport(payload) {
@@ -1016,15 +1144,68 @@ onMounted(() => {
         <p v-if="error" class="finance-error">{{ error }}</p>
 
         <template v-if="activeTab === 'cobros'">
+          <section class="finance-stats stats-strip">
+            <article
+              v-for="card in summaryCards"
+              :key="card.label"
+              v-reveal="{ delay: 50 }"
+              class="finance-stat-card"
+            >
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+            </article>
+          </section>
+
+          <section class="finance-tabs finance-tabs--sub">
+            <button
+              type="button"
+              class="finance-tabs__button"
+              :class="{ 'finance-tabs__button--active': billingView === 'por_facturar' }"
+              @click="billingView = 'por_facturar'"
+            >
+              Por facturar
+            </button>
+            <button
+              type="button"
+              class="finance-tabs__button"
+              :class="{ 'finance-tabs__button--active': billingView === 'pendientes' }"
+              @click="billingView = 'pendientes'"
+            >
+              Pendientes de pago
+            </button>
+            <button
+              type="button"
+              class="finance-tabs__button"
+              :class="{ 'finance-tabs__button--active': billingView === 'pagadas' }"
+              @click="billingView = 'pagadas'"
+            >
+              Pagadas
+            </button>
+          </section>
+
           <section class="finance-layout">
             <article v-reveal class="finance-panel">
               <div class="finance-panel__header">
                 <div>
                   <span class="finance-panel__eyebrow">Filtros</span>
-                  <h2>Facturacion por procedimiento</h2>
+                  <h2>
+                    {{
+                      billingView === "por_facturar"
+                        ? "Procedimientos listos para facturar"
+                        : billingView === "pagadas"
+                          ? "Historico de reservas pagadas"
+                          : "Cola de cobro pendiente"
+                    }}
+                  </h2>
                   <p class="finance-panel__copy">
                     Modalidad actual de la cuenta: {{ formatPricingMode(settings.defaultProcedurePricingMode) }}.
-                    Recepcion emite la factura segun esta regla y luego confirma el pago por separado.
+                    {{
+                      billingView === "por_facturar"
+                        ? "Recepcion emite la factura solo una vez por procedimiento y luego el caso cambia de bandeja."
+                        : billingView === "pagadas"
+                          ? "Aqui vive la lectura que el dueno necesita al cierre del dia o del mes: reservas cobradas, paciente, sala, fecha y monto."
+                          : "Estas reservas ya tienen factura emitida, pero todavia no cuentan como cobro realizado."
+                    }}
                   </p>
                 </div>
               </div>
@@ -1037,7 +1218,7 @@ onMounted(() => {
                 <BaseInput
                   :model-value="filters.patient"
                   label="Paciente"
-                  placeholder="Nombre del paciente"
+                  placeholder="Nombre o telefono"
                   @update:model-value="filters.patient = $event"
                 />
                 <BaseInput
@@ -1052,6 +1233,19 @@ onMounted(() => {
                   type="date"
                   @update:model-value="filters.to = $event"
                 />
+                <label class="finance-filters__field">
+                  <span class="finance-filters__label">Sucursal</span>
+                  <select v-model="filters.branchId" class="finance-filters__select">
+                    <option value="">Todas</option>
+                    <option
+                      v-for="branch in branchOptions"
+                      :key="branch.id"
+                      :value="branch.id"
+                    >
+                      {{ branch.nombre }}
+                    </option>
+                  </select>
+                </label>
                 <label class="finance-filters__field">
                   <span class="finance-filters__label">Usuario</span>
                   <select v-model="filters.userId" class="finance-filters__select">
@@ -1078,7 +1272,10 @@ onMounted(() => {
                     </option>
                   </select>
                 </label>
-                <label class="finance-filters__field">
+                <label
+                  v-if="billingView !== 'por_facturar'"
+                  class="finance-filters__field"
+                >
                   <span class="finance-filters__label">Estado</span>
                   <select v-model="filters.paymentStatus" class="finance-filters__select">
                     <option value="todos">Todos</option>
@@ -1087,6 +1284,20 @@ onMounted(() => {
                     <option value="anulado">Anulado</option>
                   </select>
                 </label>
+                <div class="finance-filters__presets">
+                  <span class="finance-filters__label">Atajos</span>
+                  <div class="finance-filters__preset-actions">
+                    <BaseButton size="sm" variant="ghost" @click.prevent="applyDatePreset('today')">
+                      Hoy
+                    </BaseButton>
+                    <BaseButton size="sm" variant="ghost" @click.prevent="applyDatePreset('week')">
+                      Semana
+                    </BaseButton>
+                    <BaseButton size="sm" variant="ghost" @click.prevent="applyDatePreset('month')">
+                      Mes
+                    </BaseButton>
+                  </div>
+                </div>
                 <div class="finance-filters__actions">
                   <BaseButton variant="ghost" @click.prevent="clearFilters">
                     Limpiar
@@ -1101,32 +1312,88 @@ onMounted(() => {
                 <div v-if="loading" class="finance-state">
                   Cargando reportes...
                 </div>
-                <div v-else-if="!reports.length" class="finance-state">
-                  No hay reportes para los filtros actuales.
+                <div
+                  v-else-if="billingView === 'por_facturar' && !filteredReservationOptions.length"
+                  class="finance-state"
+                >
+                  No hay procedimientos listos para facturar con esos filtros.
                 </div>
+                <div
+                  v-else-if="billingView !== 'por_facturar' && !displayedReports.length"
+                  class="finance-state"
+                >
+                  No hay reservas en esta bandeja con los filtros actuales.
+                </div>
+                <table v-else-if="billingView === 'por_facturar'" class="finance-table__table">
+                  <thead>
+                    <tr>
+                      <th>Reserva</th>
+                      <th>Paciente</th>
+                      <th>Sala</th>
+                      <th>Responsable</th>
+                      <th>Sucursal</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="reservation in filteredReservationOptions" :key="reservation.id">
+                      <td>
+                        <strong>{{ reservation.fecha }}</strong>
+                        <span class="finance-table__subtext">
+                          {{ reservation.horaInicio }} - {{ reservation.horaFin }}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{{ reservation.pacienteNombre }}</strong>
+                        <span class="finance-table__subtext">
+                          {{ reservation.pacienteTelefono || "Sin telefono" }}
+                        </span>
+                      </td>
+                      <td>{{ reservation.salaNombre }}</td>
+                      <td>{{ reservation.usuarioNombre || "Sin responsable" }}</td>
+                      <td>{{ reservation.branchName || "Sin sucursal" }}</td>
+                      <td class="finance-table__actions-cell">
+                        <BaseButton
+                          size="sm"
+                          @click="openCreateReportModal(reservation)"
+                        >
+                          Emitir factura
+                        </BaseButton>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
                 <table v-else class="finance-table__table">
                   <thead>
                     <tr>
                       <th>Reserva</th>
                       <th>Paciente</th>
                       <th>Sala</th>
+                      <th>Responsable</th>
                       <th>Modalidad</th>
                       <th>Total</th>
                       <th>Pago</th>
+                      <th>{{ billingView === "pagadas" ? "Pagado el" : "Detalle" }}</th>
                       <th>Decision</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="report in reports" :key="report.id">
+                    <tr v-for="report in displayedReports" :key="report.id">
                       <td>
                         <strong>{{ report.reservationDate }}</strong>
                         <span class="finance-table__subtext">
                           {{ report.reservationStartTime }} - {{ report.reservationEndTime }}
                         </span>
                       </td>
-                      <td>{{ report.patientNameSnapshot }}</td>
+                      <td>
+                        <strong>{{ report.patientNameSnapshot }}</strong>
+                        <span class="finance-table__subtext">
+                          {{ report.patientPhoneSnapshot || "Sin telefono" }}
+                        </span>
+                      </td>
                       <td>{{ report.roomNameSnapshot }}</td>
+                      <td>{{ report.reservationUserName || "Sin responsable" }}</td>
                       <td>
                         <strong>{{ formatPricingMode(report.pricingMode) }}</strong>
                         <span class="finance-table__subtext">
@@ -1137,9 +1404,18 @@ onMounted(() => {
                       <td>
                         <span
                           class="finance-table__badge"
-                          :class="`finance-table__badge--${report.paymentStatus}`"
+                          :class="`finance-table__badge--${report.financialStatus || report.paymentStatus}`"
                         >
-                          {{ report.paymentStatus }}
+                          {{ report.paymentLabel || formatFinancialStatus(report.financialStatus) }}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="finance-table__subtext finance-table__subtext--strong">
+                          {{
+                            billingView === "pagadas"
+                              ? (report.paidAt ? report.paidAt.slice(0, 10) : "Sin fecha")
+                              : formatFinancialStatus(report.financialStatus)
+                          }}
                         </span>
                       </td>
                       <td>
@@ -1157,7 +1433,7 @@ onMounted(() => {
                           variant="warning"
                           @click="openEditReportModal(report)"
                         >
-                          Editar factura
+                          {{ reportPrimaryActionLabel(report) }}
                         </BaseButton>
                         <BaseButton
                           size="sm"
@@ -2015,6 +2291,18 @@ onMounted(() => {
   gap: 0.75rem;
 }
 
+.finance-filters__presets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.finance-filters__preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
 .finance-table {
   overflow-x: auto;
   background: #fff;
@@ -2023,7 +2311,7 @@ onMounted(() => {
 
 .finance-table__table {
   width: 100%;
-  min-width: 880px;
+  min-width: 1060px;
   border-collapse: collapse;
 }
 
@@ -2097,6 +2385,11 @@ onMounted(() => {
   margin-top: 0.35rem;
   color: var(--text-soft);
   font-size: 0.86rem;
+}
+
+.finance-table__subtext--strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .finance-stock-list {
@@ -2177,11 +2470,13 @@ onMounted(() => {
   }
 
   .finance-hero__actions :deep(.base-button),
-  .finance-filters__actions :deep(.base-button) {
+  .finance-filters__actions :deep(.base-button),
+  .finance-filters__preset-actions :deep(.base-button) {
     width: 100%;
   }
 
   .finance-filters__actions,
+  .finance-filters__preset-actions,
   .finance-table__actions-cell {
     flex-direction: column;
   }

@@ -120,6 +120,34 @@ function roundMoney(value) {
     return Number(Number(value ?? 0).toFixed(2));
 }
 
+function deriveFinancialStatus(row) {
+    if (!row) {
+        return "sin_factura";
+    }
+
+    if (row.charge_decision === "exonerado") {
+        return "exonerado";
+    }
+
+    if (row.payment_status === "pagado") {
+        return "pagado";
+    }
+
+    if (row.payment_status === "anulado") {
+        return "anulado";
+    }
+
+    if (row.payment_status === "pendiente") {
+        return "pendiente";
+    }
+
+    return "sin_factura";
+}
+
+function derivePaymentLabel(financialStatus) {
+    return financialStatus === "pagado" ? "Pagado" : "No pagado";
+}
+
 function formatearLineaInsumo(linea) {
     return {
         id: linea.id,
@@ -144,12 +172,15 @@ function formatearCobroSalida(filaCobro, supplies = []) {
         return null;
     }
 
+    const financialStatus = deriveFinancialStatus(filaCobro);
+
     return {
         id: filaCobro.id,
         workspaceId: filaCobro.workspace_id,
         reservationId: filaCobro.reservation_id,
         patientId: filaCobro.patient_id,
         patientNameSnapshot: filaCobro.patient_name_snapshot,
+        patientPhoneSnapshot: filaCobro.patient_phone_snapshot ?? null,
         roomId: filaCobro.room_id,
         roomNameSnapshot: filaCobro.room_name_snapshot,
         branchId: filaCobro.branch_id ?? null,
@@ -178,6 +209,8 @@ function formatearCobroSalida(filaCobro, supplies = []) {
         reservationStatus: filaCobro.reservation_status,
         reservationUserId: filaCobro.reservation_user_id ?? null,
         reservationUserName: filaCobro.reservation_user_nombre ?? null,
+        financialStatus,
+        paymentLabel: derivePaymentLabel(financialStatus),
         createdAt: filaCobro.created_at,
         updatedAt: filaCobro.updated_at,
         supplies
@@ -190,7 +223,10 @@ function cumpleFiltrosCobro(filaCobro, filtros = {}) {
     const patientQuery = normalizarTexto(filtros.patient).toLowerCase();
     const userId = Number(filtros.userId);
     const roomId = Number(filtros.roomId);
+    const branchId = Number(filtros.branchId);
     const paymentStatus = normalizarEstadoCobro(filtros.paymentStatus);
+    const scope = normalizarTexto(filtros.scope).toLowerCase();
+    const financialStatus = deriveFinancialStatus(filaCobro);
 
     if (from && normalizarFecha(filaCobro.reservation_date) < from) {
         return false;
@@ -202,7 +238,13 @@ function cumpleFiltrosCobro(filaCobro, filtros = {}) {
 
     if (
         patientQuery &&
-        !String(filaCobro.patient_name_snapshot ?? "").toLowerCase().includes(patientQuery)
+        ![
+            filaCobro.patient_name_snapshot,
+            filaCobro.patient_phone_snapshot
+        ]
+            .join(" ")
+            .toLowerCase()
+            .includes(patientQuery)
     ) {
         return false;
     }
@@ -215,12 +257,24 @@ function cumpleFiltrosCobro(filaCobro, filtros = {}) {
         return false;
     }
 
+    if (Number.isInteger(branchId) && branchId > 0 && Number(filaCobro.branch_id) !== branchId) {
+        return false;
+    }
+
     if (
         paymentStatus &&
         paymentStatus !== "todos" &&
         ESTADOS_COBRO.includes(paymentStatus) &&
         filaCobro.payment_status !== paymentStatus
     ) {
+        return false;
+    }
+
+    if (scope === "pagado" && financialStatus !== "pagado") {
+        return false;
+    }
+
+    if (scope === "pendiente" && financialStatus === "pagado") {
         return false;
     }
 
@@ -251,6 +305,7 @@ function cumpleFiltrosReservaParaResumen(filaReserva, filtros = {}) {
     const patientQuery = normalizarTexto(filtros.patient).toLowerCase();
     const userId = Number(filtros.userId);
     const roomId = Number(filtros.roomId);
+    const branchId = Number(filtros.branchId);
 
     if (from && normalizarFecha(filaReserva.fecha) < from) {
         return false;
@@ -279,6 +334,10 @@ function cumpleFiltrosReservaParaResumen(filaReserva, filtros = {}) {
     }
 
     if (Number.isInteger(roomId) && roomId > 0 && filaReserva.sala_id !== roomId) {
+        return false;
+    }
+
+    if (Number.isInteger(branchId) && branchId > 0 && Number(filaReserva.sucursal_id) !== branchId) {
         return false;
     }
 
@@ -864,6 +923,7 @@ export async function crearCobro(payload, auth) {
                     patientId: reservation.paciente_id,
                     patientNameSnapshot:
                         reservation.paciente_nombre ?? `Paciente #${reservation.paciente_id}`,
+                    patientPhoneSnapshot: reservation.paciente_telefono ?? null,
                     roomId: reservation.sala_id,
                     roomNameSnapshot: reservation.sala_nombre ?? `Sala #${reservation.sala_id}`,
                     branchId: room.sucursal_id ?? null,

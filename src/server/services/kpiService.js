@@ -1,6 +1,6 @@
 import { listarKpiReservationFacts, listarSalasParaKpis } from "../repositories/kpiRepository.js";
 import { obtenerConfiguracionOperativaNormalizada } from "./workspaceSettingsService.js";
-import { canAccessFinance, isAdministrativeUser, isDoctorUser } from "../../shared/roles.js";
+import { KpiAccessPolicy } from "../../shared/kpiAccessPolicy.js";
 import { normalizeSupportedCurrencyCode, SUPPORTED_CURRENCY_CODES } from "../../shared/currencies.js";
 
 const GRANULARITIES = ["day", "week", "month"];
@@ -179,27 +179,18 @@ function resolveWorkspaceId(auth) {
     return Number.isInteger(workspaceId) && workspaceId > 0 ? workspaceId : null;
 }
 
-function hasKpiAccess(auth) {
-    return (
-        canAccessFinance({
-            membershipRole: auth?.membershipRole,
-            userRole: auth?.userRole
-        }) &&
-        !isDoctorUser({
-            membershipRole: auth?.membershipRole,
-            userRole: auth?.userRole
-        })
-    );
-}
-
 function buildAuthMeta(auth) {
+    const policy = new KpiAccessPolicy({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole,
+        branchId: auth?.branchId,
+        branchName: auth?.branchName,
+        userId: auth?.userId
+    });
+
     return {
-        isAdmin: isAdministrativeUser({
-            membershipRole: auth?.membershipRole,
-            userRole: auth?.userRole
-        }),
-        branchId: Number(auth?.branchId ?? 0) || null,
-        branchName: auth?.branchName ?? null
+        ...policy.meta(),
+        policy
     };
 }
 
@@ -265,14 +256,14 @@ function normalizeFilters(rawFilters = {}, auth) {
         };
     }
 
-    if (!authMeta.isAdmin) {
-        if (!authMeta.branchId) {
-            return {
-                ok: false,
-                msg: "No autorizado. Tu usuario necesita una sucursal asignada para ver KPIs gerenciales."
-            };
-        }
+    if (!authMeta.isAdmin && !authMeta.isDoctor && !authMeta.branchId) {
+        return {
+            ok: false,
+            msg: "No autorizado. Tu usuario necesita una sucursal asignada para ver KPIs operativos."
+        };
+    }
 
+    if (!authMeta.canSelectAnyBranch) {
         if (
             Number.isInteger(requestedBranchId) &&
             requestedBranchId > 0 &&
@@ -285,22 +276,32 @@ function normalizeFilters(rawFilters = {}, auth) {
         }
     }
 
+    if (!authMeta.canFilterByDoctor && Number.isInteger(requestedDoctorUserId) && requestedDoctorUserId > 0) {
+        return {
+            ok: false,
+            msg: "No autorizado. No puedes filtrar KPIs por otros medicos o responsables."
+        };
+    }
+
+    if (
+        !authMeta.canFilterByRoom &&
+        Number.isInteger(requestedRoomId) &&
+        requestedRoomId > 0
+    ) {
+        return {
+            ok: false,
+            msg: "No autorizado. Tu rol no puede filtrar KPIs por sala."
+        };
+    }
+
     return {
         ok: true,
         data: {
             from,
             to,
-            branchId:
-                authMeta.isAdmin && Number.isInteger(requestedBranchId) && requestedBranchId > 0
-                    ? requestedBranchId
-                    : authMeta.isAdmin
-                      ? null
-                      : authMeta.branchId,
+            branchId: authMeta.policy.resolveBranchScope(requestedBranchId),
             roomId: Number.isInteger(requestedRoomId) && requestedRoomId > 0 ? requestedRoomId : null,
-            doctorUserId:
-                Number.isInteger(requestedDoctorUserId) && requestedDoctorUserId > 0
-                    ? requestedDoctorUserId
-                    : null,
+            doctorUserId: authMeta.policy.resolveDoctorScope(requestedDoctorUserId),
             status: normalizeStatus(rawFilters.status),
             currencyCode: normalizedCurrency || null,
             granularity: normalizeGranularity(rawFilters.granularity),
@@ -310,7 +311,8 @@ function normalizeFilters(rawFilters = {}, auth) {
             sortBy: normalizeSortBy(rawFilters.sortBy),
             isAdmin: authMeta.isAdmin,
             scopedBranchId: authMeta.branchId,
-            scopedBranchName: authMeta.branchName ?? null
+            scopedBranchName: authMeta.branchName ?? null,
+            accessPolicy: authMeta.policy
         }
     };
 }
@@ -538,6 +540,8 @@ function getLeadTimeDays(fact) {
 
 function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financialVisible = true } = {}) {
     const scheduledCount = facts.length;
+    const pendingCount = facts.filter((fact) => fact.reservationStatus === "pendiente").length;
+    const confirmedCount = facts.filter((fact) => fact.reservationStatus === "confirmada").length;
     const cancelledCount = facts.filter((fact) => fact.reservationStatus === "cancelada").length;
     const bookedMinutes = facts.reduce((sum, fact) => {
         if (fact.reservationStatus === "cancelada") {
@@ -560,6 +564,9 @@ function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financial
     const paidFacts = facts.filter(
         (fact) => fact.chargeDecision === "cobrable" && fact.paymentStatus === "pagado"
     );
+    const pendingChargeFacts = facts.filter(
+        (fact) => fact.chargeDecision === "cobrable" && fact.paymentStatus === "pendiente"
+    );
     const paidRevenueRaw = paidFacts.reduce((sum, fact) => sum + fact.paidRevenue, 0);
     const pendingRevenueRaw = facts.reduce((sum, fact) => sum + fact.pendingRevenue, 0);
     const exoneratedAmountRaw = facts.reduce((sum, fact) => sum + fact.exoneratedAmount, 0);
@@ -569,6 +576,10 @@ function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financial
         0
     );
     const paidChargeCount = paidFacts.filter((fact) => Boolean(fact.chargeId)).length;
+    const pendingChargeCount = pendingChargeFacts.filter((fact) => Boolean(fact.chargeId)).length;
+    const paidReservationCount = new Set(
+        paidFacts.map((fact) => Number(fact.reservationId)).filter(Boolean)
+    ).size;
     const paidDoctorIds = new Set(
         paidFacts
             .map((fact) => Number(fact.reservationUserId))
@@ -599,7 +610,8 @@ function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financial
 
     return {
         scheduledCount,
-        confirmedCount: facts.filter((fact) => fact.reservationStatus === "confirmada").length,
+        pendingCount,
+        confirmedCount,
         cancelledCount,
         attendedCount,
         noShowCount,
@@ -613,6 +625,8 @@ function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financial
         confirmationRate: roundMetric(confirmationRate),
         averageLeadDays: roundMetric(averageLeadDays),
         paidChargeCount,
+        pendingChargeCount,
+        paidReservationCount,
         distinctDoctorsCount: paidDoctorIds.size,
         paidRevenue: financialVisible ? roundMoney(paidRevenueRaw) : null,
         pendingRevenue: financialVisible ? roundMoney(pendingRevenueRaw) : null,
@@ -866,7 +880,142 @@ function buildAlerts({ summaryMetrics, roomBreakdown, facts, settings, currencyM
     return alerts;
 }
 
-function buildDashboardPayload(facts, rooms, filters, settings) {
+function pickFields(source, keys) {
+    return keys.reduce((accumulator, key) => {
+        accumulator[key] = source?.[key] ?? null;
+        return accumulator;
+    }, {});
+}
+
+function buildExecutiveDashboardPayload(payload, accessPolicy) {
+    return {
+        ...payload,
+        meta: {
+            ...payload.meta,
+            ...accessPolicy.meta(),
+            dashboardKind: "executive",
+            strategicFinancialVisible: true,
+            doctorComparisonsVisible: true,
+            branchComparisonsVisible: true,
+            roomComparisonsVisible: true,
+            collectionsVisible: true
+        }
+    };
+}
+
+function buildOperationalDashboardPayload(payload, accessPolicy) {
+    const summary = pickFields(payload.summary, [
+        "scheduledCount",
+        "pendingCount",
+        "confirmedCount",
+        "cancelledCount",
+        "attendedCount",
+        "noShowCount",
+        "knownOutcomeCount",
+        "bookedMinutes",
+        "operationalMinutes",
+        "idleMinutes",
+        "occupancyRate",
+        "cancellationRate",
+        "noShowRate",
+        "confirmationRate",
+        "paidRevenue",
+        "pendingRevenue",
+        "revenueLeakage",
+        "paidChargeCount",
+        "pendingChargeCount",
+        "paidReservationCount"
+    ]);
+    const trends = payload.trends.map((row) =>
+        pickFields(row, [
+            "bucketKey",
+            "label",
+            "scheduledCount",
+            "pendingCount",
+            "confirmedCount",
+            "cancelledCount",
+            "attendedCount",
+            "noShowCount",
+            "bookedMinutes",
+            "operationalMinutes",
+            "idleMinutes",
+            "occupancyRate",
+            "cancellationRate",
+            "noShowRate",
+            "paidRevenue",
+            "pendingRevenue",
+            "revenueLeakage",
+            "paidReservationCount",
+            "pendingChargeCount"
+        ])
+    );
+    const rooms = [...(payload.breakdowns.rooms ?? [])]
+        .map((row) =>
+            pickFields(row, [
+                "roomId",
+                "roomName",
+                "branchId",
+                "branchName",
+                "scheduledCount",
+                "pendingCount",
+                "confirmedCount",
+                "cancelledCount",
+                "attendedCount",
+                "noShowCount",
+                "bookedMinutes",
+                "operationalMinutes",
+                "idleMinutes",
+                "occupancyRate",
+                "cancellationRate",
+                "noShowRate"
+            ])
+        )
+        .sort((left, right) => {
+            const scheduledDiff = (right.scheduledCount ?? 0) - (left.scheduledCount ?? 0);
+
+            if (scheduledDiff !== 0) {
+                return scheduledDiff;
+            }
+
+            return (right.occupancyRate ?? 0) - (left.occupancyRate ?? 0);
+        });
+
+    return {
+        summary,
+        trends,
+        breakdowns: {
+            branches: [],
+            rooms,
+            doctors: [],
+            procedures: []
+        },
+        alerts: payload.alerts,
+        meta: {
+            ...payload.meta,
+            ...accessPolicy.meta(),
+            dashboardKind: "operations",
+            strategicFinancialVisible: false,
+            doctorComparisonsVisible: false,
+            branchComparisonsVisible: false,
+            roomComparisonsVisible: true,
+            collectionsVisible: true
+        }
+    };
+}
+
+function shapeDashboardPayloadForPolicy(payload, accessPolicy) {
+    if (accessPolicy.isAdmin()) {
+        return buildExecutiveDashboardPayload(payload, accessPolicy);
+    }
+
+    if (accessPolicy.isReception()) {
+        return buildOperationalDashboardPayload(payload, accessPolicy);
+    }
+
+    return payload;
+}
+
+function buildDashboardPayload(facts, rooms, filters, settings, accessPolicy) {
     const normalizedFacts = facts.map((fact) => normalizeFactRow(fact));
     const roomScope = buildRoomScope(rooms, normalizedFacts, filters);
     const currencyMeta = buildCurrencyMeta(normalizedFacts, filters);
@@ -892,7 +1041,7 @@ function buildDashboardPayload(facts, rooms, filters, settings) {
         filters
     });
 
-    return {
+    const payload = {
         summary: summaryMetrics,
         trends,
         breakdowns: {
@@ -915,6 +1064,8 @@ function buildDashboardPayload(facts, rooms, filters, settings) {
             scopedBranchName: filters.scopedBranchName ?? null
         }
     };
+
+    return shapeDashboardPayloadForPolicy(payload, accessPolicy);
 }
 
 function sortBreakdownRows(rows, dimension, sortBy = null) {
@@ -938,8 +1089,10 @@ function sortBreakdownRows(rows, dimension, sortBy = null) {
     });
 }
 
-async function cargarContextoKpi(filters, auth) {
+async function cargarContextoKpi(filters, auth, options = {}) {
     const workspaceId = resolveWorkspaceId(auth);
+    const authMeta = buildAuthMeta(auth);
+    const requireAnalyticalAccess = Boolean(options.requireAnalyticalAccess);
 
     if (!workspaceId) {
         return {
@@ -948,10 +1101,17 @@ async function cargarContextoKpi(filters, auth) {
         };
     }
 
-    if (!hasKpiAccess(auth)) {
+    if (!authMeta.policy.canAccessKpiDashboard()) {
         return {
             ok: false,
-            msg: "No autorizado. No tienes acceso a los KPIs gerenciales."
+            msg: "No autorizado. Tu rol no tiene acceso al dashboard de KPIs."
+        };
+    }
+
+    if (requireAnalyticalAccess && !authMeta.policy.canAccessAnalyticalEndpoints()) {
+        return {
+            ok: false,
+            msg: "No autorizado. Este desglose gerencial solo esta disponible para owner/admin."
         };
     }
 
@@ -975,7 +1135,8 @@ async function cargarContextoKpi(filters, auth) {
             settings,
             filters: normalizedFilters,
             facts,
-            rooms
+            rooms,
+            accessPolicy: authMeta.policy
         }
     };
 }
@@ -992,7 +1153,8 @@ export async function obtenerKpiDashboard(filters, auth) {
             contextResult.data.facts,
             contextResult.data.rooms,
             contextResult.data.filters,
-            contextResult.data.settings
+            contextResult.data.settings,
+            contextResult.data.accessPolicy
         );
 
         return {
@@ -1010,7 +1172,9 @@ export async function obtenerKpiDashboard(filters, auth) {
 
 export async function obtenerKpiTrends(filters, auth) {
     try {
-        const contextResult = await cargarContextoKpi(filters, auth);
+        const contextResult = await cargarContextoKpi(filters, auth, {
+            requireAnalyticalAccess: true
+        });
 
         if (!contextResult.ok) {
             return contextResult;
@@ -1020,9 +1184,17 @@ export async function obtenerKpiTrends(filters, auth) {
             contextResult.data.facts,
             contextResult.data.rooms,
             contextResult.data.filters,
-            contextResult.data.settings
+            contextResult.data.settings,
+            contextResult.data.accessPolicy
         );
         const metric = contextResult.data.filters.metric;
+
+        if (!contextResult.data.accessPolicy.canAccessMetric(metric)) {
+            return {
+                ok: false,
+                msg: "No autorizado. Tu rol no puede consultar esa tendencia KPI."
+            };
+        }
         const metricKeyMap = {
             occupancy: "occupancyRate",
             no_show: "noShowRate",
@@ -1055,7 +1227,9 @@ export async function obtenerKpiTrends(filters, auth) {
 
 export async function obtenerKpiBreakdown(filters, auth) {
     try {
-        const contextResult = await cargarContextoKpi(filters, auth);
+        const contextResult = await cargarContextoKpi(filters, auth, {
+            requireAnalyticalAccess: true
+        });
 
         if (!contextResult.ok) {
             return contextResult;
@@ -1065,9 +1239,17 @@ export async function obtenerKpiBreakdown(filters, auth) {
             contextResult.data.facts,
             contextResult.data.rooms,
             contextResult.data.filters,
-            contextResult.data.settings
+            contextResult.data.settings,
+            contextResult.data.accessPolicy
         );
         const dimension = contextResult.data.filters.dimension;
+
+        if (!contextResult.data.accessPolicy.canAccessBreakdownDimension(dimension)) {
+            return {
+                ok: false,
+                msg: "No autorizado. Tu rol no puede consultar ese desglose KPI."
+            };
+        }
         const breakdownMap = {
             branch: payload.breakdowns.branches,
             room: payload.breakdowns.rooms,
@@ -1099,7 +1281,9 @@ export async function obtenerKpiBreakdown(filters, auth) {
 
 export async function obtenerKpiReports(filters, auth) {
     try {
-        const contextResult = await cargarContextoKpi(filters, auth);
+        const contextResult = await cargarContextoKpi(filters, auth, {
+            requireAnalyticalAccess: true
+        });
 
         if (!contextResult.ok) {
             return contextResult;
@@ -1109,7 +1293,8 @@ export async function obtenerKpiReports(filters, auth) {
             contextResult.data.facts,
             contextResult.data.rooms,
             contextResult.data.filters,
-            contextResult.data.settings
+            contextResult.data.settings,
+            contextResult.data.accessPolicy
         );
         const reportType = contextResult.data.filters.report;
         const reportData = {
@@ -1168,7 +1353,9 @@ export async function obtenerKpiReports(filters, auth) {
 
 export async function obtenerKpiAlerts(filters, auth) {
     try {
-        const contextResult = await cargarContextoKpi(filters, auth);
+        const contextResult = await cargarContextoKpi(filters, auth, {
+            requireAnalyticalAccess: true
+        });
 
         if (!contextResult.ok) {
             return contextResult;
@@ -1178,7 +1365,8 @@ export async function obtenerKpiAlerts(filters, auth) {
             contextResult.data.facts,
             contextResult.data.rooms,
             contextResult.data.filters,
-            contextResult.data.settings
+            contextResult.data.settings,
+            contextResult.data.accessPolicy
         );
 
         return {

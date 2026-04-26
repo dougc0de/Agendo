@@ -11,6 +11,7 @@ import {
 } from "../repositories/reservaRepository.js";
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
 import { buscarPacientePorId as buscarPacientePorIdRepository } from "../repositories/pacienteRepository.js";
+import { listarCobrosPorReservationIds } from "../repositories/financeRepository.js";
 import { obtenerConfiguracionOperativaNormalizada } from "./workspaceSettingsService.js";
 import { canViewAllPastReservations } from "../../shared/roles.js";
 
@@ -92,10 +93,59 @@ function mapearEstadoADominio(estado) {
     return estado === "cancelada" ? "cancelada" : "activa";
 }
 
+function deriveFinancialStatus(filaCobro) {
+    if (!filaCobro) {
+        return "sin_factura";
+    }
+
+    if (filaCobro.charge_decision === "exonerado") {
+        return "exonerado";
+    }
+
+    if (filaCobro.payment_status === "pagado") {
+        return "pagado";
+    }
+
+    if (filaCobro.payment_status === "anulado") {
+        return "anulado";
+    }
+
+    if (filaCobro.payment_status === "pendiente") {
+        return "pendiente";
+    }
+
+    return "sin_factura";
+}
+
+function derivePaymentLabel(financialStatus) {
+    return financialStatus === "pagado" ? "Pagado" : "No pagado";
+}
+
+function matchesPastPaymentFilter(financialStatus, paymentStatusFilter) {
+    const normalizedFilter = normalizarTexto(paymentStatusFilter).toLowerCase();
+
+    if (!normalizedFilter || normalizedFilter === "todos") {
+        return true;
+    }
+
+    if (normalizedFilter === "pagado") {
+        return financialStatus === "pagado";
+    }
+
+    if (normalizedFilter === "no_pagado") {
+        return financialStatus !== "pagado";
+    }
+
+    return financialStatus === normalizedFilter;
+}
+
 function formatearReservaSalida(filaReserva, options = {}) {
     if (!filaReserva) {
         return null;
     }
+
+    const financialCharge = options.financialCharge ?? null;
+    const financialStatus = deriveFinancialStatus(financialCharge);
 
     return {
         id: filaReserva.id,
@@ -128,6 +178,25 @@ function formatearReservaSalida(filaReserva, options = {}) {
         outcomeRecordedByUserId: filaReserva.outcome_recorded_by_user_id ?? null,
         createdAt: filaReserva.created_at,
         updatedAt: filaReserva.updated_at,
+        financialStatus,
+        paymentStatus: financialCharge?.payment_status ?? null,
+        paymentLabel: derivePaymentLabel(financialStatus),
+        paymentDetailLabel:
+            financialStatus === "pagado"
+                ? "pagado"
+                : financialStatus === "sin_factura"
+                  ? "sin factura"
+                  : financialStatus,
+        paidAt: financialCharge?.paid_at ?? null,
+        chargeDecision: financialCharge?.charge_decision ?? null,
+        totalBilledAmount: financialCharge
+            ? Number(
+                  financialCharge.total_billed_amount ??
+                      financialCharge.amount ??
+                      0
+              )
+            : 0,
+        currencyCode: financialCharge?.currency_code ?? null,
         ...(options.timeZone
             ? {
                   timeStatus: resolveTimeStatus(filaReserva, options.timeZone)
@@ -869,11 +938,25 @@ export async function listarReservasPasadas(filters, auth) {
             ),
             "desc"
         );
+        const reservationIds = reservasPasadas.map((filaReserva) => Number(filaReserva.id));
+        const chargeRows = await listarCobrosPorReservationIds(reservationIds, workspaceId);
+        const chargeMap = new Map(
+            chargeRows.map((filaCobro) => [Number(filaCobro.reservation_id), filaCobro])
+        );
+        const formattedReservations = reservasPasadas
+            .map((filaReserva) =>
+                formatearReservaSalida(filaReserva, {
+                    financialCharge: chargeMap.get(Number(filaReserva.id))
+                })
+            )
+            .filter((reserva) =>
+                matchesPastPaymentFilter(reserva.financialStatus, filters?.paymentStatus)
+            );
 
         return {
             ok: true,
             msg: "Reservas pasadas listadas correctamente.",
-            data: reservasPasadas.map((filaReserva) => formatearReservaSalida(filaReserva))
+            data: formattedReservations
         };
     } catch (error) {
         return {

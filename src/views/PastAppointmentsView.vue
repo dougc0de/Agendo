@@ -31,6 +31,7 @@ const error = ref("");
 const filters = ref({
     patient: "",
     status: "todos",
+    paymentStatus: "todos",
     from: "",
     to: "",
     userId: ""
@@ -56,16 +57,16 @@ const statCards = computed(() => [
         value: appointments.value.length
     },
     {
-        label: "Confirmadas",
-        value: appointments.value.filter((appointment) => appointment.estado === "confirmada").length
+        label: "Pagadas",
+        value: appointments.value.filter((appointment) => appointment.financialStatus === "pagado").length
+    },
+    {
+        label: "No pagadas",
+        value: appointments.value.filter((appointment) => appointment.financialStatus !== "pagado").length
     },
     {
         label: "Canceladas",
         value: appointments.value.filter((appointment) => appointment.estado === "cancelada").length
-    },
-    {
-        label: "Pendientes",
-        value: appointments.value.filter((appointment) => appointment.estado === "pendiente").length
     }
 ]);
 
@@ -204,6 +205,7 @@ function clearFilters() {
     filters.value = {
         patient: "",
         status: "todos",
+        paymentStatus: "todos",
         from: "",
         to: "",
         userId: ""
@@ -310,6 +312,18 @@ onMounted(() => {
                 <option value="cancelada">Cancelada</option>
               </select>
             </label>
+            <label class="past-appointments-filters__field">
+              <span class="past-appointments-filters__label">Pago</span>
+              <select v-model="filters.paymentStatus" class="past-appointments-filters__select">
+                <option value="todos">Todos</option>
+                <option value="pagado">Pagado</option>
+                <option value="no_pagado">No pagado</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="anulado">Anulado</option>
+                <option value="exonerado">Exonerado</option>
+                <option value="sin_factura">Sin factura</option>
+              </select>
+            </label>
             <label
               v-if="canFilterByUser"
               class="past-appointments-filters__field"
@@ -345,6 +359,8 @@ onMounted(() => {
             :show-actions="true"
             :show-delete-action="false"
             edit-action-label="Cerrar resultado"
+            :show-outcome="true"
+            :show-payment="true"
             :show-user="canFilterByUser"
             empty-message="No encontramos reservas en el historial con esos filtros."
             @edit="openOutcomeModal"

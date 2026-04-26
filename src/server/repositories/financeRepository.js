@@ -3,6 +3,7 @@ import pool from "../db/connection.js";
 const CHARGE_SELECT = `
     SELECT
         rc.*,
+        COALESCE(rc.patient_phone_snapshot, p.telefono) AS patient_phone_snapshot,
         r.fecha AS reservation_date,
         r.hora_inicio AS reservation_start_time,
         r.hora_fin AS reservation_end_time,
@@ -14,6 +15,9 @@ const CHARGE_SELECT = `
     INNER JOIN reservas r
         ON r.id = rc.reservation_id
        AND r.workspace_id = rc.workspace_id
+    LEFT JOIN pacientes p
+        ON p.id = rc.patient_id
+       AND p.workspace_id = rc.workspace_id
     LEFT JOIN usuarios u
         ON u.id = r.usuario_id
     LEFT JOIN usuarios uw
@@ -61,6 +65,28 @@ export async function buscarCobroPorReservaId(reservationId, workspaceId, execut
     return rows[0];
 }
 
+export async function listarCobrosPorReservationIds(
+    reservationIds,
+    workspaceId,
+    executor = pool
+) {
+    if (!Array.isArray(reservationIds) || !reservationIds.length) {
+        return [];
+    }
+
+    const { rows } = await executor.query(
+        `
+            ${CHARGE_SELECT}
+            WHERE rc.workspace_id = $1
+              AND rc.reservation_id = ANY($2::bigint[])
+            ORDER BY rc.created_at DESC
+        `,
+        [workspaceId, reservationIds]
+    );
+
+    return rows;
+}
+
 export async function crearCobro(datosCobro, executor = pool) {
     const { rows } = await executor.query(
         `
@@ -70,6 +96,7 @@ export async function crearCobro(datosCobro, executor = pool) {
                     reservation_id,
                     patient_id,
                     patient_name_snapshot,
+                    patient_phone_snapshot,
                     room_id,
                     room_name_snapshot,
                     branch_id,
@@ -95,7 +122,7 @@ export async function crearCobro(datosCobro, executor = pool) {
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                $21, $22, $23, $24, $25
+                $21, $22, $23, $24, $25, $26
             )
             RETURNING id
         `,
@@ -104,6 +131,7 @@ export async function crearCobro(datosCobro, executor = pool) {
             datosCobro.reservationId,
             datosCobro.patientId,
             datosCobro.patientNameSnapshot,
+            datosCobro.patientPhoneSnapshot,
             datosCobro.roomId,
             datosCobro.roomNameSnapshot,
             datosCobro.branchId,
