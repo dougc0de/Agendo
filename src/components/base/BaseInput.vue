@@ -16,6 +16,10 @@ const props = defineProps({
         type: String,
         default: ""
     },
+    disabled: {
+        type: Boolean,
+        default: false
+    },
     required: {
         type: Boolean,
         default: false
@@ -25,6 +29,10 @@ const props = defineProps({
         default: undefined
     },
     max: {
+        type: String,
+        default: undefined
+    },
+    step: {
         type: String,
         default: undefined
     },
@@ -56,6 +64,7 @@ function updateValue(event) {
       v-if="props.as === 'textarea'"
       class="base-input__control base-input__control--textarea"
       :placeholder="props.placeholder"
+      :disabled="props.disabled"
       :required="props.required"
       :rows="props.rows"
       :value="props.modelValue"
@@ -67,9 +76,11 @@ function updateValue(event) {
       class="base-input__control"
       :type="props.type"
       :placeholder="props.placeholder"
+      :disabled="props.disabled"
       :required="props.required"
       :min="props.min"
       :max="props.max"
+      :step="props.step"
       :value="props.modelValue"
       @input="updateValue"
     />

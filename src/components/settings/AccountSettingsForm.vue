@@ -199,7 +199,7 @@ function handleSubmit() {
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
         <h3>Moneda base</h3>
-        <p>La cuenta define una moneda principal para sus bills, pero cada caso puede ajustarse si la clinica lo necesita.</p>
+        <p>La cuenta define una moneda principal para sus facturas, pero cada caso puede ajustarse si la clinica lo necesita.</p>
       </div>
 
       <label class="account-settings-form__field">
@@ -243,8 +243,8 @@ function handleSubmit() {
     <div class="account-settings-form__tips">
       <p>Las reservas activas se calculan segun la hora final y la zona horaria de la cuenta.</p>
       <p>Los tiempos de referencia no se aplican automaticamente en reservas; solo sirven como politica interna si tu clinica decide usarlos.</p>
-      <p>La recepcion ejecuta la modalidad procedural definida aqui y luego genera el bill imprimible desde Finanzas.</p>
-      <p>Si un bill usa una moneda distinta a la base de la cuenta, recepcion puede ajustarla manualmente para ese caso.</p>
+      <p>La recepcion ejecuta la modalidad procedural definida aqui y luego genera la factura imprimible desde Finanzas.</p>
+      <p>Si una factura usa una moneda distinta a la base de la cuenta, recepcion puede ajustarla manualmente para ese caso.</p>
     </div>
 
     <p v-if="props.errorMessage" class="account-settings-form__error">

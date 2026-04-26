@@ -69,6 +69,17 @@ function sanitizeWorkspace(sessionRow) {
     };
 }
 
+function sanitizeBranch(sessionRow) {
+    if (!sessionRow.sucursal_id) {
+        return null;
+    }
+
+    return {
+        id: sessionRow.sucursal_id,
+        nombre: sessionRow.sucursal_nombre ?? null
+    };
+}
+
 function sanitizeSubscription(sessionRow) {
     return {
         id: sessionRow.subscription_id ?? null,
@@ -101,6 +112,8 @@ function createAuthToken(sessionRow) {
             correo: sessionRow.user_correo,
             workspaceId: sessionRow.workspace_id,
             membershipRole: sessionRow.membership_role,
+            branchId: sessionRow.sucursal_id ?? null,
+            branchName: sessionRow.sucursal_nombre ?? null,
             planCode: sessionRow.plan_code,
             commercialStatus: sessionRow.commercial_status
         },
@@ -119,6 +132,7 @@ function buildSessionResponse(sessionRow, token, msg) {
             token,
             user: sanitizeUser(sessionRow),
             workspace: sanitizeWorkspace(sessionRow),
+            branch: sanitizeBranch(sessionRow),
             subscription: sanitizeSubscription(sessionRow),
             membershipRole: sessionRow.membership_role
         }

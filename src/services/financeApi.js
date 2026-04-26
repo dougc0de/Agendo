@@ -66,8 +66,12 @@ export async function getFinanceSummary(filters = {}) {
     return apiRequest(`/finanzas/resumen${buildQueryString(filters)}`);
 }
 
-export async function getFinanceInventory() {
-    return apiRequest("/finanzas/inventario");
+export async function getFinanceInventory(filters = {}) {
+    return apiRequest(`/finanzas/inventario${buildQueryString(filters)}`);
+}
+
+export async function getFinanceInventoryItem(id) {
+    return apiRequest(`/finanzas/inventario/${id}`);
 }
 
 export async function createFinanceInventoryItem(payload) {
@@ -82,4 +86,30 @@ export async function updateFinanceInventoryItem(id, payload) {
         method: "PUT",
         body: payload
     });
+}
+
+export async function updateFinanceInventoryItemStatus(id, estado) {
+    return apiRequest(`/finanzas/inventario/${id}/estado`, {
+        method: "PATCH",
+        body: { estado }
+    });
+}
+
+export async function getFinanceInventoryMovements(id, filters = {}) {
+    return apiRequest(`/finanzas/inventario/${id}/movimientos${buildQueryString(filters)}`);
+}
+
+export async function createFinanceInventoryMovement(id, payload) {
+    return apiRequest(`/finanzas/inventario/${id}/movimientos`, {
+        method: "POST",
+        body: payload
+    });
+}
+
+export async function getFinanceInventorySummary(filters = {}) {
+    return apiRequest(`/finanzas/inventario/resumen${buildQueryString(filters)}`);
+}
+
+export async function getFinanceInventoryReports(filters = {}) {
+    return apiRequest(`/finanzas/inventario/reportes${buildQueryString(filters)}`);
 }

@@ -32,6 +32,8 @@ export async function buscarSesionActivaPorUsuarioId(usuarioId, executor = pool)
                 wm.id AS workspace_member_id,
                 wm.role AS membership_role,
                 wm.estado AS membership_estado,
+                wm.sucursal_id,
+                su.nombre AS sucursal_nombre,
                 w.id AS workspace_id,
                 w.nombre AS workspace_nombre,
                 w.slug AS workspace_slug,
@@ -58,6 +60,8 @@ export async function buscarSesionActivaPorUsuarioId(usuarioId, executor = pool)
                 ON s.workspace_id = w.id
             LEFT JOIN clinicas c
                 ON c.workspace_id = w.id
+            LEFT JOIN sucursales su
+                ON su.id = wm.sucursal_id
             WHERE wm.usuario_id = $1
               AND wm.estado = 'activo'
             ORDER BY wm.id ASC

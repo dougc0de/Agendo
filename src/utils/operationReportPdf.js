@@ -44,10 +44,10 @@ function buildPaymentFooter(report) {
     }
 
     if (report.paymentStatus === "anulado") {
-        return "Bill anulado. No procede confirmacion de pago.";
+        return "Factura anulada. No procede confirmacion de pago.";
     }
 
-    return "Bill emitido y pendiente de pago en recepcion.";
+    return "Factura emitida y pendiente de pago en recepcion.";
 }
 
 export function downloadOperationReportPdf(report) {
@@ -93,7 +93,7 @@ export function downloadOperationReportPdf(report) {
         <html lang="es">
           <head>
             <meta charset="utf-8" />
-            <title>Bill procedural #${escapeHtml(report.id)}</title>
+            <title>Factura de procedimiento #${escapeHtml(report.id)}</title>
             <style>
               body {
                 font-family: Arial, sans-serif;
@@ -187,14 +187,14 @@ export function downloadOperationReportPdf(report) {
             <div class="sheet">
               <div class="hero">
                 <div>
-                  <span class="eyebrow">Bill procedural</span>
+                  <span class="eyebrow">Factura de procedimiento</span>
                   <h1>${escapeHtml(report.procedureName)}</h1>
                   <p>Reserva #${escapeHtml(report.reservationId)} · ${escapeHtml(report.reservationDate)} · ${escapeHtml(report.reservationStartTime)} - ${escapeHtml(report.reservationEndTime)}</p>
                 </div>
                 <div>
                   <p><strong>Estado del cobro:</strong> ${escapeHtml(report.paymentStatus)}</p>
                   <p><strong>Decision:</strong> ${escapeHtml(chargeDecisionLabels[report.chargeDecision] ?? report.chargeDecision)}</p>
-                  <p><strong>Generado:</strong> ${escapeHtml(formatDateTime(report.generatedAt))}</p>
+                  <p><strong>Generado:</strong> ${escapeHtml(formatDateTime(report.createdAt ?? report.generatedAt))}</p>
                 </div>
               </div>
 
@@ -259,7 +259,7 @@ export function downloadOperationReportPdf(report) {
                 `
                       : `<p>${
                             report.pricingMode === "solo_sala"
-                                ? "Este caso se cobro bajo cargo fijo de sala, por lo que no se desglosan insumos en este bill."
+                                ? "Este caso se cobro bajo cargo fijo de sala, por lo que no se desglosan insumos en esta factura."
                                 : "No se registraron insumos para esta operacion."
                         }</p>`
               }

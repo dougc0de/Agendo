@@ -6,6 +6,7 @@ import {
     listarReservas as listarReservasRepository,
     actualizarReserva as actualizarReservaRepository,
     actualizarEstadoReserva as actualizarEstadoReservaRepository,
+    actualizarResultadoReserva as actualizarResultadoReservaRepository,
     eliminarReserva as eliminarReservaRepository
 } from "../repositories/reservaRepository.js";
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
@@ -15,6 +16,7 @@ import { canViewAllPastReservations } from "../../shared/roles.js";
 
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
 const TIPOS_ATENCION_PERMITIDOS = ["consulta", "procedimiento"];
+const RESULTADOS_RESERVA_PERMITIDOS = ["pendiente", "atendida", "no_show", "cancelada"];
 
 function esIdValido(valor) {
     const numero = Number(valor);
@@ -65,6 +67,15 @@ function normalizarTexto(valor) {
     return String(valor ?? "").trim();
 }
 
+function normalizarFechaHora(valor) {
+    if (!valor) {
+        return null;
+    }
+
+    const date = new Date(valor);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function normalizarTipoAtencion(valor) {
     return normalizarTexto(valor).toLowerCase();
 }
@@ -95,6 +106,7 @@ function formatearReservaSalida(filaReserva, options = {}) {
         estado: filaReserva.estado,
         tipoAtencion: filaReserva.tipo_atencion ?? "consulta",
         tipoConsulta: filaReserva.tipo_consulta,
+        appointmentOutcome: filaReserva.appointment_outcome ?? "pendiente",
         usuarioId: filaReserva.usuario_id,
         usuarioNombre: filaReserva.usuario_nombre ?? null,
         pacienteId: filaReserva.paciente_id,
@@ -103,6 +115,17 @@ function formatearReservaSalida(filaReserva, options = {}) {
         pacienteCorreo: filaReserva.paciente_correo ?? null,
         salaId: filaReserva.sala_id,
         salaNombre: filaReserva.sala_nombre ?? null,
+        branchId: filaReserva.sucursal_id ?? null,
+        branchName: filaReserva.sucursal_nombre ?? null,
+        confirmedAt: filaReserva.confirmed_at ?? null,
+        confirmedByUserId: filaReserva.confirmed_by_user_id ?? null,
+        cancelledAt: filaReserva.cancelled_at ?? null,
+        cancelledByUserId: filaReserva.cancelled_by_user_id ?? null,
+        cancellationReason: filaReserva.cancellation_reason ?? null,
+        checkedInAt: filaReserva.checked_in_at ?? null,
+        completedAt: filaReserva.completed_at ?? null,
+        outcomeRecordedAt: filaReserva.outcome_recorded_at ?? null,
+        outcomeRecordedByUserId: filaReserva.outcome_recorded_by_user_id ?? null,
         createdAt: filaReserva.created_at,
         updatedAt: filaReserva.updated_at,
         ...(options.timeZone
@@ -124,6 +147,8 @@ function normalizarDatosEntrada(datosReserva) {
         horaFin: normalizarHora(datosReserva?.horaFin),
         descripcion: normalizarTexto(datosReserva?.descripcion) || null,
         estado: normalizarTexto(datosReserva?.estado).toLowerCase() || "pendiente",
+        appointmentOutcome:
+            normalizarTexto(datosReserva?.appointmentOutcome).toLowerCase() || "pendiente",
         tipoAtencion: normalizarTipoAtencion(datosReserva?.tipoAtencion) || "consulta",
         tipoConsulta: normalizarTexto(datosReserva?.tipoConsulta) || null,
         usuarioId: Number(datosReserva?.usuarioId),
@@ -196,6 +221,13 @@ function validarEntradaReserva(datosReserva) {
         return {
             ok: false,
             msg: "El estado de la reserva no es valido."
+        };
+    }
+
+    if (!RESULTADOS_RESERVA_PERMITIDOS.includes(datosNormalizados.appointmentOutcome)) {
+        return {
+            ok: false,
+            msg: "El resultado de la reserva no es valido."
         };
     }
 
@@ -396,6 +428,152 @@ function resolveTimeStatus(filaReserva, timeZone) {
     }
 
     return "programada";
+}
+
+function crearEstadoReservaExtendido(filaReserva, actorUserId) {
+    return {
+        estado: filaReserva.estado,
+        appointmentOutcome: filaReserva.appointment_outcome ?? "pendiente",
+        confirmedAt: filaReserva.confirmed_at ?? null,
+        confirmedByUserId: filaReserva.confirmed_by_user_id ?? null,
+        cancelledAt: filaReserva.cancelled_at ?? null,
+        cancelledByUserId: filaReserva.cancelled_by_user_id ?? null,
+        cancellationReason: filaReserva.cancellation_reason ?? null,
+        checkedInAt: filaReserva.checked_in_at ?? null,
+        completedAt: filaReserva.completed_at ?? null,
+        outcomeRecordedAt: filaReserva.outcome_recorded_at ?? null,
+        outcomeRecordedByUserId: filaReserva.outcome_recorded_by_user_id ?? null,
+        actorUserId
+    };
+}
+
+function resolverTransicionEstadoReserva(filaReserva, nextStatus, actorUserId, cancellationReason = null) {
+    const now = new Date().toISOString();
+    const state = crearEstadoReservaExtendido(filaReserva, actorUserId);
+    state.estado = nextStatus;
+
+    if (nextStatus === "confirmada") {
+        state.confirmedAt = state.confirmedAt ?? now;
+        state.confirmedByUserId = state.confirmedByUserId ?? actorUserId;
+
+        if (filaReserva.estado === "cancelada") {
+            state.cancelledAt = null;
+            state.cancelledByUserId = null;
+            state.cancellationReason = null;
+
+            if (state.appointmentOutcome === "cancelada") {
+                state.appointmentOutcome = "pendiente";
+                state.outcomeRecordedAt = null;
+                state.outcomeRecordedByUserId = null;
+            }
+        }
+
+        return state;
+    }
+
+    if (nextStatus === "cancelada") {
+        state.appointmentOutcome = "cancelada";
+        state.cancelledAt = now;
+        state.cancelledByUserId = actorUserId;
+        state.cancellationReason =
+            normalizarTexto(cancellationReason) || state.cancellationReason || null;
+        state.completedAt = null;
+        state.outcomeRecordedAt = now;
+        state.outcomeRecordedByUserId = actorUserId;
+        return state;
+    }
+
+    if (filaReserva.estado === "cancelada") {
+        state.cancelledAt = null;
+        state.cancelledByUserId = null;
+        state.cancellationReason = null;
+
+        if (state.appointmentOutcome === "cancelada") {
+            state.appointmentOutcome = "pendiente";
+            state.outcomeRecordedAt = null;
+            state.outcomeRecordedByUserId = null;
+        }
+    }
+
+    return state;
+}
+
+function normalizarResultadoPayload(payload = {}) {
+    return {
+        appointmentOutcome:
+            normalizarTexto(payload?.appointmentOutcome).toLowerCase() || "pendiente",
+        checkedInAt: normalizarFechaHora(payload?.checkedInAt),
+        completedAt: normalizarFechaHora(payload?.completedAt),
+        cancellationReason: normalizarTexto(payload?.cancellationReason) || null
+    };
+}
+
+function resolverActualizacionResultadoReserva(filaReserva, payload, actorUserId) {
+    const normalized = normalizarResultadoPayload(payload);
+
+    if (!RESULTADOS_RESERVA_PERMITIDOS.includes(normalized.appointmentOutcome)) {
+        return {
+            ok: false,
+            msg: "El resultado de la reserva no es valido."
+        };
+    }
+
+    if (
+        filaReserva.estado === "cancelada" &&
+        normalized.appointmentOutcome !== "cancelada"
+    ) {
+        return {
+            ok: false,
+            msg: "Primero debes reabrir la reserva antes de registrar un resultado distinto a cancelada."
+        };
+    }
+
+    const now = new Date().toISOString();
+    const state = crearEstadoReservaExtendido(filaReserva, actorUserId);
+
+    state.appointmentOutcome = normalized.appointmentOutcome;
+
+    if (normalized.appointmentOutcome === "cancelada") {
+        state.estado = "cancelada";
+        state.cancelledAt = state.cancelledAt ?? now;
+        state.cancelledByUserId = state.cancelledByUserId ?? actorUserId;
+        state.cancellationReason =
+            normalized.cancellationReason ?? state.cancellationReason ?? null;
+        state.completedAt = null;
+        state.outcomeRecordedAt = now;
+        state.outcomeRecordedByUserId = actorUserId;
+
+        return {
+            ok: true,
+            data: state
+        };
+    }
+
+    state.cancelledAt = null;
+    state.cancelledByUserId = null;
+    state.cancellationReason = null;
+
+    if (normalized.appointmentOutcome === "pendiente") {
+        state.checkedInAt = null;
+        state.completedAt = null;
+        state.outcomeRecordedAt = null;
+        state.outcomeRecordedByUserId = null;
+    } else if (normalized.appointmentOutcome === "atendida") {
+        state.checkedInAt = normalized.checkedInAt ?? state.checkedInAt ?? now;
+        state.completedAt = normalized.completedAt ?? state.completedAt ?? now;
+        state.outcomeRecordedAt = now;
+        state.outcomeRecordedByUserId = actorUserId;
+    } else if (normalized.appointmentOutcome === "no_show") {
+        state.checkedInAt = null;
+        state.completedAt = null;
+        state.outcomeRecordedAt = now;
+        state.outcomeRecordedByUserId = actorUserId;
+    }
+
+    return {
+        ok: true,
+        data: state
+    };
 }
 
 function ordenarReservasPorInicio(filasReservas, direction = "asc") {
@@ -809,6 +987,7 @@ export async function crearReserva(datosReserva, auth) {
         }
 
         const datosNormalizados = resultadoValidacion.data;
+        datosNormalizados.appointmentOutcome = "pendiente";
         const result = await crearReservaRepository(datosNormalizados);
         const filaReservaCreada = await buscarReservaPorIdRepository(
             result.insertId,
@@ -873,6 +1052,8 @@ export async function editarReserva(id, datosReserva, auth) {
             estado: datosReserva?.estado ?? filaReservaActual.estado,
             tipoAtencion: datosReserva?.tipoAtencion ?? filaReservaActual.tipo_atencion,
             tipoConsulta: datosReserva?.tipoConsulta ?? filaReservaActual.tipo_consulta,
+            appointmentOutcome:
+                datosReserva?.appointmentOutcome ?? filaReservaActual.appointment_outcome ?? "pendiente",
             usuarioId,
             pacienteId: datosReserva?.pacienteId ?? filaReservaActual.paciente_id,
             salaId: datosReserva?.salaId ?? filaReservaActual.sala_id,
@@ -892,9 +1073,27 @@ export async function editarReserva(id, datosReserva, auth) {
         }
 
         const datosNormalizados = resultadoValidacion.data;
+        const transicionEstado = resolverTransicionEstadoReserva(
+            filaReservaActual,
+            datosNormalizados.estado,
+            usuarioId,
+            datosReserva?.cancellationReason
+        );
         const result = await actualizarReservaRepository(
             id,
-            datosNormalizados,
+            {
+                ...datosNormalizados,
+                appointmentOutcome: transicionEstado.appointmentOutcome,
+                confirmedAt: transicionEstado.confirmedAt,
+                confirmedByUserId: transicionEstado.confirmedByUserId,
+                cancelledAt: transicionEstado.cancelledAt,
+                cancelledByUserId: transicionEstado.cancelledByUserId,
+                cancellationReason: transicionEstado.cancellationReason,
+                checkedInAt: transicionEstado.checkedInAt,
+                completedAt: transicionEstado.completedAt,
+                outcomeRecordedAt: transicionEstado.outcomeRecordedAt,
+                outcomeRecordedByUserId: transicionEstado.outcomeRecordedByUserId
+            },
             workspaceId
         );
 
@@ -920,7 +1119,7 @@ export async function editarReserva(id, datosReserva, auth) {
     }
 }
 
-export async function actualizarEstadoReserva(id, estado, auth) {
+export async function actualizarEstadoReserva(id, estado, auth, extras = {}) {
     try {
         const workspaceId = resolveWorkspaceId(auth);
         const usuarioId = resolveUserId(auth);
@@ -963,11 +1162,14 @@ export async function actualizarEstadoReserva(id, estado, auth) {
             };
         }
 
-        const result = await actualizarEstadoReservaRepository(
-            id,
+        const transicionEstado = resolverTransicionEstadoReserva(
+            filaReservaActual,
             normalizedStatus,
-            workspaceId
+            usuarioId,
+            extras?.cancellationReason
         );
+
+        const result = await actualizarEstadoReservaRepository(id, transicionEstado, workspaceId);
 
         if (result.affectedRows === 0) {
             return {
@@ -987,6 +1189,79 @@ export async function actualizarEstadoReserva(id, estado, auth) {
         return {
             ok: false,
             msg: `Error al actualizar el estado de la reserva: ${error.message}`
+        };
+    }
+}
+
+export async function actualizarResultadoReserva(id, payload, auth) {
+    try {
+        const workspaceId = resolveWorkspaceId(auth);
+        const usuarioId = resolveUserId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de workspace."
+            };
+        }
+
+        if (!usuarioId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el usuario de sesion."
+            };
+        }
+
+        if (!esIdValido(id)) {
+            return {
+                ok: false,
+                msg: "El id de la reserva no es valido."
+            };
+        }
+
+        const filaReservaActual = await buscarReservaPorIdRepository(id, workspaceId);
+
+        if (!filaReservaActual) {
+            return {
+                ok: false,
+                msg: "Reserva no encontrada."
+            };
+        }
+
+        const resultado = resolverActualizacionResultadoReserva(
+            filaReservaActual,
+            payload,
+            usuarioId
+        );
+
+        if (!resultado.ok) {
+            return resultado;
+        }
+
+        const updateResult = await actualizarResultadoReservaRepository(
+            id,
+            resultado.data,
+            workspaceId
+        );
+
+        if (updateResult.affectedRows === 0) {
+            return {
+                ok: false,
+                msg: "No se pudo actualizar el resultado de la reserva."
+            };
+        }
+
+        const filaReservaActualizada = await buscarReservaPorIdRepository(id, workspaceId);
+
+        return {
+            ok: true,
+            msg: "Resultado de la reserva actualizado correctamente.",
+            data: formatearReservaSalida(filaReservaActualizada)
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            msg: `Error al actualizar el resultado de la reserva: ${error.message}`
         };
     }
 }

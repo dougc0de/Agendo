@@ -3,6 +3,7 @@ const AUTH_STORAGE_KEYS = [
     "agendo-token",
     "agendo-user",
     "agendo-workspace",
+    "agendo-branch",
     "agendo-subscription",
     "agendo-membership-role"
 ];

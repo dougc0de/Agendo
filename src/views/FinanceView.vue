@@ -5,22 +5,33 @@ import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
 import BaseModal from "../components/base/BaseModal.vue";
 import FinanceChargeForm from "../components/finance/FinanceChargeForm.vue";
+import InventoryMovementForm from "../components/finance/InventoryMovementForm.vue";
 import FinancePaymentForm from "../components/finance/FinancePaymentForm.vue";
 import InventoryItemForm from "../components/finance/InventoryItemForm.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
-import { getAppointments, getPastAppointments } from "../services/appointmentApi.js";
+import {
+    getAppointmentById,
+    getAppointments,
+    getPastAppointments
+} from "../services/appointmentApi.js";
 import {
     confirmFinanceOperationReportPayment,
+    createFinanceInventoryMovement,
     createFinanceInventoryItem,
     createFinanceOperationReport,
     getFinanceInventory,
+    getFinanceInventoryMovements,
+    getFinanceInventoryReports,
+    getFinanceInventorySummary,
     getFinanceOperationReportPdf,
     getFinanceOperationReports,
     getFinanceSummary,
+    updateFinanceInventoryItemStatus,
     updateFinanceInventoryItem,
     updateFinanceOperationReport
 } from "../services/financeApi.js";
+import { getBranches } from "../services/branchApi.js";
 import { getInternalUsers } from "../services/internalUserApi.js";
 import { getRooms } from "../services/roomApi.js";
 import { getAccountSettings } from "../services/settingsApi.js";
@@ -33,8 +44,22 @@ import { downloadOperationReportPdf } from "../utils/operationReportPdf.js";
 const router = useRouter();
 const authStore = useAuthStore();
 const activeTab = ref("cobros");
+const inventoryTab = ref("catalogo");
 const reports = ref([]);
 const inventoryItems = ref([]);
+const inventoryCatalogItems = ref([]);
+const inventoryMovements = ref([]);
+const inventorySummary = ref({
+    totalItems: 0,
+    stockControlledCount: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+    inactiveCount: 0,
+    estimatedConsumedCost: 0,
+    alerts: [],
+    mostUsedItems: []
+});
+const inventoryReports = ref([]);
 const summary = ref({
     ingresosCobrados: 0,
     ingresosPendientes: 0,
@@ -52,22 +77,33 @@ const summary = ref({
 });
 const loading = ref(false);
 const inventoryLoading = ref(false);
+const inventoryMovementsLoading = ref(false);
+const inventorySummaryLoading = ref(false);
+const inventoryReportsLoading = ref(false);
 const reportModalOpen = ref(false);
 const inventoryModalOpen = ref(false);
+const movementModalOpen = ref(false);
 const paymentModalOpen = ref(false);
 const reportModalMode = ref("create");
 const inventoryModalMode = ref("create");
 const reportModalError = ref("");
 const inventoryModalError = ref("");
+const movementModalError = ref("");
 const paymentModalError = ref("");
 const savingReport = ref(false);
 const savingInventory = ref(false);
+const savingMovement = ref(false);
 const savingPayment = ref(false);
 const currentReport = ref({});
 const currentInventoryItem = ref({});
+const currentMovementItem = ref({});
 const currentPaymentReport = ref({});
+const selectedReservation = ref(null);
+const reservationLoading = ref(false);
+const reservationError = ref("");
 const userOptions = ref([]);
 const roomOptions = ref([]);
+const branchOptions = ref([]);
 const reservationOptions = ref([]);
 const settings = ref({
     timeZone: "America/Costa_Rica",
@@ -82,6 +118,28 @@ const filters = ref({
     userId: "",
     roomId: "",
     paymentStatus: "todos"
+});
+const inventoryFilters = ref({
+    query: "",
+    category: "",
+    status: "todos",
+    branchId: "",
+    stockState: "todos",
+    scopeType: "todos",
+    stockControlled: "todos"
+});
+const inventoryMovementFilters = ref({
+    itemId: "",
+    from: "",
+    to: "",
+    branchId: "",
+    movementType: "todos"
+});
+const inventoryReportFilters = ref({
+    from: "",
+    to: "",
+    branchId: "",
+    groupBy: "branch"
 });
 const feedback = ref("");
 const error = ref("");
@@ -118,18 +176,16 @@ const heroTitle = computed(() =>
 const heroDescription = computed(() =>
     ({
         cobros:
-            "Recepcion emite primero el bill del procedimiento, lo imprime y confirma el pago despues cuando el paciente ya cancelo.",
+            "Recepcion emite primero la factura del procedimiento, la imprime y confirma el pago despues cuando el paciente ya cancelo.",
         inventario:
-            "Mantiene un catalogo reusable de hilos, agujas, equipos y cualquier insumo propio de la clinica.",
+            "Administra catalogo, stock por sucursal y movimientos reales de hilos, agujas, equipo y cualquier insumo propio de la clinica.",
         reportes:
             "Revisa ingresos por sala, insumos, exoneraciones, costo de materiales y rendimiento por usuario o sala."
     })[activeTab.value] ?? ""
 );
 
 const reportModalTitle = computed(() =>
-    reportModalMode.value === "edit"
-        ? "Editar bill procedural"
-        : "Emitir bill procedural"
+    reportModalMode.value === "edit" ? "Editar Factura" : "Emitir Factura"
 );
 
 const inventoryModalTitle = computed(() =>
@@ -155,12 +211,44 @@ const summaryCards = computed(() => [
     }
 ]);
 
+const inventoryCategories = computed(() =>
+    [...new Set(inventoryItems.value.map((item) => item.categoria).filter(Boolean))].sort(
+        (left, right) => left.localeCompare(right)
+    )
+);
+
+const inventorySummaryCards = computed(() => [
+    {
+        label: "Stock bajo",
+        value: inventorySummary.value.lowStockCount
+    },
+    {
+        label: "Agotados",
+        value: inventorySummary.value.outOfStockCount
+    },
+    {
+        label: "Inactivos",
+        value: inventorySummary.value.inactiveCount
+    },
+    {
+        label: "Costo consumido",
+        value: formatCurrency(inventorySummary.value.estimatedConsumedCost)
+    }
+]);
+
+const selectedMovementItem = computed(() =>
+    inventoryItems.value.find(
+        (item) => Number(item.id) === Number(inventoryMovementFilters.value.itemId)
+    ) ?? null
+);
+
 const topRooms = computed(() => summary.value.rooms?.slice(0, 5) ?? []);
 const topUsers = computed(() => summary.value.users?.slice(0, 5) ?? []);
 const reportCurrencies = computed(() =>
     [...new Set(reports.value.map((report) => report.currencyCode).filter(Boolean))]
 );
 const hasMixedCurrencies = computed(() => reportCurrencies.value.length > 1);
+let reservationRequestToken = 0;
 
 function formatCurrency(
     value,
@@ -194,6 +282,123 @@ function formatChargeDecision(decision) {
 
 function formatInventoryStatus(status) {
     return status === "activo" ? "Activo" : "Inactivo";
+}
+
+function formatInventoryType(type) {
+    return type === "reusable" ? "Reusable" : "Desechable";
+}
+
+function formatInventoryScope(item) {
+    if (item.scopeType === "sucursal") {
+        return `Sucursal · ${item.branchName || "Sin sucursal"}`;
+    }
+
+    return "Global para la cuenta";
+}
+
+function formatInventoryStockState(state) {
+    return (
+        {
+            ok: "Disponible",
+            bajo: "Stock bajo",
+            agotado: "Agotado",
+            inactivo: "Inactivo",
+            referencial: "Referencial"
+        }[state] ?? state
+    );
+}
+
+function formatMovementType(type) {
+    return (
+        {
+            entrada: "Entrada",
+            salida: "Salida",
+            ajuste: "Ajuste",
+            consumo: "Consumo",
+            devolucion: "Devolucion"
+        }[type] ?? type
+    );
+}
+
+function formatInventoryReportGroup(groupBy) {
+    return (
+        {
+            room: "Sala",
+            branch: "Sucursal",
+            procedure: "Procedimiento",
+            date: "Fecha",
+            user: "Usuario"
+        }[groupBy] ?? groupBy
+    );
+}
+
+function buildReservationSummaryFromReport(report = {}) {
+    if (!report?.reservationId) {
+        return null;
+    }
+
+    return {
+        id: Number(report.reservationId),
+        fecha: report.reservationDate ?? null,
+        horaInicio: report.reservationStartTime ?? null,
+        horaFin: report.reservationEndTime ?? null,
+        descripcion: report.notes ?? "",
+        estado: report.reservationStatus ?? null,
+        tipoAtencion: report.tipoAtencion ?? "procedimiento",
+        tipoConsulta: report.procedureName ?? "",
+        usuarioId: report.reservationUserId ?? null,
+        usuarioNombre: report.reservationUserName ?? null,
+        pacienteId: report.patientId ?? null,
+        pacienteNombre: report.patientNameSnapshot ?? null,
+        salaId: report.roomId ?? null,
+        salaNombre: report.roomNameSnapshot ?? null,
+        branchId: report.branchId ?? null,
+        branchName: report.branchNameSnapshot ?? null
+    };
+}
+
+async function loadSelectedReservation(reservationId, options = {}) {
+    const numericReservationId = Number(reservationId);
+    const requestToken = ++reservationRequestToken;
+    const fallbackReservation = options.fallbackReservation ?? null;
+
+    if (!Number.isInteger(numericReservationId) || numericReservationId <= 0) {
+        selectedReservation.value = fallbackReservation;
+        reservationLoading.value = false;
+        reservationError.value = "";
+        return;
+    }
+
+    reservationLoading.value = true;
+    reservationError.value = "";
+    selectedReservation.value = fallbackReservation;
+
+    try {
+        const response = await getAppointmentById(numericReservationId);
+
+        if (requestToken !== reservationRequestToken) {
+            return;
+        }
+
+        selectedReservation.value = response.data ?? null;
+        reservationError.value = "";
+    } catch (requestError) {
+        if (requestToken !== reservationRequestToken) {
+            return;
+        }
+
+        selectedReservation.value = fallbackReservation;
+        reservationError.value =
+            options.allowFallback && fallbackReservation
+                ? "No fue posible refrescar la reserva. Se muestran los datos guardados en la factura."
+                : requestError.response?.msg ||
+                  requestError.message ||
+                  "No fue posible cargar la reserva seleccionada.";
+    } finally {
+        if (requestToken === reservationRequestToken) {
+            reservationLoading.value = false;
+        }
+    }
 }
 
 async function fetchReservationOptions() {
@@ -266,13 +471,19 @@ async function fetchReservationOptions() {
 
 async function fetchFiltersSupport() {
     try {
-        const [userResponse, roomResponse] = await Promise.all([getInternalUsers(), getRooms()]);
+        const [userResponse, roomResponse, branchResponse] = await Promise.all([
+            getInternalUsers(),
+            getRooms(),
+            getBranches()
+        ]);
 
         userOptions.value = userResponse.data ?? [];
         roomOptions.value = roomResponse.data ?? [];
+        branchOptions.value = branchResponse.data ?? [];
     } catch {
         userOptions.value = [];
         roomOptions.value = [];
+        branchOptions.value = [];
     }
 }
 
@@ -339,13 +550,85 @@ async function fetchInventory() {
     inventoryLoading.value = true;
 
     try {
+        const response = await getFinanceInventory(inventoryFilters.value);
+        inventoryCatalogItems.value = response.data ?? [];
+    } catch {
+        inventoryCatalogItems.value = [];
+    } finally {
+        inventoryLoading.value = false;
+    }
+}
+
+async function fetchInventoryOptions() {
+    try {
         const response = await getFinanceInventory();
         inventoryItems.value = response.data ?? [];
     } catch {
         inventoryItems.value = [];
-    } finally {
-        inventoryLoading.value = false;
     }
+}
+
+async function fetchInventorySummary() {
+    inventorySummaryLoading.value = true;
+
+    try {
+        const response = await getFinanceInventorySummary({
+            from: inventoryReportFilters.value.from,
+            to: inventoryReportFilters.value.to,
+            branchId: inventoryReportFilters.value.branchId || inventoryFilters.value.branchId
+        });
+        inventorySummary.value = response.data ?? inventorySummary.value;
+    } catch {
+        inventorySummary.value = {
+            totalItems: 0,
+            stockControlledCount: 0,
+            lowStockCount: 0,
+            outOfStockCount: 0,
+            inactiveCount: 0,
+            estimatedConsumedCost: 0,
+            alerts: [],
+            mostUsedItems: []
+        };
+    } finally {
+        inventorySummaryLoading.value = false;
+    }
+}
+
+async function fetchInventoryMovements() {
+    const itemId = Number(inventoryMovementFilters.value.itemId);
+
+    if (!Number.isInteger(itemId) || itemId <= 0) {
+        inventoryMovements.value = [];
+        return;
+    }
+
+    inventoryMovementsLoading.value = true;
+
+    try {
+        const response = await getFinanceInventoryMovements(itemId, inventoryMovementFilters.value);
+        inventoryMovements.value = response.data ?? [];
+    } catch {
+        inventoryMovements.value = [];
+    } finally {
+        inventoryMovementsLoading.value = false;
+    }
+}
+
+async function fetchInventoryReports() {
+    inventoryReportsLoading.value = true;
+
+    try {
+        const response = await getFinanceInventoryReports(inventoryReportFilters.value);
+        inventoryReports.value = response.data ?? [];
+    } catch {
+        inventoryReports.value = [];
+    } finally {
+        inventoryReportsLoading.value = false;
+    }
+}
+
+function refreshInventoryInsights() {
+    return Promise.all([fetchInventorySummary(), fetchInventoryReports()]);
 }
 
 function clearFilters() {
@@ -360,9 +643,47 @@ function clearFilters() {
     fetchFinanceData();
 }
 
+function clearInventoryFilters() {
+    inventoryFilters.value = {
+        query: "",
+        category: "",
+        status: "todos",
+        branchId: "",
+        stockState: "todos",
+        scopeType: "todos",
+        stockControlled: "todos"
+    };
+    fetchInventory();
+}
+
+function clearInventoryMovementFilters() {
+    inventoryMovementFilters.value = {
+        itemId: "",
+        from: "",
+        to: "",
+        branchId: "",
+        movementType: "todos"
+    };
+    inventoryMovements.value = [];
+}
+
+function clearInventoryReportFilters() {
+    inventoryReportFilters.value = {
+        from: "",
+        to: "",
+        branchId: "",
+        groupBy: "branch"
+    };
+    fetchInventorySummary();
+    fetchInventoryReports();
+}
+
 function openCreateReportModal() {
     reportModalMode.value = "create";
     currentReport.value = {};
+    selectedReservation.value = null;
+    reservationLoading.value = false;
+    reservationError.value = "";
     reportModalError.value = "";
     reportModalOpen.value = true;
     fetchReservationOptions();
@@ -374,9 +695,16 @@ function openEditReportModal(report) {
         ...report,
         supplies: report.supplies ?? []
     };
+    selectedReservation.value = buildReservationSummaryFromReport(report);
+    reservationLoading.value = false;
+    reservationError.value = "";
     reportModalError.value = "";
     reportModalOpen.value = true;
     fetchReservationOptions();
+    loadSelectedReservation(report.reservationId, {
+        allowFallback: true,
+        fallbackReservation: buildReservationSummaryFromReport(report)
+    });
 }
 
 function canEditReport(report) {
@@ -387,6 +715,9 @@ function closeReportModal() {
     reportModalOpen.value = false;
     reportModalError.value = "";
     currentReport.value = {};
+    selectedReservation.value = null;
+    reservationLoading.value = false;
+    reservationError.value = "";
 }
 
 function openCreateInventoryModal() {
@@ -403,10 +734,31 @@ function openEditInventoryModal(item) {
     inventoryModalOpen.value = true;
 }
 
+function openInventoryMovementsForItem(item) {
+    inventoryTab.value = "movimientos";
+    inventoryMovementFilters.value = {
+        ...inventoryMovementFilters.value,
+        itemId: item.id
+    };
+    fetchInventoryMovements();
+}
+
 function closeInventoryModal() {
     inventoryModalOpen.value = false;
     inventoryModalError.value = "";
     currentInventoryItem.value = {};
+}
+
+function openMovementModal(item) {
+    currentMovementItem.value = { ...item };
+    movementModalError.value = "";
+    movementModalOpen.value = true;
+}
+
+function closeMovementModal() {
+    movementModalOpen.value = false;
+    movementModalError.value = "";
+    currentMovementItem.value = {};
 }
 
 function openPaymentModal(report) {
@@ -419,6 +771,11 @@ function closePaymentModal() {
     paymentModalOpen.value = false;
     paymentModalError.value = "";
     currentPaymentReport.value = {};
+}
+
+function handleReportReservationChange(reservationId) {
+    reportModalError.value = "";
+    loadSelectedReservation(reservationId);
 }
 
 async function handleSaveReport(payload) {
@@ -456,7 +813,12 @@ async function handleSaveInventoryItem(payload) {
 
         feedback.value = response.msg;
         closeInventoryModal();
-        await fetchInventory();
+        await Promise.all([
+            fetchInventory(),
+            fetchInventoryOptions(),
+            fetchInventorySummary(),
+            fetchInventoryReports()
+        ]);
     } catch (requestError) {
         inventoryModalError.value =
             requestError.response?.msg ||
@@ -464,6 +826,50 @@ async function handleSaveInventoryItem(payload) {
             "No fue posible guardar el insumo.";
     } finally {
         savingInventory.value = false;
+    }
+}
+
+async function handleSaveInventoryMovement(payload) {
+    savingMovement.value = true;
+    movementModalError.value = "";
+
+    try {
+        const response = await createFinanceInventoryMovement(
+            currentMovementItem.value.id,
+            payload
+        );
+
+        feedback.value = response.msg;
+        closeMovementModal();
+        await Promise.all([
+            fetchInventory(),
+            fetchInventoryOptions(),
+            fetchInventorySummary(),
+            fetchInventoryReports(),
+            fetchInventoryMovements()
+        ]);
+    } catch (requestError) {
+        movementModalError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible registrar el movimiento.";
+    } finally {
+        savingMovement.value = false;
+    }
+}
+
+async function handleToggleInventoryStatus(item) {
+    try {
+        const nextStatus = item.estado === "activo" ? "inactivo" : "activo";
+        const response = await updateFinanceInventoryItemStatus(item.id, nextStatus);
+
+        feedback.value = response.msg;
+        await Promise.all([fetchInventory(), fetchInventoryOptions(), fetchInventorySummary()]);
+    } catch (requestError) {
+        error.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible cambiar el estado del inventario.";
     }
 }
 
@@ -526,7 +932,10 @@ async function bootstrapFinance() {
         fetchSettings(),
         fetchFiltersSupport(),
         fetchFinanceData(),
-        fetchInventory()
+        fetchInventory(),
+        fetchInventoryOptions(),
+        fetchInventorySummary(),
+        fetchInventoryReports()
     ]);
 }
 
@@ -559,7 +968,7 @@ onMounted(() => {
               v-if="activeTab === 'cobros'"
               @click="openCreateReportModal"
             >
-              Emitir bill
+              Emitir Factura
             </BaseButton>
             <BaseButton
               v-else-if="activeTab === 'inventario'"
@@ -615,13 +1024,13 @@ onMounted(() => {
                   <h2>Facturacion por procedimiento</h2>
                   <p class="finance-panel__copy">
                     Modalidad actual de la cuenta: {{ formatPricingMode(settings.defaultProcedurePricingMode) }}.
-                    Recepcion emite el bill segun esta regla y luego confirma el pago por separado.
+                    Recepcion emite la factura segun esta regla y luego confirma el pago por separado.
                   </p>
                 </div>
               </div>
 
               <p v-if="hasMixedCurrencies" class="finance-warning">
-                Hay bills en varias monedas dentro de este filtro. Los totales agregados no convierten divisas automaticamente.
+                Hay facturas en varias monedas dentro de este filtro. Los totales agregados no convierten divisas automaticamente.
               </p>
 
               <form class="finance-filters" @submit.prevent="fetchFinanceData">
@@ -748,14 +1157,14 @@ onMounted(() => {
                           variant="warning"
                           @click="openEditReportModal(report)"
                         >
-                          Editar bill
+                          Editar factura
                         </BaseButton>
                         <BaseButton
                           size="sm"
                           variant="ghost"
                           @click="handleDownloadPdf(report)"
                         >
-                          Imprimir bill
+                          Imprimir factura
                         </BaseButton>
                         <BaseButton
                           v-if="report.paymentStatus === 'pendiente' && report.chargeDecision === 'cobrable'"
@@ -774,62 +1183,489 @@ onMounted(() => {
         </template>
 
         <template v-else-if="activeTab === 'inventario'">
+          <section class="finance-stats stats-strip">
+            <article
+              v-for="card in inventorySummaryCards"
+              :key="card.label"
+              v-reveal="{ delay: 50 }"
+              class="finance-stat-card"
+            >
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+            </article>
+          </section>
+
+          <section class="finance-tabs finance-tabs--sub">
+            <button
+              type="button"
+              class="finance-tabs__button"
+              :class="{ 'finance-tabs__button--active': inventoryTab === 'catalogo' }"
+              @click="inventoryTab = 'catalogo'"
+            >
+              Catalogo
+            </button>
+            <button
+              type="button"
+              class="finance-tabs__button"
+              :class="{ 'finance-tabs__button--active': inventoryTab === 'movimientos' }"
+              @click="inventoryTab = 'movimientos'"
+            >
+              Movimientos
+            </button>
+            <button
+              type="button"
+              class="finance-tabs__button"
+              :class="{ 'finance-tabs__button--active': inventoryTab === 'reportes' }"
+              @click="inventoryTab = 'reportes'"
+            >
+              Reportes
+            </button>
+          </section>
+
           <section class="finance-layout">
             <article v-reveal class="finance-panel">
-              <div class="finance-panel__header">
-                <div>
-                  <span class="finance-panel__eyebrow">Catalogo reusable</span>
-                  <h2>Inventario de insumos y equipo</h2>
-                  <p class="finance-panel__copy">
-                    Agrega hilos, agujas, paquetes, equipo o cualquier material que la clinica desee reutilizar en sus reportes de operacion.
-                  </p>
+              <template v-if="inventoryTab === 'catalogo'">
+                <div class="finance-panel__header">
+                  <div>
+                    <span class="finance-panel__eyebrow">Catalogo + stock</span>
+                    <h2>Inventario clinico por sucursal</h2>
+                    <p class="finance-panel__copy">
+                      Cada clinica mantiene sus propios insumos y define si solo son referenciales o si manejan existencias reales por sede.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div class="finance-table">
-                <div v-if="inventoryLoading" class="finance-state">
-                  Cargando inventario...
+                <form class="finance-filters" @submit.prevent="fetchInventory">
+                  <BaseInput
+                    :model-value="inventoryFilters.query"
+                    label="Buscar"
+                    placeholder="Nombre, descripcion o categoria"
+                    @update:model-value="inventoryFilters.query = $event"
+                  />
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Categoria</span>
+                    <select v-model="inventoryFilters.category" class="finance-filters__select">
+                      <option value="">Todas</option>
+                      <option
+                        v-for="category in inventoryCategories"
+                        :key="category"
+                        :value="category"
+                      >
+                        {{ category }}
+                      </option>
+                    </select>
+                  </label>
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Sucursal</span>
+                    <select v-model="inventoryFilters.branchId" class="finance-filters__select">
+                      <option value="">Todas</option>
+                      <option
+                        v-for="branch in branchOptions"
+                        :key="branch.id"
+                        :value="branch.id"
+                      >
+                        {{ branch.nombre }}
+                      </option>
+                    </select>
+                  </label>
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Estado</span>
+                    <select v-model="inventoryFilters.status" class="finance-filters__select">
+                      <option value="todos">Todos</option>
+                      <option value="activo">Activo</option>
+                      <option value="inactivo">Inactivo</option>
+                    </select>
+                  </label>
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Stock</span>
+                    <select v-model="inventoryFilters.stockState" class="finance-filters__select">
+                      <option value="todos">Todos</option>
+                      <option value="ok">Disponible</option>
+                      <option value="bajo">Stock bajo</option>
+                      <option value="agotado">Agotado</option>
+                      <option value="inactivo">Inactivo</option>
+                    </select>
+                  </label>
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Control real</span>
+                    <select v-model="inventoryFilters.stockControlled" class="finance-filters__select">
+                      <option value="todos">Todos</option>
+                      <option value="si">Con stock</option>
+                      <option value="no">Solo referencial</option>
+                    </select>
+                  </label>
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Alcance</span>
+                    <select v-model="inventoryFilters.scopeType" class="finance-filters__select">
+                      <option value="todos">Todos</option>
+                      <option value="global">Global</option>
+                      <option value="sucursal">Sucursal</option>
+                    </select>
+                  </label>
+                  <div class="finance-filters__actions">
+                    <BaseButton variant="ghost" @click.prevent="clearInventoryFilters">
+                      Limpiar
+                    </BaseButton>
+                    <BaseButton type="submit">
+                      Aplicar filtros
+                    </BaseButton>
+                  </div>
+                </form>
+
+                <div class="finance-table">
+                  <div v-if="inventoryLoading" class="finance-state">
+                    Cargando inventario...
+                  </div>
+                  <div v-else-if="!inventoryCatalogItems.length" class="finance-state">
+                    Todavia no hay insumos registrados para los filtros actuales.
+                  </div>
+                  <table v-else class="finance-table__table finance-table__table--inventory">
+                    <thead>
+                      <tr>
+                        <th>Insumo</th>
+                        <th>Alcance</th>
+                        <th>Tipo</th>
+                        <th>Stock</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in inventoryCatalogItems" :key="item.id">
+                        <td>
+                          <strong>{{ item.nombre }}</strong>
+                          <span class="finance-table__subtext">
+                            {{ item.categoria || "General" }} · {{ item.unidad }}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{{ formatInventoryScope(item) }}</strong>
+                          <span class="finance-table__subtext">
+                            {{ item.controlaStock ? "Con stock real" : "Solo referencial" }}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{{ formatInventoryType(item.tipo) }}</strong>
+                          <span class="finance-table__subtext">
+                            Costo {{ formatCurrency(item.costoBase) }}
+                          </span>
+                        </td>
+                        <td>
+                          <template v-if="item.controlaStock && item.stockByBranch.length">
+                            <ul class="finance-stock-list">
+                              <li v-for="stockRow in item.stockByBranch" :key="stockRow.id">
+                                <strong>{{ stockRow.branchName }}</strong>
+                                <span>
+                                  {{ stockRow.currentStock }} / minimo {{ stockRow.minimumStock }}
+                                </span>
+                              </li>
+                            </ul>
+                          </template>
+                          <span v-else-if="item.controlaStock" class="finance-table__subtext">
+                            Sin stock configurado
+                          </span>
+                          <span v-else class="finance-table__subtext">
+                            Referencial
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            class="finance-table__badge"
+                            :class="`finance-table__badge--${item.stockState}`"
+                          >
+                            {{ formatInventoryStockState(item.stockState) }}
+                          </span>
+                        </td>
+                        <td class="finance-table__actions-cell">
+                          <BaseButton size="sm" variant="warning" @click="openEditInventoryModal(item)">
+                            Editar
+                          </BaseButton>
+                          <BaseButton size="sm" variant="ghost" @click="openInventoryMovementsForItem(item)">
+                            Movimientos
+                          </BaseButton>
+                          <BaseButton
+                            size="sm"
+                            :disabled="!item.controlaStock || item.estado !== 'activo'"
+                            @click="openMovementModal(item)"
+                          >
+                            Registrar mov.
+                          </BaseButton>
+                          <BaseButton
+                            v-if="canWaive"
+                            size="sm"
+                            variant="ghost"
+                            @click="handleToggleInventoryStatus(item)"
+                          >
+                            {{ item.estado === "activo" ? "Inactivar" : "Activar" }}
+                          </BaseButton>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div v-else-if="!inventoryItems.length" class="finance-state">
-                  Todavia no hay insumos registrados en inventario.
+              </template>
+
+              <template v-else-if="inventoryTab === 'movimientos'">
+                <div class="finance-panel__header">
+                  <div>
+                    <span class="finance-panel__eyebrow">Trazabilidad</span>
+                    <h2>Movimientos por insumo</h2>
+                    <p class="finance-panel__copy">
+                      Revisa entradas, salidas, ajustes, devoluciones y consumos automaticos ligados a procedimientos.
+                    </p>
+                  </div>
+
+                  <BaseButton
+                    v-if="selectedMovementItem"
+                    :disabled="!selectedMovementItem.controlaStock || selectedMovementItem.estado !== 'activo'"
+                    @click="openMovementModal(selectedMovementItem)"
+                  >
+                    Registrar movimiento
+                  </BaseButton>
                 </div>
-                <table v-else class="finance-table__table finance-table__table--inventory">
-                  <thead>
-                    <tr>
-                      <th>Insumo</th>
-                      <th>Categoria</th>
-                      <th>Unidad</th>
-                      <th>Costo base</th>
-                      <th>Precio sugerido</th>
-                      <th>Estado</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in inventoryItems" :key="item.id">
-                      <td>{{ item.nombre }}</td>
-                      <td>{{ item.categoria || "General" }}</td>
-                      <td>{{ item.unidad }}</td>
-                      <td>{{ formatCurrency(item.costoBase) }}</td>
-                      <td>{{ formatCurrency(item.precioSugerido) }}</td>
-                      <td>
-                        <span
-                          class="finance-table__badge"
-                          :class="`finance-table__badge--${item.estado}`"
-                        >
-                          {{ formatInventoryStatus(item.estado) }}
-                        </span>
-                      </td>
-                      <td class="finance-table__actions-cell">
-                        <BaseButton size="sm" variant="warning" @click="openEditInventoryModal(item)">
-                          Editar
-                        </BaseButton>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+
+                <form class="finance-filters" @submit.prevent="fetchInventoryMovements">
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Insumo</span>
+                    <select
+                      v-model="inventoryMovementFilters.itemId"
+                      class="finance-filters__select"
+                    >
+                      <option value="">Selecciona un insumo</option>
+                      <option
+                        v-for="item in inventoryItems"
+                        :key="item.id"
+                        :value="item.id"
+                      >
+                        {{ item.nombre }}
+                      </option>
+                    </select>
+                  </label>
+                  <BaseInput
+                    :model-value="inventoryMovementFilters.from"
+                    label="Desde"
+                    type="date"
+                    @update:model-value="inventoryMovementFilters.from = $event"
+                  />
+                  <BaseInput
+                    :model-value="inventoryMovementFilters.to"
+                    label="Hasta"
+                    type="date"
+                    @update:model-value="inventoryMovementFilters.to = $event"
+                  />
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Sucursal</span>
+                    <select
+                      v-model="inventoryMovementFilters.branchId"
+                      class="finance-filters__select"
+                    >
+                      <option value="">Todas</option>
+                      <option
+                        v-for="branch in branchOptions"
+                        :key="branch.id"
+                        :value="branch.id"
+                      >
+                        {{ branch.nombre }}
+                      </option>
+                    </select>
+                  </label>
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Tipo</span>
+                    <select
+                      v-model="inventoryMovementFilters.movementType"
+                      class="finance-filters__select"
+                    >
+                      <option value="todos">Todos</option>
+                      <option value="entrada">Entrada</option>
+                      <option value="salida">Salida</option>
+                      <option value="ajuste">Ajuste</option>
+                      <option value="consumo">Consumo</option>
+                      <option value="devolucion">Devolucion</option>
+                    </select>
+                  </label>
+                  <div class="finance-filters__actions">
+                    <BaseButton variant="ghost" @click.prevent="clearInventoryMovementFilters">
+                      Limpiar
+                    </BaseButton>
+                    <BaseButton type="submit">
+                      Ver movimientos
+                    </BaseButton>
+                  </div>
+                </form>
+
+                <div class="finance-table">
+                  <div
+                    v-if="!inventoryMovementFilters.itemId"
+                    class="finance-state"
+                  >
+                    Selecciona un insumo para revisar sus movimientos.
+                  </div>
+                  <div v-else-if="inventoryMovementsLoading" class="finance-state">
+                    Cargando movimientos...
+                  </div>
+                  <div v-else-if="!inventoryMovements.length" class="finance-state">
+                    No hay movimientos para ese insumo y rango.
+                  </div>
+                  <table v-else class="finance-table__table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Sucursal</th>
+                        <th>Cantidad</th>
+                        <th>Antes / despues</th>
+                        <th>Usuario</th>
+                        <th>Observacion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="movement in inventoryMovements" :key="movement.id">
+                        <td>
+                          <strong>{{ movement.createdAt?.slice(0, 10) }}</strong>
+                          <span class="finance-table__subtext">
+                            {{ movement.createdAt?.slice(11, 16) }}
+                          </span>
+                        </td>
+                        <td>{{ formatMovementType(movement.movementType) }}</td>
+                        <td>{{ movement.branchName || "Sin sucursal" }}</td>
+                        <td>{{ movement.quantity }}</td>
+                        <td>
+                          <strong>{{ movement.stockBefore }}</strong>
+                          <span class="finance-table__subtext">a {{ movement.stockAfter }}</span>
+                        </td>
+                        <td>{{ movement.createdByUserName || "Usuario" }}</td>
+                        <td>{{ movement.observation || "Sin observacion" }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+
+              <template v-else>
+                <div class="finance-panel__header">
+                  <div>
+                    <span class="finance-panel__eyebrow">Lectura operativa</span>
+                    <h2>Reportes de consumo</h2>
+                    <p class="finance-panel__copy">
+                      Mide consumo por sala, sucursal, procedimiento, fecha o usuario a partir de los movimientos reales del inventario.
+                    </p>
+                  </div>
+                </div>
+
+                <form class="finance-filters" @submit.prevent="refreshInventoryInsights">
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Agrupar por</span>
+                    <select
+                      v-model="inventoryReportFilters.groupBy"
+                      class="finance-filters__select"
+                    >
+                      <option value="branch">Sucursal</option>
+                      <option value="room">Sala</option>
+                      <option value="procedure">Procedimiento</option>
+                      <option value="date">Fecha</option>
+                      <option value="user">Usuario</option>
+                    </select>
+                  </label>
+                  <BaseInput
+                    :model-value="inventoryReportFilters.from"
+                    label="Desde"
+                    type="date"
+                    @update:model-value="inventoryReportFilters.from = $event"
+                  />
+                  <BaseInput
+                    :model-value="inventoryReportFilters.to"
+                    label="Hasta"
+                    type="date"
+                    @update:model-value="inventoryReportFilters.to = $event"
+                  />
+                  <label class="finance-filters__field">
+                    <span class="finance-filters__label">Sucursal</span>
+                    <select
+                      v-model="inventoryReportFilters.branchId"
+                      class="finance-filters__select"
+                    >
+                      <option value="">Todas</option>
+                      <option
+                        v-for="branch in branchOptions"
+                        :key="branch.id"
+                        :value="branch.id"
+                      >
+                        {{ branch.nombre }}
+                      </option>
+                    </select>
+                  </label>
+                  <div class="finance-filters__actions">
+                    <BaseButton variant="ghost" @click.prevent="clearInventoryReportFilters">
+                      Limpiar
+                    </BaseButton>
+                    <BaseButton type="submit">
+                      Actualizar
+                    </BaseButton>
+                  </div>
+                </form>
+
+                <div class="finance-table">
+                  <div v-if="inventoryReportsLoading" class="finance-state">
+                    Cargando reportes de inventario...
+                  </div>
+                  <div v-else-if="!inventoryReports.length" class="finance-state">
+                    No hay datos de inventario para ese rango.
+                  </div>
+                  <table v-else class="finance-table__table">
+                    <thead>
+                      <tr>
+                        <th>{{ formatInventoryReportGroup(inventoryReportFilters.groupBy) }}</th>
+                        <th>Movimientos</th>
+                        <th>Cantidad movida</th>
+                        <th>Consumo neto</th>
+                        <th>Costo estimado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="report in inventoryReports" :key="report.key">
+                        <td>{{ report.label }}</td>
+                        <td>{{ report.movementsCount }}</td>
+                        <td>{{ report.quantityMoved }}</td>
+                        <td>{{ report.netConsumptionQuantity }}</td>
+                        <td>{{ formatCurrency(report.estimatedConsumedCost) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </article>
+
+            <aside v-if="inventoryTab === 'reportes'" class="finance-side">
+              <article v-reveal="80" class="finance-side__card">
+                <span class="finance-panel__eyebrow">Alertas</span>
+                <ul class="finance-side__list">
+                  <li
+                    v-for="alert in inventorySummary.alerts.slice(0, 6)"
+                    :key="`alert-${alert.itemId}-${alert.branchId}`"
+                  >
+                    <strong>{{ alert.itemName }}</strong>
+                    <span>
+                      {{ alert.branchName }} · {{ alert.currentStock }} / minimo {{ alert.minimumStock }} · {{ alert.state }}
+                    </span>
+                  </li>
+                </ul>
+              </article>
+
+              <article v-reveal="120" class="finance-side__card">
+                <span class="finance-panel__eyebrow">Mas usados</span>
+                <ul class="finance-side__list">
+                  <li
+                    v-for="item in inventorySummary.mostUsedItems"
+                    :key="`top-item-${item.itemId}`"
+                  >
+                    <strong>{{ item.itemName }}</strong>
+                    <span>
+                      {{ item.quantityUsed }} usados · {{ formatCurrency(item.costConsumed) }}
+                    </span>
+                  </li>
+                </ul>
+              </article>
+            </aside>
           </section>
         </template>
 
@@ -917,7 +1753,7 @@ onMounted(() => {
     <BaseModal
       :open="reportModalOpen"
       :title="reportModalTitle"
-      description="Cierra el procedimiento con monto fijo o insumos ya usados y genera el bill imprimible para firma manual."
+      description="Cierra el procedimiento con monto fijo o insumos ya usados y genera la factura imprimible para firma manual."
       @close="closeReportModal"
     >
       <FinanceChargeForm
@@ -931,6 +1767,10 @@ onMounted(() => {
         :default-pricing-mode="settings.defaultProcedurePricingMode"
         :default-currency-code="settings.defaultCurrencyCode"
         :can-waive="canWaive"
+        :selected-reservation="selectedReservation"
+        :reservation-loading="reservationLoading"
+        :reservation-error="reservationError"
+        @reservation-change="handleReportReservationChange"
         @submit="handleSaveReport"
         @cancel="closeReportModal"
       />
@@ -944,6 +1784,7 @@ onMounted(() => {
     >
       <InventoryItemForm
         :initial-value="currentInventoryItem"
+        :branch-options="branchOptions"
         :submitting="savingInventory"
         :error-message="inventoryModalError"
         :mode="inventoryModalMode"
@@ -953,9 +1794,25 @@ onMounted(() => {
     </BaseModal>
 
     <BaseModal
+      :open="movementModalOpen"
+      title="Registrar movimiento"
+      description="Registra entradas, salidas, ajustes o devoluciones sobre el stock real del insumo."
+      @close="closeMovementModal"
+    >
+      <InventoryMovementForm
+        :item="currentMovementItem"
+        :branch-options="branchOptions"
+        :submitting="savingMovement"
+        :error-message="movementModalError"
+        @submit="handleSaveInventoryMovement"
+        @cancel="closeMovementModal"
+      />
+    </BaseModal>
+
+    <BaseModal
       :open="paymentModalOpen"
       title="Confirmar pago"
-      description="Registra cuando el paciente ya cancelo el bill emitido previamente."
+      description="Registra cuando el paciente ya cancelo la factura emitida previamente."
       @close="closePaymentModal"
     >
       <FinancePaymentForm
@@ -1206,15 +2063,23 @@ onMounted(() => {
 }
 
 .finance-table__badge--pagado,
-.finance-table__badge--activo {
+.finance-table__badge--activo,
+.finance-table__badge--ok {
   background: rgba(17, 184, 159, 0.14);
   color: var(--primary-dark);
 }
 
 .finance-table__badge--anulado,
-.finance-table__badge--inactivo {
+.finance-table__badge--inactivo,
+.finance-table__badge--agotado {
   background: rgba(235, 85, 69, 0.14);
   color: #b8392d;
+}
+
+.finance-table__badge--bajo,
+.finance-table__badge--referencial {
+  background: rgba(242, 159, 56, 0.15);
+  color: #9b6112;
 }
 
 .finance-table__badge--cobrable {
@@ -1230,6 +2095,19 @@ onMounted(() => {
 .finance-table__subtext {
   display: block;
   margin-top: 0.35rem;
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.finance-stock-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.finance-stock-list span {
+  display: block;
   color: var(--text-soft);
   font-size: 0.86rem;
 }

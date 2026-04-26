@@ -10,6 +10,7 @@ export async function crearReserva(reserva, executor = pool) {
                     hora_fin,
                     descripcion,
                     estado,
+                    appointment_outcome,
                     tipo_atencion,
                     tipo_consulta,
                     usuario_id,
@@ -17,7 +18,7 @@ export async function crearReserva(reserva, executor = pool) {
                     sala_id,
                     workspace_id
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING id
         `,
         [
@@ -26,6 +27,7 @@ export async function crearReserva(reserva, executor = pool) {
             reserva.horaFin,
             reserva.descripcion,
             reserva.estado,
+            reserva.appointmentOutcome ?? "pendiente",
             reserva.tipoAtencion,
             reserva.tipoConsulta,
             reserva.usuarioId,
@@ -46,6 +48,8 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
             SELECT
                 r.*,
                 s.nombre AS sala_nombre,
+                s.sucursal_id AS sucursal_id,
+                su.nombre AS sucursal_nombre,
                 u.nombre AS usuario_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
@@ -54,6 +58,8 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
             LEFT JOIN salas s
                 ON s.id = r.sala_id
                AND s.workspace_id = r.workspace_id
+            LEFT JOIN sucursales su
+                ON su.id = s.sucursal_id
             LEFT JOIN usuarios u
                 ON u.id = r.usuario_id
             LEFT JOIN pacientes p
@@ -99,6 +105,8 @@ export async function listarReservas(workspaceId, executor = pool) {
             SELECT
                 r.*,
                 s.nombre AS sala_nombre,
+                s.sucursal_id AS sucursal_id,
+                su.nombre AS sucursal_nombre,
                 u.nombre AS usuario_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
@@ -107,6 +115,8 @@ export async function listarReservas(workspaceId, executor = pool) {
             LEFT JOIN salas s
                 ON s.id = r.sala_id
                AND s.workspace_id = r.workspace_id
+            LEFT JOIN sucursales su
+                ON su.id = s.sucursal_id
             LEFT JOIN usuarios u
                 ON u.id = r.usuario_id
             LEFT JOIN pacientes p
@@ -135,9 +145,19 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
                 tipo_consulta = $7,
                 usuario_id = $8,
                 paciente_id = $9,
-                sala_id = $10
-            WHERE id = $11
-              AND workspace_id = $12
+                sala_id = $10,
+                appointment_outcome = $11,
+                confirmed_at = $12,
+                confirmed_by_user_id = $13,
+                cancelled_at = $14,
+                cancelled_by_user_id = $15,
+                cancellation_reason = $16,
+                checked_in_at = $17,
+                completed_at = $18,
+                outcome_recorded_at = $19,
+                outcome_recorded_by_user_id = $20
+            WHERE id = $21
+              AND workspace_id = $22
         `,
         [
             datos.fecha,
@@ -150,6 +170,16 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
             datos.usuarioId,
             datos.pacienteId,
             datos.salaId,
+            datos.appointmentOutcome,
+            datos.confirmedAt,
+            datos.confirmedByUserId,
+            datos.cancelledAt,
+            datos.cancelledByUserId,
+            datos.cancellationReason,
+            datos.checkedInAt,
+            datos.completedAt,
+            datos.outcomeRecordedAt,
+            datos.outcomeRecordedByUserId,
             id,
             workspaceId
         ]
@@ -160,15 +190,77 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
     };
 }
 
-export async function actualizarEstadoReserva(id, estado, workspaceId, executor = pool) {
+export async function actualizarEstadoReserva(id, datos, workspaceId, executor = pool) {
     const result = await executor.query(
         `
             UPDATE reservas
-            SET estado = $3
+            SET
+                estado = $3,
+                appointment_outcome = $4,
+                confirmed_at = $5,
+                confirmed_by_user_id = $6,
+                cancelled_at = $7,
+                cancelled_by_user_id = $8,
+                cancellation_reason = $9,
+                checked_in_at = $10,
+                completed_at = $11,
+                outcome_recorded_at = $12,
+                outcome_recorded_by_user_id = $13
             WHERE id = $1
               AND workspace_id = $2
         `,
-        [id, workspaceId, estado]
+        [
+            id,
+            workspaceId,
+            datos.estado,
+            datos.appointmentOutcome,
+            datos.confirmedAt,
+            datos.confirmedByUserId,
+            datos.cancelledAt,
+            datos.cancelledByUserId,
+            datos.cancellationReason,
+            datos.checkedInAt,
+            datos.completedAt,
+            datos.outcomeRecordedAt,
+            datos.outcomeRecordedByUserId
+        ]
+    );
+
+    return {
+        affectedRows: result.rowCount
+    };
+}
+
+export async function actualizarResultadoReserva(id, datos, workspaceId, executor = pool) {
+    const result = await executor.query(
+        `
+            UPDATE reservas
+            SET
+                estado = $3,
+                appointment_outcome = $4,
+                cancelled_at = $5,
+                cancelled_by_user_id = $6,
+                cancellation_reason = $7,
+                checked_in_at = $8,
+                completed_at = $9,
+                outcome_recorded_at = $10,
+                outcome_recorded_by_user_id = $11
+            WHERE id = $1
+              AND workspace_id = $2
+        `,
+        [
+            id,
+            workspaceId,
+            datos.estado,
+            datos.appointmentOutcome,
+            datos.cancelledAt,
+            datos.cancelledByUserId,
+            datos.cancellationReason,
+            datos.checkedInAt,
+            datos.completedAt,
+            datos.outcomeRecordedAt,
+            datos.outcomeRecordedByUserId
+        ]
     );
 
     return {

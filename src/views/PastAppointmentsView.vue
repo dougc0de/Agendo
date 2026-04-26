@@ -1,12 +1,18 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import AppointmentOutcomeForm from "../components/appointments/AppointmentOutcomeForm.vue";
 import AppointmentTable from "../components/appointments/AppointmentTable.vue";
 import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
+import BaseModal from "../components/base/BaseModal.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
-import { getPastAppointments } from "../services/appointmentApi.js";
+import {
+    getPastAppointments,
+    updateAppointmentOutcome,
+    updateAppointmentStatus
+} from "../services/appointmentApi.js";
 import { getInternalUsers } from "../services/internalUserApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
 import { canViewAllPastReservations } from "../shared/roles.js";
@@ -17,6 +23,10 @@ const authStore = useAuthStore();
 const appointments = ref([]);
 const userOptions = ref([]);
 const loading = ref(false);
+const outcomeModalOpen = ref(false);
+const outcomeSaving = ref(false);
+const outcomeError = ref("");
+const selectedAppointment = ref({});
 const error = ref("");
 const filters = ref({
     patient: "",
@@ -59,6 +69,11 @@ const statCards = computed(() => [
     }
 ]);
 
+const fullMomentFormatter = new Intl.DateTimeFormat("es-CR", {
+    dateStyle: "medium",
+    timeStyle: "short"
+});
+
 async function fetchPastAppointments() {
     loading.value = true;
     error.value = "";
@@ -88,6 +103,100 @@ async function fetchUserOptions() {
         userOptions.value = response.data ?? [];
     } catch {
         userOptions.value = [];
+    }
+}
+
+function toAppointmentDate(appointment) {
+    const fecha = String(appointment?.fecha ?? "").trim();
+    const hora = String(appointment?.horaInicio ?? "00:00").trim().slice(0, 5);
+
+    if (!fecha) {
+        return null;
+    }
+
+    const value = new Date(`${fecha}T${hora || "00:00"}`);
+    return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function formatAppointmentMoment(appointment) {
+    const appointmentDate = toAppointmentDate(appointment);
+
+    if (!appointmentDate) {
+        return "Fecha no disponible";
+    }
+
+    return fullMomentFormatter.format(appointmentDate);
+}
+
+function openOutcomeModal(appointment) {
+    selectedAppointment.value = {
+        ...appointment
+    };
+    outcomeError.value = "";
+    outcomeModalOpen.value = true;
+}
+
+function closeOutcomeModal() {
+    outcomeModalOpen.value = false;
+    outcomeError.value = "";
+    selectedAppointment.value = {};
+}
+
+async function handleSaveOutcome(payload) {
+    if (!selectedAppointment.value?.id) {
+        return;
+    }
+
+    outcomeSaving.value = true;
+    outcomeError.value = "";
+
+    try {
+        let latestAppointment = selectedAppointment.value;
+        const needsStatusUpdate =
+            payload.status !== selectedAppointment.value.estado ||
+            (
+                payload.status === "cancelada" &&
+                payload.cancellationReason !== selectedAppointment.value.cancellationReason
+            );
+
+        if (needsStatusUpdate) {
+            const statusResponse = await updateAppointmentStatus(
+                selectedAppointment.value.id,
+                payload.status,
+                {
+                    cancellationReason: payload.cancellationReason
+                }
+            );
+            latestAppointment = statusResponse.data ?? latestAppointment;
+        }
+
+        const shouldSkipOutcomePatch =
+            payload.status === "cancelada" && payload.appointmentOutcome === "cancelada";
+
+        if (
+            !shouldSkipOutcomePatch &&
+            payload.appointmentOutcome !== (latestAppointment.appointmentOutcome ?? "pendiente")
+        ) {
+            const outcomeResponse = await updateAppointmentOutcome(
+                selectedAppointment.value.id,
+                {
+                    appointmentOutcome: payload.appointmentOutcome,
+                    cancellationReason: payload.cancellationReason
+                }
+            );
+            latestAppointment = outcomeResponse.data ?? latestAppointment;
+        }
+
+        selectedAppointment.value = latestAppointment;
+        await fetchPastAppointments();
+        closeOutcomeModal();
+    } catch (requestError) {
+        outcomeError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible guardar el resultado de la reserva.";
+    } finally {
+        outcomeSaving.value = false;
     }
 }
 
@@ -233,12 +342,35 @@ onMounted(() => {
           <AppointmentTable
             :appointments="appointments"
             :loading="loading"
-            :show-actions="false"
+            :show-actions="true"
+            :show-delete-action="false"
+            edit-action-label="Cerrar resultado"
             :show-user="canFilterByUser"
             empty-message="No encontramos reservas en el historial con esos filtros."
+            @edit="openOutcomeModal"
           />
         </section>
       </main>
+
+      <BaseModal
+        :open="outcomeModalOpen"
+        title="Cerrar resultado de la reserva"
+        @close="closeOutcomeModal"
+      >
+        <AppointmentOutcomeForm
+          :initial-value="selectedAppointment"
+          :summary="{
+            patientName: selectedAppointment.pacienteNombre,
+            dateLabel: formatAppointmentMoment(selectedAppointment),
+            roomName: selectedAppointment.salaNombre || `Sala #${selectedAppointment.salaId ?? ''}`,
+            typeName: selectedAppointment.tipoConsulta
+          }"
+          :submitting="outcomeSaving"
+          :error-message="outcomeError"
+          @submit="handleSaveOutcome"
+          @cancel="closeOutcomeModal"
+        />
+      </BaseModal>
 
       <AppFooter />
     </div>

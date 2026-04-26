@@ -2,17 +2,14 @@ import { withTransaction } from "../db/connection.js";
 import {
     actualizarCobro as actualizarCobroRepository,
     actualizarPagoCobro as actualizarPagoCobroRepository,
-    actualizarItemInventario as actualizarItemInventarioRepository,
     buscarCobroPorId,
     buscarCobroPorReservaId,
-    buscarItemInventarioPorId,
     crearCobro as crearCobroRepository,
-    crearItemInventario as crearItemInventarioRepository,
     listarCobrosPorWorkspaceId,
-    listarInventarioPorWorkspaceId,
     listarLineasInsumosPorChargeIds,
     reemplazarLineasInsumos
 } from "../repositories/financeRepository.js";
+import { buscarItemInventarioPorId } from "../repositories/inventoryRepository.js";
 import {
     buscarReservaPorId as buscarReservaPorIdRepository,
     listarReservas as listarReservasRepository
@@ -25,10 +22,10 @@ import {
     normalizeSupportedCurrencyCode,
     SUPPORTED_CURRENCY_CODES
 } from "../../shared/currencies.js";
+import { syncProcedureConsumption } from "./inventoryService.js";
 
 const ESTADOS_COBRO = ["pendiente", "pagado", "anulado"];
 const METODOS_PAGO = ["efectivo", "tarjeta", "transferencia", "otro"];
-const ESTADOS_INVENTARIO = ["activo", "inactivo"];
 const MODOS_COBRO = ["solo_sala", "solo_insumos", "sala_mas_insumos"];
 const DECISIONES_COBRO = ["cobrable", "exonerado"];
 const DEFAULT_PRICING_POLICY = "bloqueado";
@@ -184,21 +181,6 @@ function formatearCobroSalida(filaCobro, supplies = []) {
         createdAt: filaCobro.created_at,
         updatedAt: filaCobro.updated_at,
         supplies
-    };
-}
-
-function formatearInventarioSalida(row) {
-    return {
-        id: row.id,
-        workspaceId: row.workspace_id,
-        nombre: row.nombre,
-        categoria: row.categoria ?? "",
-        unidad: row.unidad,
-        costoBase: Number(row.costo_base ?? 0),
-        precioSugerido: Number(row.precio_sugerido ?? 0),
-        estado: row.estado,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
     };
 }
 
@@ -535,7 +517,7 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
     if (requestedCurrencyCode && !SUPPORTED_CURRENCY_CODES.includes(requestedCurrencyCode)) {
         return {
             ok: false,
-            msg: "La moneda del bill no es valida."
+            msg: "La moneda de la factura no es valida."
         };
     }
 
@@ -716,17 +698,6 @@ function normalizarPayloadPago(payload = {}) {
             paymentMethod,
             paidAt
         }
-    };
-}
-
-function normalizarItemInventario(payload = {}) {
-    return {
-        nombre: normalizarTexto(payload.nombre),
-        categoria: normalizarTexto(payload.categoria) || null,
-        unidad: normalizarTexto(payload.unidad) || "unidad",
-        costoBase: roundMoney(normalizarMonto(payload.costoBase, NaN)),
-        precioSugerido: roundMoney(normalizarMonto(payload.precioSugerido, NaN)),
-        estado: normalizarTexto(payload.estado).toLowerCase() || "activo"
     };
 }
 
@@ -925,6 +896,21 @@ export async function crearCobro(payload, auth) {
                 client
             );
 
+            const inventorySyncResult = await syncProcedureConsumption({
+                workspaceId,
+                branchId: room.sucursal_id ?? null,
+                reservationId: reservation.id,
+                chargeId: createdCharge.id,
+                previousSupplies: [],
+                nextSupplies: normalizedPayload.data.supplies,
+                createdByUserId: registeredByUserId,
+                executor: client
+            });
+
+            if (!inventorySyncResult.ok) {
+                throw new Error(inventorySyncResult.msg);
+            }
+
             const createdRow = await buscarCobroPorId(createdCharge.id, workspaceId, client);
             const [formattedReport] = await enriquecerCobrosConLineas(
                 [createdRow],
@@ -1029,6 +1015,37 @@ export async function actualizarCobro(id, payload, auth) {
                 client
             );
 
+            const reservation = await buscarReservaPorIdRepository(
+                charge.reservation_id,
+                workspaceId,
+                client
+            );
+
+            if (!reservation) {
+                throw new Error("La reserva asociada al reporte ya no existe.");
+            }
+
+            const room = await buscarSalaPorId(reservation.sala_id, workspaceId, client);
+
+            if (!room) {
+                throw new Error("La sala asociada a la reserva no existe.");
+            }
+
+            const inventorySyncResult = await syncProcedureConsumption({
+                workspaceId,
+                branchId: room.sucursal_id ?? null,
+                reservationId: reservation.id,
+                chargeId,
+                previousSupplies: existingReport.supplies ?? [],
+                nextSupplies: normalizedPayload.data.supplies,
+                createdByUserId: registeredByUserId,
+                executor: client
+            });
+
+            if (!inventorySyncResult.ok) {
+                throw new Error(inventorySyncResult.msg);
+            }
+
             const updatedRow = await buscarCobroPorId(chargeId, workspaceId, client);
             const [formattedReport] = await enriquecerCobrosConLineas(
                 [updatedRow],
@@ -1098,7 +1115,7 @@ export async function confirmarPagoCobro(id, payload, auth) {
         if (charge.payment_status === "anulado") {
             return {
                 ok: false,
-                msg: "Este bill esta anulado y no puede confirmarse como pagado."
+                msg: "Esta factura esta anulada y no puede confirmarse como pagada."
             };
         }
 
@@ -1140,196 +1157,6 @@ export async function confirmarPagoCobro(id, payload, auth) {
         return {
             ok: false,
             msg: `Error al confirmar el pago: ${error.message}`
-        };
-    }
-}
-
-export async function listarInventario(auth) {
-    try {
-        const workspaceId = resolveWorkspaceId(auth);
-
-        if (!workspaceId) {
-            return {
-                ok: false,
-                msg: "No autorizado. Falta el contexto de la cuenta."
-            };
-        }
-
-        if (!hasFinanceAccess(auth)) {
-            return {
-                ok: false,
-                msg: "No autorizado. No tienes acceso al inventario."
-            };
-        }
-
-        const rows = await listarInventarioPorWorkspaceId(workspaceId);
-
-        return {
-            ok: true,
-            msg: "Inventario cargado correctamente.",
-            data: rows.map((row) => formatearInventarioSalida(row))
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            msg: `Error al cargar el inventario: ${error.message}`
-        };
-    }
-}
-
-export async function crearItemInventario(payload, auth) {
-    try {
-        const workspaceId = resolveWorkspaceId(auth);
-
-        if (!workspaceId) {
-            return {
-                ok: false,
-                msg: "No autorizado. Falta el contexto de la cuenta."
-            };
-        }
-
-        if (!hasFinanceAccess(auth)) {
-            return {
-                ok: false,
-                msg: "No autorizado. No tienes acceso al inventario."
-            };
-        }
-
-        const datos = normalizarItemInventario(payload);
-
-        if (!datos.nombre) {
-            return {
-                ok: false,
-                msg: "El nombre del insumo es obligatorio."
-            };
-        }
-
-        if (!Number.isFinite(datos.costoBase) || datos.costoBase < 0) {
-            return {
-                ok: false,
-                msg: "El costo base del insumo debe ser valido."
-            };
-        }
-
-        if (!Number.isFinite(datos.precioSugerido) || datos.precioSugerido < 0) {
-            return {
-                ok: false,
-                msg: "El precio sugerido del insumo debe ser valido."
-            };
-        }
-
-        if (!ESTADOS_INVENTARIO.includes(datos.estado)) {
-            return {
-                ok: false,
-                msg: "El estado del insumo no es valido."
-            };
-        }
-
-        const createdItem = await crearItemInventarioRepository({
-            workspaceId,
-            ...datos
-        });
-
-        return {
-            ok: true,
-            msg: "Insumo creado correctamente.",
-            data: formatearInventarioSalida(createdItem)
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            msg: `Error al crear el insumo: ${error.message}`
-        };
-    }
-}
-
-export async function actualizarItemInventario(id, payload, auth) {
-    try {
-        const workspaceId = resolveWorkspaceId(auth);
-        const itemId = Number(id);
-
-        if (!workspaceId) {
-            return {
-                ok: false,
-                msg: "No autorizado. Falta el contexto de la cuenta."
-            };
-        }
-
-        if (!hasFinanceAccess(auth)) {
-            return {
-                ok: false,
-                msg: "No autorizado. No tienes acceso al inventario."
-            };
-        }
-
-        if (!Number.isInteger(itemId) || itemId <= 0) {
-            return {
-                ok: false,
-                msg: "El insumo indicado no es valido."
-            };
-        }
-
-        const existingItem = await buscarItemInventarioPorId(itemId, workspaceId);
-
-        if (!existingItem) {
-            return {
-                ok: false,
-                msg: "El insumo indicado no existe en esta cuenta."
-            };
-        }
-
-        const datos = normalizarItemInventario({
-            nombre: payload?.nombre ?? existingItem.nombre,
-            categoria: payload?.categoria ?? existingItem.categoria,
-            unidad: payload?.unidad ?? existingItem.unidad,
-            costoBase: payload?.costoBase ?? existingItem.costo_base,
-            precioSugerido: payload?.precioSugerido ?? existingItem.precio_sugerido,
-            estado: payload?.estado ?? existingItem.estado
-        });
-
-        if (!datos.nombre) {
-            return {
-                ok: false,
-                msg: "El nombre del insumo es obligatorio."
-            };
-        }
-
-        if (!Number.isFinite(datos.costoBase) || datos.costoBase < 0) {
-            return {
-                ok: false,
-                msg: "El costo base del insumo debe ser valido."
-            };
-        }
-
-        if (!Number.isFinite(datos.precioSugerido) || datos.precioSugerido < 0) {
-            return {
-                ok: false,
-                msg: "El precio sugerido del insumo debe ser valido."
-            };
-        }
-
-        if (!ESTADOS_INVENTARIO.includes(datos.estado)) {
-            return {
-                ok: false,
-                msg: "El estado del insumo no es valido."
-            };
-        }
-
-        const updatedItem = await actualizarItemInventarioRepository(
-            itemId,
-            workspaceId,
-            datos
-        );
-
-        return {
-            ok: true,
-            msg: "Insumo actualizado correctamente.",
-            data: formatearInventarioSalida(updatedItem)
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            msg: `Error al actualizar el insumo: ${error.message}`
         };
     }
 }

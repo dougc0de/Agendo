@@ -18,6 +18,26 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
+    showOutcome: {
+        type: Boolean,
+        default: true
+    },
+    showEditAction: {
+        type: Boolean,
+        default: true
+    },
+    showDeleteAction: {
+        type: Boolean,
+        default: true
+    },
+    editActionLabel: {
+        type: String,
+        default: "Editar"
+    },
+    deleteActionLabel: {
+        type: String,
+        default: "Eliminar"
+    },
     emptyMessage: {
         type: String,
         default: "No hay reservas registradas todavia."
@@ -28,6 +48,17 @@ defineEmits(["edit", "delete"]);
 
 function appointmentTimeRange(appointment) {
     return `${appointment.horaInicio} - ${appointment.horaFin}`;
+}
+
+function formatOutcome(outcome) {
+    return (
+        {
+            pendiente: "Pendiente",
+            atendida: "Atendida",
+            no_show: "No-show",
+            cancelada: "Cancelada"
+        }[outcome] ?? outcome ?? "Pendiente"
+    );
 }
 </script>
 
@@ -68,6 +99,13 @@ function appointmentTimeRange(appointment) {
               {{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}
             </span>
             <span
+              v-if="props.showOutcome"
+              class="appointment-table__badge appointment-table__badge--outcome"
+              :class="`appointment-table__badge--outcome-${appointment.appointmentOutcome || 'pendiente'}`"
+            >
+              {{ formatOutcome(appointment.appointmentOutcome) }}
+            </span>
+            <span
               class="appointment-table__badge"
               :class="`appointment-table__badge--${appointment.estado}`"
             >
@@ -76,11 +114,21 @@ function appointmentTimeRange(appointment) {
           </div>
 
           <div v-if="props.showActions" class="appointment-table__card-actions">
-            <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
-              Editar
+            <BaseButton
+              v-if="props.showEditAction"
+              size="sm"
+              variant="warning"
+              @click="$emit('edit', appointment)"
+            >
+              {{ props.editActionLabel }}
             </BaseButton>
-            <BaseButton size="sm" variant="danger" @click="$emit('delete', appointment)">
-              Eliminar
+            <BaseButton
+              v-if="props.showDeleteAction"
+              size="sm"
+              variant="danger"
+              @click="$emit('delete', appointment)"
+            >
+              {{ props.deleteActionLabel }}
             </BaseButton>
           </div>
         </article>
@@ -96,6 +144,7 @@ function appointmentTimeRange(appointment) {
               <th>Tiempo de reserva</th>
               <th>Tipo</th>
               <th>Estado</th>
+              <th v-if="props.showOutcome">Resultado</th>
               <th v-if="props.showUser">Usuario</th>
               <th v-if="props.showActions">Opciones</th>
             </tr>
@@ -115,14 +164,32 @@ function appointmentTimeRange(appointment) {
                   {{ appointment.estado }}
                 </span>
               </td>
+              <td v-if="props.showOutcome">
+                <span
+                  class="appointment-table__badge appointment-table__badge--outcome"
+                  :class="`appointment-table__badge--outcome-${appointment.appointmentOutcome || 'pendiente'}`"
+                >
+                  {{ formatOutcome(appointment.appointmentOutcome) }}
+                </span>
+              </td>
               <td v-if="props.showUser">{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</td>
               <td v-if="props.showActions" class="appointment-table__actions-cell">
                 <div class="appointment-table__actions">
-                  <BaseButton size="sm" variant="warning" @click="$emit('edit', appointment)">
-                    Editar
+                  <BaseButton
+                    v-if="props.showEditAction"
+                    size="sm"
+                    variant="warning"
+                    @click="$emit('edit', appointment)"
+                  >
+                    {{ props.editActionLabel }}
                   </BaseButton>
-                  <BaseButton size="sm" variant="danger" @click="$emit('delete', appointment)">
-                    Eliminar
+                  <BaseButton
+                    v-if="props.showDeleteAction"
+                    size="sm"
+                    variant="danger"
+                    @click="$emit('delete', appointment)"
+                  >
+                    {{ props.deleteActionLabel }}
                   </BaseButton>
                 </div>
               </td>
@@ -255,6 +322,30 @@ function appointmentTimeRange(appointment) {
 }
 
 .appointment-table__badge--cancelada {
+  background: rgba(235, 85, 69, 0.14);
+  color: #b8392d;
+}
+
+.appointment-table__badge--outcome {
+  margin-inline-end: 0.35rem;
+}
+
+.appointment-table__badge--outcome-pendiente {
+  background: rgba(151, 169, 181, 0.18);
+  color: #50616d;
+}
+
+.appointment-table__badge--outcome-atendida {
+  background: rgba(17, 184, 159, 0.16);
+  color: var(--primary-dark);
+}
+
+.appointment-table__badge--outcome-no_show {
+  background: rgba(242, 159, 56, 0.18);
+  color: #9b6112;
+}
+
+.appointment-table__badge--outcome-cancelada {
   background: rgba(235, 85, 69, 0.14);
   color: #b8392d;
 }

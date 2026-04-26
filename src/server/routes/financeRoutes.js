@@ -3,14 +3,22 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import {
     actualizarCobro,
     confirmarPagoCobro,
-    actualizarItemInventario,
     crearCobro,
-    crearItemInventario,
-    listarCobros,
-    listarInventario,
     obtenerReporteOperacionPdf,
     obtenerResumenFinanciero
 } from "../services/financeService.js";
+import {
+    actualizarEstadoItemInventario,
+    actualizarItemInventario,
+    crearItemInventario,
+    crearMovimientoInventario,
+    listarInventario,
+    listarMovimientosInventario,
+    obtenerItemInventario,
+    obtenerReportesInventario,
+    obtenerResumenInventario
+} from "../services/inventoryService.js";
+import { listarCobros } from "../services/financeService.js";
 
 const router = express.Router();
 
@@ -64,8 +72,48 @@ router.get("/resumen", async (req, res) => {
     return res.status(200).json(resultado);
 });
 
+router.get("/inventario/resumen", async (req, res) => {
+    const resultado = await obtenerResumenInventario(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/inventario/reportes", async (req, res) => {
+    const resultado = await obtenerReportesInventario(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
 router.get("/inventario", async (req, res) => {
-    const resultado = await listarInventario(req.auth);
+    const resultado = await listarInventario(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/inventario/:id", async (req, res) => {
+    const resultado = await obtenerItemInventario(req.params.id, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/inventario/:id/movimientos", async (req, res) => {
+    const resultado = await listarMovimientosInventario(req.params.id, req.query, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
@@ -96,6 +144,16 @@ router.post("/reportes-operacion", async (req, res) => {
 
 router.post("/inventario", async (req, res) => {
     const resultado = await crearItemInventario(req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(201).json(resultado);
+});
+
+router.post("/inventario/:id/movimientos", async (req, res) => {
+    const resultado = await crearMovimientoInventario(req.params.id, req.body, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
@@ -146,6 +204,20 @@ router.patch("/reportes-operacion/:id/pago", async (req, res) => {
 
 router.put("/inventario/:id", async (req, res) => {
     const resultado = await actualizarItemInventario(req.params.id, req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.patch("/inventario/:id/estado", async (req, res) => {
+    const resultado = await actualizarEstadoItemInventario(
+        req.params.id,
+        req.body?.estado,
+        req.auth
+    );
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);

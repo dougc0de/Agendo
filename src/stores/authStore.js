@@ -6,6 +6,7 @@ let hydratePromise = null;
 const TOKEN_KEY = "agendo-token";
 const USER_KEY = "agendo-user";
 const WORKSPACE_KEY = "agendo-workspace";
+const BRANCH_KEY = "agendo-branch";
 const SUBSCRIPTION_KEY = "agendo-subscription";
 const MEMBERSHIP_ROLE_KEY = "agendo-membership-role";
 
@@ -31,6 +32,7 @@ function clearSessionStorage() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(WORKSPACE_KEY);
+    localStorage.removeItem(BRANCH_KEY);
     localStorage.removeItem(SUBSCRIPTION_KEY);
     localStorage.removeItem(MEMBERSHIP_ROLE_KEY);
 }
@@ -42,6 +44,7 @@ export const useAuthStore = defineStore("auth", {
         token: null,
         user: null,
         workspace: null,
+        branch: null,
         subscription: null,
         membershipRole: null
     }),
@@ -51,6 +54,7 @@ export const useAuthStore = defineStore("auth", {
             this.token = sessionData.token ?? this.token ?? null;
             this.user = sessionData.user ?? null;
             this.workspace = sessionData.workspace ?? null;
+            this.branch = sessionData.branch ?? null;
             this.subscription = sessionData.subscription ?? null;
             this.membershipRole = sessionData.membershipRole ?? null;
             this.isAuthenticated = Boolean(this.token);
@@ -71,6 +75,12 @@ export const useAuthStore = defineStore("auth", {
                 localStorage.removeItem(WORKSPACE_KEY);
             }
 
+            if (this.branch) {
+                persistJson(BRANCH_KEY, this.branch);
+            } else {
+                localStorage.removeItem(BRANCH_KEY);
+            }
+
             if (this.subscription) {
                 persistJson(SUBSCRIPTION_KEY, this.subscription);
             } else {
@@ -89,6 +99,7 @@ export const useAuthStore = defineStore("auth", {
             this.token = null;
             this.user = null;
             this.workspace = null;
+            this.branch = null;
             this.subscription = null;
             this.membershipRole = null;
         },
@@ -101,6 +112,7 @@ export const useAuthStore = defineStore("auth", {
             this.token = localStorage.getItem(TOKEN_KEY);
             this.user = readJsonFromStorage(USER_KEY);
             this.workspace = readJsonFromStorage(WORKSPACE_KEY);
+            this.branch = readJsonFromStorage(BRANCH_KEY);
             this.subscription = readJsonFromStorage(SUBSCRIPTION_KEY);
             this.membershipRole = localStorage.getItem(MEMBERSHIP_ROLE_KEY);
             this.isAuthenticated = Boolean(this.token);

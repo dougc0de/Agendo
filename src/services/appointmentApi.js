@@ -23,6 +23,10 @@ export async function getPastAppointments(filters = {}) {
     return apiRequest(`/reservas/pasadas${buildQueryString(filters)}`);
 }
 
+export async function getAppointmentById(id) {
+    return apiRequest(`/reservas/${id}`);
+}
+
 export async function getAppointmentCalendar(filters = {}) {
     return apiRequest(`/reservas/calendario${buildQueryString(filters)}`);
 }
@@ -41,10 +45,17 @@ export async function updateAppointment(id, payload) {
     });
 }
 
-export async function updateAppointmentStatus(id, estado) {
+export async function updateAppointmentStatus(id, estado, extras = {}) {
     return apiRequest(`/reservas/${id}/estado`, {
         method: "PATCH",
-        body: { estado }
+        body: { estado, ...extras }
+    });
+}
+
+export async function updateAppointmentOutcome(id, payload) {
+    return apiRequest(`/reservas/${id}/resultado`, {
+        method: "PATCH",
+        body: payload
     });
 }
 

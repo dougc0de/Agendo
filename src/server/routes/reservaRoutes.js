@@ -8,6 +8,7 @@ import {
     crearReserva,
     editarReserva,
     actualizarEstadoReserva,
+    actualizarResultadoReserva,
     eliminarReserva
 } from "../services/reservaService.js";
 
@@ -87,7 +88,20 @@ router.put("/:id", async (req, res) => {
 
 router.patch("/:id/estado", async (req, res) => {
     const { id } = req.params;
-    const resultado = await actualizarEstadoReserva(id, req.body?.estado, req.auth);
+    const resultado = await actualizarEstadoReserva(id, req.body?.estado, req.auth, {
+        cancellationReason: req.body?.cancellationReason
+    });
+
+    if (!resultado.ok) {
+        return res.status(resolveReservaStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.patch("/:id/resultado", async (req, res) => {
+    const { id } = req.params;
+    const resultado = await actualizarResultadoReserva(id, req.body, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveReservaStatus(resultado, 400)).json(resultado);

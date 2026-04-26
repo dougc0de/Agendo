@@ -30,6 +30,7 @@ export function requireAuth(req, res, next) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const userId = Number(decoded.userId ?? decoded.id);
         const workspaceId = Number(decoded.workspaceId ?? 0) || null;
+        const branchId = Number(decoded.branchId ?? 0) || null;
 
         if (!Number.isInteger(userId) || userId <= 0) {
             return res.status(401).json({
@@ -43,6 +44,8 @@ export function requireAuth(req, res, next) {
             userRole: decoded.userRole ?? null,
             correo: decoded.correo ?? null,
             workspaceId,
+            branchId,
+            branchName: decoded.branchName ?? null,
             membershipRole: decoded.membershipRole ?? null,
             planCode: decoded.planCode ?? null,
             commercialStatus: decoded.commercialStatus ?? null

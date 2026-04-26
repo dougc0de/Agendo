@@ -1,11 +1,12 @@
 <script setup>
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import {
     DEFAULT_CURRENCY_CODE,
     LATAM_CURRENCY_OPTIONS
 } from "../../shared/currencies.js";
+import InventorySearchEngine from "../../services/InventorySearchEngine.js";
 
 const props = defineProps({
     initialValue: {
@@ -47,10 +48,25 @@ const props = defineProps({
     canWaive: {
         type: Boolean,
         default: false
+    },
+    selectedReservation: {
+        type: Object,
+        default: null
+    },
+    reservationLoading: {
+        type: Boolean,
+        default: false
+    },
+    reservationError: {
+        type: String,
+        default: ""
     }
 });
 
-const emit = defineEmits(["submit", "cancel"]);
+const emit = defineEmits(["submit", "cancel", "reservation-change"]);
+const inventorySearchEngine = new InventorySearchEngine();
+const lastAutoProcedureName = ref("");
+const clientError = ref("");
 
 function createDefaultSupply() {
     return {
@@ -113,6 +129,86 @@ const suppliesTotal = computed(() =>
 const grandTotal = computed(() =>
     Number(form.roomChargeAmount || 0) + Number(suppliesTotal.value || 0)
 );
+const hasReservationContext = computed(
+    () =>
+        Boolean(props.selectedReservation) &&
+        Number(form.reservationId) > 0 &&
+        Number(props.selectedReservation?.id ?? form.reservationId) === Number(form.reservationId)
+);
+const hasReservationFallbackWarning = computed(
+    () => Boolean(props.reservationError) && hasReservationContext.value
+);
+const canEditChargeDetails = computed(() => {
+    if (!hasReservationContext.value) {
+        return false;
+    }
+
+    if (props.mode === "edit") {
+        return true;
+    }
+
+    return !props.reservationLoading && !props.reservationError;
+});
+const canSubmit = computed(() => {
+    if (props.submitting || props.reservationLoading) {
+        return false;
+    }
+
+    if (!Number(form.reservationId) || !hasReservationContext.value) {
+        return false;
+    }
+
+    if (props.mode !== "edit" && props.reservationError) {
+        return false;
+    }
+
+    return true;
+});
+const reservationSummaryItems = computed(() => {
+    if (!props.selectedReservation) {
+        return [];
+    }
+
+    return [
+        {
+            label: "Paciente",
+            value: props.selectedReservation.pacienteNombre || "Paciente sin nombre"
+        },
+        {
+            label: "Fecha y hora",
+            value: `${props.selectedReservation.fecha || "Sin fecha"} · ${
+                props.selectedReservation.horaInicio || "--:--"
+            } - ${props.selectedReservation.horaFin || "--:--"}`
+        },
+        {
+            label: "Sala",
+            value: props.selectedReservation.salaNombre || "Sala sin nombre"
+        },
+        {
+            label: "Sucursal",
+            value: props.selectedReservation.branchName || "Sucursal sin definir"
+        },
+        {
+            label: "Tipo de atencion",
+            value: props.selectedReservation.tipoAtencion || "procedimiento"
+        },
+        {
+            label: "Procedimiento sugerido",
+            value:
+                props.selectedReservation.tipoConsulta ||
+                props.selectedReservation.descripcion ||
+                "Sin detalle"
+        },
+        {
+            label: "Estado de la reserva",
+            value: props.selectedReservation.estado || "Sin estado"
+        }
+    ];
+});
+
+function buildSuggestedProcedureName(reservation) {
+    return reservation?.tipoConsulta || reservation?.descripcion || "";
+}
 
 function syncIncomingValue(value) {
     Object.assign(form, createDefaultForm(), {
@@ -139,9 +235,7 @@ function syncIncomingValue(value) {
         }))
     });
 
-    if (!form.reservationId && props.reservationOptions.length) {
-        form.reservationId = props.reservationOptions[0].id;
-    }
+    lastAutoProcedureName.value = "";
 
     if (form.paidAt) {
         form.paidAt = String(form.paidAt).slice(0, 16);
@@ -157,22 +251,20 @@ watch(
 );
 
 watch(
-    () => props.reservationOptions,
-    (value) => {
-        if (!form.reservationId && value.length) {
-            form.reservationId = value[0].id;
-        }
-    },
-    { deep: true, immediate: true }
-);
-
-watch(
     () => props.defaultPricingMode,
     (value) => {
         if (props.mode === "create" && !props.initialValue?.id) {
             form.pricingMode = value || "solo_sala";
         }
     }
+);
+
+watch(
+    () => props.inventoryOptions,
+    (value) => {
+        inventorySearchEngine.setItems(value ?? []);
+    },
+    { deep: true, immediate: true }
 );
 
 watch(
@@ -184,63 +276,236 @@ watch(
     }
 );
 
+watch(
+    () => props.selectedReservation,
+    (value) => {
+        if (props.mode === "edit" && props.initialValue?.id) {
+            return;
+        }
+
+        if (!value) {
+            if (form.procedureName === lastAutoProcedureName.value) {
+                form.procedureName = "";
+            }
+
+            lastAutoProcedureName.value = "";
+            return;
+        }
+
+        const suggestedProcedureName = buildSuggestedProcedureName(value);
+
+        if (!suggestedProcedureName) {
+            return;
+        }
+
+        if (!form.procedureName || form.procedureName === lastAutoProcedureName.value) {
+            form.procedureName = suggestedProcedureName;
+            lastAutoProcedureName.value = suggestedProcedureName;
+        }
+    },
+    { deep: true, immediate: true }
+);
+
 function findInventoryItem(itemId) {
     return props.inventoryOptions.find((item) => Number(item.id) === Number(itemId));
 }
 
 function addSupplyLine() {
+    if (!canEditChargeDetails.value) {
+        return;
+    }
+
+    clientError.value = "";
     form.supplies.push(createDefaultSupply());
 }
 
 function removeSupplyLine(index) {
-    form.supplies.splice(index, 1);
-}
-
-function handleSupplyItemChange(index) {
-    const supply = form.supplies[index];
-    const inventoryItem = findInventoryItem(supply.inventoryItemId);
-
-    if (!inventoryItem) {
+    if (!canEditChargeDetails.value) {
         return;
     }
 
-    if (!Number(supply.unitCost)) {
-        supply.unitCost = inventoryItem.costoBase ?? 0;
+    clientError.value = "";
+    form.supplies.splice(index, 1);
+}
+
+function applyInventoryItemToSupply(supply, inventoryItem) {
+    if (!supply || !inventoryItem) {
+        return;
     }
 
-    if (!Number(supply.unitPrice)) {
-        supply.unitPrice = inventoryItem.precioSugerido ?? 0;
+    clientError.value = "";
+    supply.inventoryItemId = inventoryItem.id;
+    supply.searchQuery = inventoryItem.nombre ?? "";
+    supply.unitCost = inventoryItem.costoBase ?? 0;
+    supply.unitPrice = inventoryItem.precioSugerido ?? 0;
+}
+
+function handleSupplySearchInput(index, value) {
+    if (!canEditChargeDetails.value) {
+        return;
     }
 
-    if (!supply.searchQuery) {
-        supply.searchQuery = inventoryItem.nombre ?? "";
+    const supply = form.supplies[index];
+
+    if (!supply) {
+        return;
+    }
+
+    supply.searchQuery = value;
+
+    const selectedItem = findInventoryItem(supply.inventoryItemId);
+    const normalizedQuery = String(value ?? "").trim().toLowerCase();
+
+    if (
+        selectedItem &&
+        normalizedQuery !== String(selectedItem.nombre ?? "").trim().toLowerCase()
+    ) {
+        supply.inventoryItemId = "";
     }
 }
 
+function selectInventoryItem(index, inventoryItem) {
+    if (!canEditChargeDetails.value) {
+        return;
+    }
+
+    const supply = form.supplies[index];
+    applyInventoryItemToSupply(supply, inventoryItem);
+}
+
+function clearInventoryItem(index) {
+    if (!canEditChargeDetails.value) {
+        return;
+    }
+
+    clientError.value = "";
+    const supply = form.supplies[index];
+
+    if (!supply) {
+        return;
+    }
+
+    Object.assign(supply, createDefaultSupply());
+}
+
+function getReservationBranchId() {
+    const branchId = Number(props.selectedReservation?.branchId);
+    return Number.isInteger(branchId) && branchId > 0 ? branchId : null;
+}
+
+function getStockRowForReservation(item) {
+    const reservationBranchId = getReservationBranchId();
+
+    if (!reservationBranchId || !item?.controlaStock) {
+        return null;
+    }
+
+    return (
+        item.stockByBranch?.find(
+            (stockRow) => Number(stockRow.branchId) === Number(reservationBranchId)
+        ) ?? null
+    );
+}
+
+function getInventoryAvailability(item) {
+    if (!item) {
+        return {
+            available: false,
+            label: "Selecciona un insumo valido"
+        };
+    }
+
+    const reservationBranchId = getReservationBranchId();
+
+    if (item.scopeType === "sucursal") {
+        if (!reservationBranchId) {
+            return {
+                available: false,
+                label: "La reserva no tiene sucursal asociada"
+            };
+        }
+
+        if (Number(item.branchId) !== Number(reservationBranchId)) {
+            return {
+                available: false,
+                label: "Disponible solo en otra sucursal"
+            };
+        }
+    }
+
+    if (!item.controlaStock) {
+        return {
+            available: true,
+            label: "Insumo referencial sin control de stock"
+        };
+    }
+
+    const stockRow = getStockRowForReservation(item);
+
+    if (!stockRow) {
+        return {
+            available: false,
+            label: "Sin stock configurado en esta sucursal"
+        };
+    }
+
+    if (stockRow.currentStock <= 0 && !item.allowNegativeStock) {
+        return {
+            available: false,
+            label: "Sin existencias disponibles",
+            stockRow
+        };
+    }
+
+    return {
+        available: true,
+        label:
+            stockRow.currentStock > 0
+                ? `Disponible: ${stockRow.currentStock} ${item.unidad}${
+                      stockRow.isLowStock ? " · stock bajo" : ""
+                  }`
+                : "Permitido con stock negativo",
+        stockRow
+    };
+}
+
 function getVisibleInventoryOptions(searchQuery, selectedItemId) {
-    const normalizedQuery = String(searchQuery ?? "").trim().toLowerCase();
+    return inventorySearchEngine
+        .search(searchQuery, {
+        selectedItemId,
+        activeOnly: true
+        })
+        .filter((item) => {
+            if (item.scopeType !== "sucursal") {
+                return true;
+            }
 
-    return props.inventoryOptions.filter((item) => {
-        const isSelected = Number(item.id) === Number(selectedItemId);
-        const isActive = item.estado === "activo";
+            const reservationBranchId = getReservationBranchId();
 
-        if (!isSelected && !isActive) {
-            return false;
-        }
+            return !reservationBranchId || Number(item.branchId) === Number(reservationBranchId);
+        });
+}
 
-        if (isSelected) {
-            return true;
-        }
+function getSelectedInventoryItem(supply) {
+    return findInventoryItem(supply.inventoryItemId);
+}
 
-        if (!normalizedQuery) {
-            return true;
-        }
+function shouldShowInventorySuggestions(supply) {
+    const query = String(supply?.searchQuery ?? "").trim().toLowerCase();
+    const selectedItem = getSelectedInventoryItem(supply);
 
-        return [item.nombre, item.categoria, item.unidad]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalizedQuery);
-    });
+    if (!query) {
+        return false;
+    }
+
+    if (
+        selectedItem &&
+        query === String(selectedItem.nombre ?? "").trim().toLowerCase()
+    ) {
+        return false;
+    }
+
+    return true;
 }
 
 function formatReservationLabel(reservation) {
@@ -251,7 +516,71 @@ function formatReservationLabel(reservation) {
     }`;
 }
 
+function handleReservationSelection() {
+    clientError.value = "";
+    if (form.procedureName === lastAutoProcedureName.value) {
+        form.procedureName = "";
+        lastAutoProcedureName.value = "";
+    }
+
+    emit(
+        "reservation-change",
+        Number(form.reservationId) > 0 ? Number(form.reservationId) : null
+    );
+}
+
+function getInitialSupplyQuantity(itemId) {
+    return (props.initialValue?.supplies ?? [])
+        .filter(
+            (supply) =>
+                Number(supply.inventoryItemId ?? supply.inventory_item_id) === Number(itemId)
+        )
+        .reduce((sum, supply) => sum + Number(supply.quantity ?? 0), 0);
+}
+
 function handleSubmit() {
+    if (!canSubmit.value) {
+        return;
+    }
+
+    clientError.value = "";
+
+    if (shouldShowSupplies.value) {
+        const groupedSupplies = form.supplies
+            .filter((supply) => Number(supply.inventoryItemId) > 0)
+            .reduce((map, supply) => {
+                const itemId = Number(supply.inventoryItemId);
+
+                if (!map.has(itemId)) {
+                    map.set(itemId, 0);
+                }
+
+                map.set(itemId, map.get(itemId) + Number(supply.quantity || 0));
+                return map;
+            }, new Map());
+
+        for (const [itemId, quantity] of groupedSupplies.entries()) {
+            const item = findInventoryItem(itemId);
+            const availability = getInventoryAvailability(item);
+
+            if (!availability.available) {
+                clientError.value = `El insumo ${item?.nombre ?? `#${itemId}`} no puede usarse en esta reserva: ${availability.label}.`;
+                return;
+            }
+
+            if (item?.controlaStock && !item.allowNegativeStock) {
+                const availableStock = Number(availability.stockRow?.currentStock ?? 0);
+                const initialQuantity = getInitialSupplyQuantity(itemId);
+                const allowedQuantity = availableStock + initialQuantity;
+
+                if (Number(quantity) > allowedQuantity) {
+                    clientError.value = `El insumo ${item.nombre} solo tiene ${availableStock} ${item.unidad} disponibles en esta sucursal.`;
+                    return;
+                }
+            }
+        }
+    }
+
     emit("submit", {
         reservationId: Number(form.reservationId),
         procedureName: form.procedureName,
@@ -284,9 +613,10 @@ function handleSubmit() {
         v-model="form.reservationId"
         class="finance-charge-form__select"
         :disabled="props.mode === 'edit' || !props.reservationOptions.length"
+        @change="handleReservationSelection"
       >
         <option :value="null" disabled>
-          {{ props.reservationOptions.length ? "Selecciona un procedimiento" : "No hay procedimientos listos para facturar" }}
+          {{ props.reservationOptions.length ? "Selecciona una reserva procedural" : "No hay procedimientos listos para facturar" }}
         </option>
         <option
           v-for="reservation in props.reservationOptions"
@@ -298,12 +628,55 @@ function handleSubmit() {
       </select>
     </label>
 
+    <div v-if="!form.reservationId" class="finance-charge-form__state">
+      Selecciona una reserva procedural para cargar el contexto de la factura.
+    </div>
+    <div v-else-if="props.reservationLoading" class="finance-charge-form__state">
+      Cargando reserva...
+    </div>
+    <p
+      v-else-if="props.reservationError && !hasReservationFallbackWarning"
+      class="finance-charge-form__error"
+    >
+      {{ props.reservationError }}
+    </p>
+    <p
+      v-else-if="hasReservationFallbackWarning"
+      class="finance-charge-form__warning"
+    >
+      {{ props.reservationError }}
+    </p>
+
+    <section
+      v-if="hasReservationContext"
+      class="finance-charge-form__reservation-card"
+    >
+      <div class="finance-charge-form__reservation-header">
+        <div>
+          <span class="finance-charge-form__reservation-eyebrow">Reserva seleccionada</span>
+          <h3>Contexto clinico de la factura</h3>
+        </div>
+      </div>
+
+      <div class="finance-charge-form__reservation-grid">
+        <article
+          v-for="item in reservationSummaryItems"
+          :key="item.label"
+          class="finance-charge-form__reservation-item"
+        >
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </article>
+      </div>
+    </section>
+
     <div class="finance-charge-form__grid">
       <BaseInput
         :model-value="form.procedureName"
         label="Nombre del procedimiento"
         placeholder="Ej. Cirugia menor"
         :required="true"
+        :disabled="!canEditChargeDetails"
         @update:model-value="form.procedureName = $event"
       />
       <div class="finance-charge-form__field">
@@ -312,7 +685,12 @@ function handleSubmit() {
           <strong>{{ activePricingModeLabel }}</strong>
           <p>La cuenta define esta modalidad desde Configuraciones y recepcion solo registra el cierre del caso.</p>
         </div>
-        <select v-else v-model="form.pricingMode" class="finance-charge-form__select">
+        <select
+          v-else
+          v-model="form.pricingMode"
+          class="finance-charge-form__select"
+          :disabled="!canEditChargeDetails"
+        >
           <option
             v-for="(label, key) in pricingModeLabels"
             :key="key"
@@ -330,11 +708,16 @@ function handleSubmit() {
         min="0"
         step="0.01"
         :required="form.pricingMode !== 'solo_insumos'"
+        :disabled="!canEditChargeDetails"
         @update:model-value="form.roomChargeAmount = $event"
       />
       <label class="finance-charge-form__field">
         <span class="finance-charge-form__label">Moneda</span>
-        <select v-model="form.currencyCode" class="finance-charge-form__select">
+        <select
+          v-model="form.currencyCode"
+          class="finance-charge-form__select"
+          :disabled="!canEditChargeDetails"
+        >
           <option
             v-for="currency in LATAM_CURRENCY_OPTIONS"
             :key="currency.code"
@@ -345,7 +728,7 @@ function handleSubmit() {
         </select>
       </label>
       <div class="finance-charge-form__field">
-        <span class="finance-charge-form__label">Estado del bill</span>
+        <span class="finance-charge-form__label">Estado de la factura</span>
         <div class="finance-charge-form__policy-card">
           <strong>{{ displayPaymentStatus }}</strong>
           <p>
@@ -354,7 +737,7 @@ function handleSubmit() {
                 ? "El pago ya fue confirmado en recepcion."
                 : displayPaymentStatus === "anulado"
                   ? "Este caso quedo anulado por decision administrativa."
-                  : "El bill se emite primero y el pago se confirma despues."
+                  : "La factura se emite primero y el pago se confirma despues."
             }}
           </p>
         </div>
@@ -364,7 +747,11 @@ function handleSubmit() {
         class="finance-charge-form__field"
       >
         <span class="finance-charge-form__label">Decision del caso</span>
-        <select v-model="form.chargeDecision" class="finance-charge-form__select">
+        <select
+          v-model="form.chargeDecision"
+          class="finance-charge-form__select"
+          :disabled="!canEditChargeDetails"
+        >
           <option value="cobrable">Cobrable</option>
           <option value="exonerado">Exonerado</option>
         </select>
@@ -383,6 +770,7 @@ function handleSubmit() {
       :rows="3"
       placeholder="Autorizado por direccion medica..."
       :required="true"
+      :disabled="!canEditChargeDetails"
       @update:model-value="form.waiverReason = $event"
     />
 
@@ -395,6 +783,7 @@ function handleSubmit() {
         <BaseButton
           variant="ghost"
           type="button"
+          :disabled="!canEditChargeDetails"
           @click="addSupplyLine"
         >
           Agregar insumo
@@ -411,35 +800,73 @@ function handleSubmit() {
         class="finance-charge-form__supply-card"
       >
         <div class="finance-charge-form__supply-grid">
-          <BaseInput
-            :model-value="supply.searchQuery"
-            label="Buscar en inventario"
-            placeholder="Ej. Hilos, agujas o paquetes"
-            @update:model-value="supply.searchQuery = $event"
-          />
-          <label class="finance-charge-form__field">
-            <span class="finance-charge-form__label">Insumo</span>
-            <select
-              v-model="supply.inventoryItemId"
-              class="finance-charge-form__select"
-              @change="handleSupplyItemChange(index)"
+          <div class="finance-charge-form__field finance-charge-form__inventory-field">
+            <BaseInput
+              :model-value="supply.searchQuery"
+              label="Buscar en inventario"
+              placeholder="Escribe hilos, agujas, paquetes..."
+              :disabled="!canEditChargeDetails"
+              @update:model-value="handleSupplySearchInput(index, $event)"
+            />
+
+            <div
+              v-if="getSelectedInventoryItem(supply)"
+              class="finance-charge-form__selected-item"
             >
-              <option value="">Selecciona un insumo</option>
-              <option
+              <div>
+                <strong>{{ getSelectedInventoryItem(supply)?.nombre }}</strong>
+                <span>
+                  {{ getSelectedInventoryItem(supply)?.categoria || "General" }} ·
+                  {{ getSelectedInventoryItem(supply)?.unidad }}
+                </span>
+                <span class="finance-charge-form__selected-item-stock">
+                  {{ getInventoryAvailability(getSelectedInventoryItem(supply)).label }}
+                </span>
+              </div>
+
+              <BaseButton
+                type="button"
+                size="sm"
+                variant="ghost"
+                :disabled="!canEditChargeDetails"
+                @click="clearInventoryItem(index)"
+              >
+                Cambiar
+              </BaseButton>
+            </div>
+
+            <div
+              v-if="shouldShowInventorySuggestions(supply)"
+              class="finance-charge-form__inventory-results"
+            >
+              <button
                 v-for="item in getVisibleInventoryOptions(supply.searchQuery, supply.inventoryItemId)"
                 :key="item.id"
-                :value="item.id"
+                type="button"
+                class="finance-charge-form__inventory-result"
+                :disabled="!canEditChargeDetails || !getInventoryAvailability(item).available"
+                @click="selectInventoryItem(index, item)"
               >
-                {{ item.nombre }} · {{ item.categoria || "General" }} · {{ item.unidad }}
-              </option>
-            </select>
-          </label>
+                <strong>{{ item.nombre }}</strong>
+                <span>{{ item.categoria || "General" }} · {{ item.unidad }}</span>
+                <small>{{ getInventoryAvailability(item).label }}</small>
+              </button>
+
+              <p
+                v-if="!getVisibleInventoryOptions(supply.searchQuery, supply.inventoryItemId).length"
+                class="finance-charge-form__inventory-empty"
+              >
+                No encontramos coincidencias con esa busqueda.
+              </p>
+            </div>
+          </div>
           <BaseInput
             :model-value="supply.quantity"
             label="Cantidad"
             type="number"
             min="0.01"
             step="0.01"
+            :disabled="!canEditChargeDetails"
             @update:model-value="supply.quantity = $event"
           />
           <BaseInput
@@ -448,6 +875,7 @@ function handleSubmit() {
             type="number"
             min="0"
             step="0.01"
+            :disabled="!canEditChargeDetails"
             @update:model-value="supply.unitCost = $event"
           />
           <BaseInput
@@ -456,6 +884,7 @@ function handleSubmit() {
             type="number"
             min="0"
             step="0.01"
+            :disabled="!canEditChargeDetails"
             @update:model-value="supply.unitPrice = $event"
           />
         </div>
@@ -464,6 +893,7 @@ function handleSubmit() {
           :model-value="supply.notes"
           label="Nota del insumo"
           placeholder="Ej. 2 paquetes de sutura"
+          :disabled="!canEditChargeDetails"
           @update:model-value="supply.notes = $event"
         />
 
@@ -481,6 +911,7 @@ function handleSubmit() {
           <BaseButton
             variant="ghost"
             type="button"
+            :disabled="!canEditChargeDetails"
             @click="removeSupplyLine(index)"
           >
             Quitar
@@ -518,23 +949,24 @@ function handleSubmit() {
 
     <BaseInput
       :model-value="form.notes"
-      label="Observaciones para el bill"
+      label="Observaciones de la factura"
       as="textarea"
       :rows="3"
       placeholder="Observacion administrativa o detalle para impresion"
+      :disabled="!canEditChargeDetails"
       @update:model-value="form.notes = $event"
     />
 
-    <p v-if="props.errorMessage" class="finance-charge-form__error">
-      {{ props.errorMessage }}
+    <p v-if="clientError || props.errorMessage" class="finance-charge-form__error">
+      {{ clientError || props.errorMessage }}
     </p>
 
     <div class="finance-charge-form__actions">
       <BaseButton variant="ghost" @click.prevent="emit('cancel')">
         Cancelar
       </BaseButton>
-      <BaseButton type="submit" :disabled="props.submitting">
-        {{ props.mode === "edit" ? "Guardar bill" : "Emitir bill" }}
+      <BaseButton type="submit" :disabled="!canSubmit">
+        {{ props.mode === "edit" ? "Guardar Factura" : "Emitir Factura" }}
       </BaseButton>
     </div>
   </form>
@@ -548,7 +980,8 @@ function handleSubmit() {
 }
 
 .finance-charge-form__grid,
-.finance-charge-form__supply-grid {
+.finance-charge-form__supply-grid,
+.finance-charge-form__reservation-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
@@ -558,6 +991,10 @@ function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+
+.finance-charge-form__inventory-field {
+  grid-column: 1 / -1;
 }
 
 .finance-charge-form__label {
@@ -575,7 +1012,8 @@ function handleSubmit() {
   outline: none;
 }
 
-.finance-charge-form__policy-card {
+.finance-charge-form__policy-card,
+.finance-charge-form__reservation-card {
   display: grid;
   gap: 0.35rem;
   padding: 0.9rem 1rem;
@@ -584,7 +1022,8 @@ function handleSubmit() {
   background: rgba(255, 255, 255, 0.86);
 }
 
-.finance-charge-form__policy-card strong {
+.finance-charge-form__policy-card strong,
+.finance-charge-form__reservation-item strong {
   color: var(--primary-dark);
 }
 
@@ -592,6 +1031,103 @@ function handleSubmit() {
   margin: 0;
   color: var(--text-soft);
   font-size: 0.9rem;
+}
+
+.finance-charge-form__reservation-header h3 {
+  margin: 0.35rem 0 0;
+}
+
+.finance-charge-form__reservation-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.32rem 0.72rem;
+  border-radius: 999px;
+  background: var(--hero-chip-bg);
+  color: var(--primary-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.finance-charge-form__reservation-item {
+  border-radius: 14px;
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  background: rgba(248, 252, 253, 0.92);
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.finance-charge-form__reservation-item span {
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
+.finance-charge-form__selected-item,
+.finance-charge-form__inventory-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 184, 159, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.finance-charge-form__selected-item strong,
+.finance-charge-form__inventory-result strong {
+  color: var(--primary-dark);
+}
+
+.finance-charge-form__selected-item span,
+.finance-charge-form__inventory-result span {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--text-soft);
+  text-align: left;
+}
+
+.finance-charge-form__selected-item-stock,
+.finance-charge-form__inventory-result small {
+  display: block;
+  margin-top: 0.22rem;
+  color: var(--primary-dark);
+  font-size: 0.82rem;
+}
+
+.finance-charge-form__inventory-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.finance-charge-form__inventory-result {
+  cursor: pointer;
+  text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.finance-charge-form__inventory-result:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.finance-charge-form__inventory-result:hover,
+.finance-charge-form__inventory-result:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(17, 184, 159, 0.3);
+  box-shadow: 0 14px 28px rgba(16, 38, 44, 0.08);
+}
+
+.finance-charge-form__inventory-empty {
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  background: rgba(17, 184, 159, 0.08);
+  color: var(--text-soft);
 }
 
 .finance-charge-form__hint {
@@ -669,7 +1205,8 @@ function handleSubmit() {
 }
 
 .finance-charge-form__state,
-.finance-charge-form__error {
+.finance-charge-form__error,
+.finance-charge-form__warning {
   margin: 0;
   padding: 0.9rem 1rem;
   border-radius: 18px;
@@ -678,6 +1215,12 @@ function handleSubmit() {
 .finance-charge-form__state {
   background: rgba(17, 184, 159, 0.08);
   color: var(--text-soft);
+}
+
+.finance-charge-form__warning {
+  background: rgba(255, 189, 97, 0.14);
+  border: 1px solid rgba(255, 189, 97, 0.2);
+  color: #7d4d0b;
 }
 
 .finance-charge-form__error {
@@ -695,7 +1238,8 @@ function handleSubmit() {
 @media (max-width: 760px) {
   .finance-charge-form__grid,
   .finance-charge-form__supply-grid,
-  .finance-charge-form__totals {
+  .finance-charge-form__totals,
+  .finance-charge-form__reservation-grid {
     grid-template-columns: 1fr;
   }
 
