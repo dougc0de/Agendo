@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
@@ -298,7 +298,7 @@ const filteredReservationOptions = computed(() => {
     });
 });
 const pendingReports = computed(() =>
-    reports.value.filter((report) => report.financialStatus !== "pagado")
+    reports.value.filter((report) => report.financialStatus === "pendiente")
 );
 const paidReports = computed(() =>
     reports.value.filter((report) => report.financialStatus === "pagado")
@@ -306,6 +306,17 @@ const paidReports = computed(() =>
 const displayedReports = computed(() =>
     billingView.value === "pagadas" ? paidReports.value : pendingReports.value
 );
+
+watch(billingView, (value) => {
+    if (value === "pagadas") {
+        filters.value.paymentStatus = "pagado";
+    } else if (value === "pendientes") {
+        filters.value.paymentStatus = "pendiente";
+    } else {
+        filters.value.paymentStatus = "todos";
+    }
+});
+
 let reservationRequestToken = 0;
 
 function formatCurrency(
@@ -1013,6 +1024,8 @@ async function handleConfirmPayment(payload) {
 
         feedback.value = response.msg;
         closePaymentModal();
+        billingView.value = "pagadas";
+        filters.value.paymentStatus = "pagado";
         await fetchFinanceData();
     } catch (requestError) {
         paymentModalError.value =
