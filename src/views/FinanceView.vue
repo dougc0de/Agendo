@@ -301,7 +301,10 @@ const pendingReports = computed(() =>
     reports.value.filter((report) => report.financialStatus === "pendiente")
 );
 const paidReports = computed(() =>
-    reports.value.filter((report) => report.financialStatus === "pagado")
+    reports.value.filter(
+        (report) =>
+            report.financialStatus === "pagado" || report.financialStatus === "anulado"
+    )
 );
 const displayedReports = computed(() =>
     billingView.value === "pagadas" ? paidReports.value : pendingReports.value
@@ -309,7 +312,7 @@ const displayedReports = computed(() =>
 
 watch(billingView, (value) => {
     if (value === "pagadas") {
-        filters.value.paymentStatus = "pagado";
+        filters.value.paymentStatus = "todos";
     } else if (value === "pendientes") {
         filters.value.paymentStatus = "pendiente";
     } else {
@@ -1286,15 +1289,14 @@ onMounted(() => {
                   </select>
                 </label>
                 <label
-                  v-if="billingView !== 'por_facturar'"
+                  v-if="billingView === 'pagadas'"
                   class="finance-filters__field"
                 >
                   <span class="finance-filters__label">Estado</span>
                   <select v-model="filters.paymentStatus" class="finance-filters__select">
-                    <option value="todos">Todos</option>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="pagado">Pagado</option>
-                    <option value="anulado">Anulado</option>
+                    <option value="todos">Todas</option>
+                    <option value="pagado">Pagadas</option>
+                    <option value="anulado">Anuladas</option>
                   </select>
                 </label>
                 <div class="finance-filters__presets">
