@@ -101,6 +101,8 @@ const currentPaymentReport = ref({});
 const selectedReservation = ref(null);
 const reservationLoading = ref(false);
 const reservationError = ref("");
+const reservationOptionsLoading = ref(false);
+const reservationOptionsError = ref("");
 const userOptions = ref([]);
 const roomOptions = ref([]);
 const branchOptions = ref([]);
@@ -528,13 +530,19 @@ async function loadSelectedReservation(reservationId, options = {}) {
 }
 
 async function fetchReservationOptions() {
+    reservationOptionsLoading.value = true;
+    reservationOptionsError.value = "";
+
+    const currentReservation =
+        currentReport.value.reservationId && selectedReservation.value
+            ? { ...selectedReservation.value }
+            : currentReport.value.reservationId
+              ? buildReservationSummaryFromReport(currentReport.value)
+            : null;
+
     try {
-        const response = await getFinanceBillableReservations(filters.value);
+        const response = await getFinanceBillableReservations();
         const billableReservations = response.data ?? [];
-        const currentReservation =
-            reportModalMode.value === "edit" && currentReport.value.reservationId
-                ? buildReservationSummaryFromReport(currentReport.value)
-                : null;
         const reservationMap = new Map(
             billableReservations.map((reservation) => [Number(reservation.id), reservation])
         );
@@ -548,8 +556,14 @@ async function fetchReservationOptions() {
             const rightKey = `${String(right.fecha ?? "")}T${String(right.horaInicio ?? "00:00").slice(0, 5)}`;
             return rightKey.localeCompare(leftKey);
         });
-    } catch {
-        reservationOptions.value = [];
+    } catch (requestError) {
+        reservationOptions.value = currentReservation ? [currentReservation] : [];
+        reservationOptionsError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible cargar las reservas facturables. Revisa la conexion e intenta de nuevo.";
+    } finally {
+        reservationOptionsLoading.value = false;
     }
 }
 
@@ -774,6 +788,7 @@ function openCreateReportModal(reservation = null) {
     selectedReservation.value = reservation ? { ...reservation } : null;
     reservationLoading.value = false;
     reservationError.value = "";
+    reservationOptionsError.value = "";
     reportModalError.value = "";
     reportModalOpen.value = true;
     fetchReservationOptions();
@@ -795,6 +810,7 @@ function openEditReportModal(report) {
     selectedReservation.value = buildReservationSummaryFromReport(report);
     reservationLoading.value = false;
     reservationError.value = "";
+    reservationOptionsError.value = "";
     reportModalError.value = "";
     reportModalOpen.value = true;
     fetchReservationOptions();
@@ -815,6 +831,7 @@ function closeReportModal() {
     selectedReservation.value = null;
     reservationLoading.value = false;
     reservationError.value = "";
+    reservationOptionsError.value = "";
 }
 
 function openCreateInventoryModal() {
@@ -1287,10 +1304,16 @@ onMounted(() => {
                   Cargando reportes...
                 </div>
                 <div
+                  v-else-if="billingView === 'por_facturar' && reservationOptionsError"
+                  class="finance-state finance-state--error"
+                >
+                  {{ reservationOptionsError }}
+                </div>
+                <div
                   v-else-if="billingView === 'por_facturar' && !filteredReservationOptions.length"
                   class="finance-state"
                 >
-                  No hay procedimientos listos para facturar con esos filtros.
+                  No hay procedimientos confirmados sin factura emitida con esos filtros.
                 </div>
                 <div
                   v-else-if="billingView !== 'por_facturar' && !displayedReports.length"
@@ -2018,6 +2041,8 @@ onMounted(() => {
         :default-currency-code="settings.defaultCurrencyCode"
         :can-waive="canWaive"
         :selected-reservation="selectedReservation"
+        :reservation-options-loading="reservationOptionsLoading"
+        :reservation-options-error="reservationOptionsError"
         :reservation-loading="reservationLoading"
         :reservation-error="reservationError"
         @reservation-change="handleReportReservationChange"
@@ -2190,6 +2215,12 @@ onMounted(() => {
 .finance-state {
   background: rgba(17, 184, 159, 0.08);
   color: var(--text-soft);
+}
+
+.finance-state--error {
+  background: rgba(235, 85, 69, 0.12);
+  border: 1px solid rgba(235, 85, 69, 0.2);
+  color: #b8392d;
 }
 
 .finance-stats {

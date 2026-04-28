@@ -53,6 +53,14 @@ const props = defineProps({
         type: Object,
         default: null
     },
+    reservationOptionsLoading: {
+        type: Boolean,
+        default: false
+    },
+    reservationOptionsError: {
+        type: String,
+        default: ""
+    },
     reservationLoading: {
         type: Boolean,
         default: false
@@ -138,6 +146,21 @@ const hasReservationContext = computed(
 const hasReservationFallbackWarning = computed(
     () => Boolean(props.reservationError) && hasReservationContext.value
 );
+const reservationSelectPlaceholder = computed(() => {
+    if (props.reservationOptionsLoading) {
+        return "Cargando reservas facturables";
+    }
+
+    if (props.reservationOptionsError) {
+        return "No fue posible cargar las reservas";
+    }
+
+    if (!props.reservationOptions.length) {
+        return "No hay procedimientos confirmados sin factura";
+    }
+
+    return "Selecciona una reserva procedural";
+});
 const canEditChargeDetails = computed(() => {
     if (!hasReservationContext.value) {
         return false;
@@ -612,11 +635,11 @@ function handleSubmit() {
       <select
         v-model="form.reservationId"
         class="finance-charge-form__select"
-        :disabled="props.mode === 'edit' || !props.reservationOptions.length"
+        :disabled="props.mode === 'edit' || props.reservationOptionsLoading || !props.reservationOptions.length"
         @change="handleReservationSelection"
       >
         <option :value="null" disabled>
-          {{ props.reservationOptions.length ? "Selecciona una reserva procedural" : "No hay procedimientos listos para facturar" }}
+          {{ reservationSelectPlaceholder }}
         </option>
         <option
           v-for="reservation in props.reservationOptions"
@@ -626,9 +649,30 @@ function handleSubmit() {
           {{ formatReservationLabel(reservation) }}
         </option>
       </select>
+      <span class="finance-charge-form__helper">
+        Solo se muestran procedimientos confirmados sin factura emitida.
+      </span>
     </label>
 
-    <div v-if="!form.reservationId" class="finance-charge-form__state">
+    <div
+      v-if="!form.reservationId && props.reservationOptionsLoading"
+      class="finance-charge-form__state"
+    >
+      Cargando reservas facturables...
+    </div>
+    <p
+      v-else-if="!form.reservationId && props.reservationOptionsError"
+      class="finance-charge-form__error"
+    >
+      {{ props.reservationOptionsError }}
+    </p>
+    <div
+      v-else-if="!form.reservationId && !props.reservationOptions.length"
+      class="finance-charge-form__state"
+    >
+      No hay procedimientos confirmados sin factura emitida en este momento.
+    </div>
+    <div v-else-if="!form.reservationId" class="finance-charge-form__state">
       Selecciona una reserva procedural para cargar el contexto de la factura.
     </div>
     <div v-else-if="props.reservationLoading" class="finance-charge-form__state">
@@ -1000,6 +1044,12 @@ function handleSubmit() {
 .finance-charge-form__label {
   font-size: 0.92rem;
   font-weight: 600;
+}
+
+.finance-charge-form__helper {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 
 .finance-charge-form__select {

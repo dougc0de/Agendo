@@ -424,11 +424,10 @@ function formatearReservaFacturable(filaReserva) {
     };
 }
 
-function esReservaFacturable(filaReserva, chargeMap, timeZone) {
+function esReservaFacturable(filaReserva, chargeMap) {
     return (
         filaReserva.tipo_atencion === "procedimiento" &&
         filaReserva.estado === "confirmada" &&
-        compareDateTimeToNow(filaReserva.fecha, filaReserva.hora_inicio, timeZone) <= 0 &&
         !chargeMap.has(Number(filaReserva.id))
     );
 }
@@ -901,7 +900,6 @@ export async function listarReservasFacturables(filtros, auth) {
             };
         }
 
-        const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
         const reservationRows = await listarReservasRepository(workspaceId);
         const chargeMap = new Map(
             (
@@ -917,9 +915,7 @@ export async function listarReservasFacturables(filtros, auth) {
             msg: "Reservas facturables listadas correctamente.",
             data: reservationRows
                 .filter((filaReserva) => cumpleFiltrosReservaParaResumen(filaReserva, filtros))
-                .filter((filaReserva) =>
-                    esReservaFacturable(filaReserva, chargeMap, settings.timeZone)
-                )
+                .filter((filaReserva) => esReservaFacturable(filaReserva, chargeMap))
                 .sort((left, right) => {
                     const leftKey = `${normalizarFecha(left.fecha)}T${normalizarHora(left.hora_inicio)}`;
                     const rightKey = `${normalizarFecha(right.fecha)}T${normalizarHora(right.hora_inicio)}`;

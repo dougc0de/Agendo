@@ -506,10 +506,7 @@ function validarReservaNoIniciadaEnPasado(datosReserva, settings) {
 }
 
 function debeOcultarseEnAgendaOperativa(filaReserva, financialCharge, timeZone) {
-    return (
-        deriveFinancialStatus(financialCharge) === "pagado" &&
-        compareReservationStartToNow(filaReserva, timeZone) <= 0
-    );
+    return deriveFinancialStatus(financialCharge) === "pagado";
 }
 
 async function construirMapaCobrosPorReserva(filasReservas, workspaceId) {
