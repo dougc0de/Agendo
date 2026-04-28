@@ -14,11 +14,12 @@ import RoomForm from "../components/rooms/RoomForm.vue";
 import { useAppointments } from "../composables/useAppointments.js";
 import { getAppointmentCalendar } from "../services/appointmentApi.js";
 import { getBranches } from "../services/branchApi.js";
+import { getInternalUsers } from "../services/internalUserApi.js";
 import { createPatient } from "../services/patientApi.js";
 import { createRoom, getRooms } from "../services/roomApi.js";
 import { getAccountSettings } from "../services/settingsApi.js";
 import { buildPrivateNavLinks } from "../shared/privateNavigation.js";
-import { isAdministrativeUser } from "../shared/roles.js";
+import { canAccessFinance, isAdministrativeUser, isDoctorUser } from "../shared/roles.js";
 import { useAuthStore } from "../stores/authStore.js";
 import {
     addDays,
@@ -38,9 +39,6 @@ const {
     loading,
     saving,
     error,
-    totalAppointments,
-    pendingAppointments,
-    confirmedAppointments,
     fetchAppointments,
     createAppointment,
     updateAppointment,
@@ -59,6 +57,8 @@ const accountSettings = ref({
     consultationDurationMinutes: 30,
     procedureDurationEnabled: false,
     procedureDurationMinutes: 60,
+    procedureTurnoverEnabled: false,
+    procedureTurnoverMinutes: 15,
     consultationOpenTime: "08:00",
     consultationCloseTime: "17:00",
     consultationNoClosing: false,
@@ -81,9 +81,13 @@ const calendarSummary = ref([]);
 const calendarItems = ref([]);
 const selectedCalendarDate = ref("");
 const calendarDetailModalOpen = ref(false);
+const internalUsers = ref([]);
+const doctorOptionsLoading = ref(false);
+const doctorOptionsError = ref("");
 const filters = ref({
     search: "",
-    status: "todos"
+    status: "todos",
+    scope: "clinica"
 });
 
 const fullMomentFormatter = new Intl.DateTimeFormat("es-CR", {
@@ -215,6 +219,20 @@ const isAdminUser = computed(() =>
         userRole: authStore.user?.rol
     })
 );
+const isDoctorActor = computed(() =>
+    isDoctorUser({
+        membershipRole: authStore.membershipRole,
+        userRole: authStore.user?.rol
+    })
+);
+const canAssignDoctor = computed(
+    () =>
+        !isDoctorActor.value &&
+        canAccessFinance({
+            membershipRole: authStore.membershipRole,
+            userRole: authStore.user?.rol
+        })
+);
 
 const navLinks = computed(() =>
     buildPrivateNavLinks({
@@ -254,11 +272,65 @@ const appointmentRoomOptions = computed(() => {
         return currentRoomId !== null && Number(room.id) === currentRoomId;
     });
 });
+const activeDoctorOptions = computed(() =>
+    internalUsers.value.filter(
+        (user) => user.role === "doctor" && user.estado === "activo"
+    )
+);
+
+function matchesDoctorScope(appointment) {
+    if (!isDoctorActor.value || filters.value.scope !== "mis_reservas") {
+        return true;
+    }
+
+    return Number(appointment?.usuarioId) === Number(authStore.user?.id ?? 0);
+}
+
+function buildCalendarSummaryFromAppointments(appointmentItems) {
+    return Object.values(
+        appointmentItems.reduce((accumulator, appointment) => {
+            const dateKey = String(appointment?.fecha ?? "").trim().slice(0, 10);
+
+            if (!dateKey) {
+                return accumulator;
+            }
+
+            if (!accumulator[dateKey]) {
+                accumulator[dateKey] = createEmptyCalendarSummary(dateKey);
+            }
+
+            const summary = accumulator[dateKey];
+            summary.total += 1;
+
+            if (appointment.estado === "pendiente") {
+                summary.pending += 1;
+            }
+
+            if (appointment.estado === "confirmada") {
+                summary.confirmed += 1;
+            }
+
+            if (appointment.estado === "cancelada") {
+                summary.cancelled += 1;
+            }
+
+            if (appointment.timeStatus === "en_curso") {
+                summary.inProgress += 1;
+            }
+
+            return accumulator;
+        }, {})
+    ).sort((left, right) => left.date.localeCompare(right.date));
+}
+
+const scopedAppointments = computed(() =>
+    appointments.value.filter((appointment) => matchesDoctorScope(appointment))
+);
 
 const filteredAppointments = computed(() => {
     const searchValue = String(filters.value.search ?? "").trim().toLowerCase();
 
-    return appointments.value.filter((appointment) => {
+    return scopedAppointments.value.filter((appointment) => {
         const matchesStatus =
             filters.value.status === "todos" ||
             appointment.estado === filters.value.status;
@@ -290,21 +362,21 @@ const nextVisibleAppointment = computed(() =>
 );
 
 const canceledAppointments = computed(
-    () => appointments.value.filter((appointment) => appointment.estado === "cancelada").length
+    () => scopedAppointments.value.filter((appointment) => appointment.estado === "cancelada").length
 );
 
 const statCards = computed(() => [
     {
         label: "Total",
-        value: totalAppointments.value
+        value: scopedAppointments.value.length
     },
     {
         label: "Pendientes",
-        value: pendingAppointments.value
+        value: scopedAppointments.value.filter((appointment) => appointment.estado === "pendiente").length
     },
     {
         label: "Confirmadas",
-        value: confirmedAppointments.value
+        value: scopedAppointments.value.filter((appointment) => appointment.estado === "confirmada").length
     },
     {
         label: "Canceladas",
@@ -335,8 +407,14 @@ const calendarRange = computed(() =>
     getScaleRange(calendarScale.value, calendarDate.value)
 );
 
-const calendarSummaryMap = computed(() => mapSummaryByDate(calendarSummary.value));
-const calendarItemsByDate = computed(() => groupAppointmentsByDate(calendarItems.value));
+const scopedCalendarItems = computed(() =>
+    calendarItems.value.filter((appointment) => matchesDoctorScope(appointment))
+);
+const scopedCalendarSummary = computed(() =>
+    buildCalendarSummaryFromAppointments(scopedCalendarItems.value)
+);
+const calendarSummaryMap = computed(() => mapSummaryByDate(scopedCalendarSummary.value));
+const calendarItemsByDate = computed(() => groupAppointmentsByDate(scopedCalendarItems.value));
 
 const activeCalendarAppointments = computed(() =>
     selectedCalendarDate.value
@@ -411,9 +489,13 @@ function openCreateModal() {
         return;
     }
 
+    if (canAssignDoctor.value && (!internalUsers.value.length || doctorOptionsError.value)) {
+        fetchInternalDoctorOptions();
+    }
+
     currentAppointment.value = {
         estado: "pendiente",
-        usuarioId: authStore.user?.id ?? null,
+        usuarioId: isDoctorActor.value ? authStore.user?.id ?? null : null,
         salaId: reservableRooms.value[0]?.id ?? null
     };
     modalOpen.value = true;
@@ -423,6 +505,11 @@ function openEditModal(appointment) {
     pageError.value = "";
     modalMode.value = "edit";
     modalError.value = "";
+
+    if (canAssignDoctor.value && (!internalUsers.value.length || doctorOptionsError.value)) {
+        fetchInternalDoctorOptions();
+    }
+
     currentAppointment.value = {
         ...appointment
     };
@@ -482,6 +569,31 @@ async function fetchBranches() {
     }
 }
 
+async function fetchInternalDoctorOptions() {
+    if (!canAssignDoctor.value) {
+        internalUsers.value = [];
+        doctorOptionsError.value = "";
+        doctorOptionsLoading.value = false;
+        return;
+    }
+
+    doctorOptionsLoading.value = true;
+    doctorOptionsError.value = "";
+
+    try {
+        const response = await getInternalUsers();
+        internalUsers.value = response.data ?? [];
+    } catch (requestError) {
+        internalUsers.value = [];
+        doctorOptionsError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible cargar los doctores disponibles para esta reserva.";
+    } finally {
+        doctorOptionsLoading.value = false;
+    }
+}
+
 async function fetchAccountSettings() {
     try {
         const response = await getAccountSettings();
@@ -492,6 +604,9 @@ async function fetchAccountSettings() {
             procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
             procedureDurationMinutes:
                 Number(response.data?.procedureDurationMinutes ?? 60) || 60,
+            procedureTurnoverEnabled: Boolean(response.data?.procedureTurnoverEnabled),
+            procedureTurnoverMinutes:
+                Number(response.data?.procedureTurnoverMinutes ?? 15) || 15,
             consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
             consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
             consultationNoClosing: Boolean(response.data?.consultationNoClosing),
@@ -509,6 +624,8 @@ async function fetchAccountSettings() {
             consultationDurationMinutes: 30,
             procedureDurationEnabled: false,
             procedureDurationMinutes: 60,
+            procedureTurnoverEnabled: false,
+            procedureTurnoverMinutes: 15,
             consultationOpenTime: "08:00",
             consultationCloseTime: "17:00",
             consultationNoClosing: false,
@@ -614,6 +731,7 @@ function normalizeComparableAppointment(source = {}) {
         descripcion: String(source.descripcion ?? "").trim(),
         tipoAtencion: String(source.tipoAtencion ?? "consulta").trim().toLowerCase(),
         tipoConsulta: String(source.tipoConsulta ?? "").trim(),
+        usuarioId: Number(source.usuarioId ?? 0) || null,
         pacienteId: Number(source.pacienteId ?? 0) || null,
         salaId: Number(source.salaId ?? 0) || null,
         estado: String(source.estado ?? "pendiente").trim().toLowerCase()
@@ -636,6 +754,7 @@ function shouldUseStatusOnlyUpdate(nextPayload) {
         currentComparable.descripcion === nextComparable.descripcion &&
         currentComparable.tipoAtencion === nextComparable.tipoAtencion &&
         currentComparable.tipoConsulta === nextComparable.tipoConsulta &&
+        currentComparable.usuarioId === nextComparable.usuarioId &&
         currentComparable.pacienteId === nextComparable.pacienteId &&
         currentComparable.salaId === nextComparable.salaId
     );
@@ -692,7 +811,7 @@ async function handleSaveAppointment(payload) {
         estado: payload.estado,
         tipoAtencion: payload.tipoAtencion,
         tipoConsulta: payload.tipoConsulta,
-        usuarioId: Number(payload.usuarioId || authStore.user?.id || 0) || null,
+        usuarioId: Number(payload.usuarioId || 0) || null,
         pacienteId: patientId,
         salaId: Number(payload.salaId)
     };
@@ -755,9 +874,14 @@ async function handleCreateRoom(payload) {
         if (shouldResumeReservation) {
             modalMode.value = "create";
             modalError.value = "";
+
+            if (canAssignDoctor.value && (!internalUsers.value.length || doctorOptionsError.value)) {
+                fetchInternalDoctorOptions();
+            }
+
             currentAppointment.value = {
                 estado: "pendiente",
-                usuarioId: authStore.user?.id ?? null,
+                usuarioId: isDoctorActor.value ? authStore.user?.id ?? null : null,
                 salaId: createdRoom?.id ?? reservableRooms.value[0]?.id ?? null
             };
             modalOpen.value = true;
@@ -792,7 +916,8 @@ async function handleDeleteAppointment(appointment) {
 function clearFilters() {
     filters.value = {
         search: "",
-        status: "todos"
+        status: "todos",
+        scope: isDoctorActor.value ? "mis_reservas" : "clinica"
     };
 }
 
@@ -817,7 +942,8 @@ async function bootstrapAppointments() {
         fetchAppointments(),
         fetchRooms(),
         fetchBranches(),
-        fetchAccountSettings()
+        fetchAccountSettings(),
+        fetchInternalDoctorOptions()
     ]);
 
     if (viewMode.value === "calendar") {
@@ -857,8 +983,9 @@ watch(
     }
 );
 
-onMounted(() => {
-    bootstrapAppointments();
+onMounted(async () => {
+    await bootstrapAppointments();
+    clearFilters();
 });
 </script>
 
@@ -961,15 +1088,21 @@ onMounted(() => {
                 {{ error }}
               </p>
 
-              <template v-if="viewMode === 'list'">
-                <AppointmentFilters
-                  :search="filters.search"
-                  :status="filters.status"
-                  @update:search="filters.search = $event"
-                  @update:status="filters.status = $event"
-                  @clear="clearFilters"
-                />
+              <AppointmentFilters
+                v-if="viewMode === 'list' || isDoctorActor"
+                :search="filters.search"
+                :status="filters.status"
+                :scope="filters.scope"
+                :show-search="viewMode === 'list'"
+                :show-status="viewMode === 'list'"
+                :show-scope="isDoctorActor"
+                @update:search="filters.search = $event"
+                @update:status="filters.status = $event"
+                @update:scope="filters.scope = $event"
+                @clear="clearFilters"
+              />
 
+              <template v-if="viewMode === 'list'">
                 <AppointmentTable
                   :appointments="filteredAppointments"
                   :loading="loading"
@@ -985,8 +1118,8 @@ onMounted(() => {
                 <AppointmentCalendar
                   :scale="calendarScale"
                   :active-date="calendarDate"
-                  :summary-by-date="calendarSummary"
-                  :items="calendarItems"
+                  :summary-by-date="scopedCalendarSummary"
+                  :items="scopedCalendarItems"
                   :loading="calendarLoading"
                   :error="calendarError"
                   @navigate="handleCalendarNavigate"
@@ -1066,6 +1199,12 @@ onMounted(() => {
         :mode="modalMode"
         :error-message="modalError"
         :current-user-id="authStore.user?.id ?? 0"
+        :current-user-name="authStore.user?.nombre ?? ''"
+        :is-doctor-actor="isDoctorActor"
+        :can-assign-doctor="canAssignDoctor"
+        :doctor-options="activeDoctorOptions"
+        :doctor-options-loading="doctorOptionsLoading"
+        :doctor-options-error="doctorOptionsError"
         :rooms="appointmentRoomOptions"
         @submit="handleSaveAppointment"
         @cancel="closeModal"

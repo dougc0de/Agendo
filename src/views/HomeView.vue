@@ -145,6 +145,8 @@ function submitContact() {
           </div>
         </section>
 
+<Divisor />
+        
         <section id="servicios" v-reveal class="section-block section-shell">
           <div class="section-heading">
             <span class="section-label">Servicios</span>

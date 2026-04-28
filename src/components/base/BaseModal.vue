@@ -55,12 +55,14 @@ const emit = defineEmits(["close"]);
 .modal-card {
   width: min(940px, 100%);
   max-height: calc(100vh - 2rem);
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: var(--shadow);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-strong);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  backdrop-filter: blur(14px);
 }
 
 .modal-header {
@@ -68,7 +70,7 @@ const emit = defineEmits(["close"]);
   justify-content: space-between;
   gap: 1rem;
   padding: 1.2rem 1.4rem;
-  border-bottom: 1px solid #deeaef;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .modal-title {

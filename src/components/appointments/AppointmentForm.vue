@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import { searchPatients } from "../../services/patientApi.js";
@@ -25,6 +25,30 @@ const props = defineProps({
         type: Number,
         default: 0
     },
+    currentUserName: {
+        type: String,
+        default: ""
+    },
+    isDoctorActor: {
+        type: Boolean,
+        default: false
+    },
+    canAssignDoctor: {
+        type: Boolean,
+        default: false
+    },
+    doctorOptions: {
+        type: Array,
+        default: () => []
+    },
+    doctorOptionsLoading: {
+        type: Boolean,
+        default: false
+    },
+    doctorOptionsError: {
+        type: String,
+        default: ""
+    },
     rooms: {
         type: Array,
         default: () => []
@@ -42,7 +66,7 @@ function createDefaultForm() {
         estado: "pendiente",
         tipoAtencion: "consulta",
         tipoConsulta: "",
-        usuarioId: Number(props.currentUserId) || null,
+        usuarioId: props.isDoctorActor ? Number(props.currentUserId) || null : null,
         salaId: null
     };
 }
@@ -83,6 +107,79 @@ const patientSearchError = ref("");
 const patientValidationError = ref("");
 const formValidationError = ref("");
 const selectedPatient = ref(null);
+const selectedRoom = computed(
+    () =>
+        props.rooms.find((room) => Number(room.id) === Number(form.salaId)) ?? null
+);
+const filteredDoctorOptions = computed(() => {
+    if (!props.canAssignDoctor) {
+        return [];
+    }
+
+    const roomBranchId =
+        Number(selectedRoom.value?.sucursalId ?? selectedRoom.value?.sucursal_id ?? 0) || null;
+
+    return props.doctorOptions.filter((doctor) => {
+        const doctorBranchId = Number(doctor.sucursalId ?? 0) || null;
+        return doctorBranchId === roomBranchId;
+    });
+});
+const selectedDoctorOption = computed(
+    () =>
+        props.doctorOptions.find((doctor) => Number(doctor.id) === Number(form.usuarioId)) ?? null
+);
+const doctorSelectionDisabled = computed(
+    () =>
+        props.doctorOptionsLoading ||
+        Boolean(props.doctorOptionsError) ||
+        !selectedRoom.value ||
+        !filteredDoctorOptions.value.length
+);
+const doctorFieldPlaceholder = computed(() => {
+    if (props.doctorOptionsLoading) {
+        return "Cargando doctores";
+    }
+
+    if (!selectedRoom.value) {
+        return "Selecciona primero una sala";
+    }
+
+    if (props.doctorOptionsError) {
+        return "No fue posible cargar doctores";
+    }
+
+    if (!filteredDoctorOptions.value.length) {
+        return "No hay doctores activos en esta sucursal";
+    }
+
+    return "Selecciona un doctor responsable";
+});
+const doctorReadOnlyName = computed(
+    () =>
+        props.initialValue?.usuarioNombre ||
+        selectedDoctorOption.value?.nombre ||
+        props.currentUserName ||
+        "Responsable sin nombre"
+);
+const doctorFieldHelper = computed(() => {
+    if (props.isDoctorActor) {
+        return "Esta reserva quedara a tu nombre como responsable.";
+    }
+
+    if (props.doctorOptionsError) {
+        return props.doctorOptionsError;
+    }
+
+    if (props.canAssignDoctor && selectedRoom.value && !filteredDoctorOptions.value.length) {
+        return "No hay doctores activos disponibles en la sucursal de esta sala.";
+    }
+
+    if (props.canAssignDoctor) {
+        return "Debes adjudicar la reserva a un doctor activo de la misma sucursal de la sala.";
+    }
+
+    return "";
+});
 
 let patientSearchTimeout = null;
 let patientSearchRequest = 0;
@@ -120,8 +217,10 @@ function resetPatientState() {
 function syncForm() {
     Object.assign(form, createDefaultForm(), props.initialValue ?? {});
 
-    if (!Number.isInteger(Number(form.usuarioId)) || Number(form.usuarioId) <= 0) {
+    if (props.isDoctorActor && !props.initialValue?.id) {
         form.usuarioId = Number(props.currentUserId) || null;
+    } else if (!Number.isInteger(Number(form.usuarioId)) || Number(form.usuarioId) <= 0) {
+        form.usuarioId = null;
     }
 
     if (!hasValidRoomId(form.salaId)) {
@@ -137,7 +236,7 @@ watch(() => props.initialValue, syncForm, { deep: true, immediate: true });
 watch(
     () => props.currentUserId,
     (value) => {
-        if (!props.initialValue?.id) {
+        if (props.isDoctorActor && !props.initialValue?.id) {
             form.usuarioId = Number(value) || null;
         }
     }
@@ -160,6 +259,26 @@ watch(
         }
     },
     { deep: true, immediate: true }
+);
+
+watch(
+    [selectedRoom, filteredDoctorOptions, () => props.canAssignDoctor],
+    ([room, doctorOptions, canAssignDoctorValue]) => {
+        if (!canAssignDoctorValue || !room) {
+            return;
+        }
+
+        const currentDoctorId = Number(form.usuarioId) || null;
+
+        if (!currentDoctorId) {
+            return;
+        }
+
+        if (!doctorOptions.some((doctor) => Number(doctor.id) === currentDoctorId)) {
+            form.usuarioId = null;
+        }
+    },
+    { immediate: true }
 );
 
 watch(patientSearch, (value) => {
@@ -324,6 +443,41 @@ function handleSubmit() {
         return;
     }
 
+    if (props.canAssignDoctor) {
+        if (props.doctorOptionsLoading) {
+            formValidationError.value = "Espera a que cargue la lista de doctores disponibles.";
+            return;
+        }
+
+        if (props.doctorOptionsError) {
+            formValidationError.value = props.doctorOptionsError;
+            return;
+        }
+
+        if (!selectedRoom.value) {
+            formValidationError.value = "Selecciona una sala antes de adjudicar un doctor.";
+            return;
+        }
+
+        if (!filteredDoctorOptions.value.length) {
+            formValidationError.value =
+                "No hay doctores activos disponibles en la sucursal de esta sala.";
+            return;
+        }
+
+        if (
+            !filteredDoctorOptions.value.some(
+                (doctor) => Number(doctor.id) === Number(form.usuarioId)
+            )
+        ) {
+            formValidationError.value =
+                "Selecciona un doctor responsable para esta reserva.";
+            return;
+        }
+    } else if (props.isDoctorActor) {
+        form.usuarioId = Number(props.currentUserId) || null;
+    }
+
     const paciente = buildPatientPayload();
 
     if (!paciente) {
@@ -338,7 +492,7 @@ function handleSubmit() {
         estado: form.estado,
         tipoAtencion: form.tipoAtencion,
         tipoConsulta: form.tipoConsulta,
-        usuarioId: Number(form.usuarioId || props.currentUserId || 0) || null,
+        usuarioId: Number(form.usuarioId || 0) || null,
         salaId: Number(form.salaId),
         paciente
     });
@@ -370,6 +524,44 @@ function handleSubmit() {
           </option>
         </select>
       </label>
+      <label
+        v-if="props.canAssignDoctor"
+        class="appointment-form__field appointment-form__field--compact"
+      >
+        <span class="appointment-form__label">
+          Doctor responsable
+          <span class="appointment-form__required">*</span>
+        </span>
+        <select
+          v-model="form.usuarioId"
+          class="appointment-form__select"
+          :disabled="doctorSelectionDisabled"
+        >
+          <option :value="null" disabled>
+            {{ doctorFieldPlaceholder }}
+          </option>
+          <option
+            v-for="doctor in filteredDoctorOptions"
+            :key="doctor.id"
+            :value="doctor.id"
+          >
+            {{ doctor.nombre }} · {{ doctor.sucursalNombre || "Sucursal sin nombre" }}
+          </option>
+        </select>
+        <span class="appointment-form__helper" :class="{ 'appointment-form__helper--error': props.doctorOptionsError }">
+          {{ doctorFieldHelper }}
+        </span>
+      </label>
+      <div
+        v-else-if="props.isDoctorActor"
+        class="appointment-form__field appointment-form__field--compact"
+      >
+        <span class="appointment-form__label">Responsable</span>
+        <div class="appointment-form__readonly-card">
+          <strong>{{ doctorReadOnlyName }}</strong>
+          <span>{{ doctorFieldHelper }}</span>
+        </div>
+      </div>
       <BaseInput
         :model-value="form.fecha"
         label="Fecha"
@@ -614,7 +806,13 @@ function handleSubmit() {
           Busca un paciente existente o crea uno nuevo antes de guardar la reserva.
         </p>
         <p class="appointment-form__helper">
-          La reserva usara tu usuario actual de sesion.
+          {{
+            props.isDoctorActor
+              ? "Esta reserva quedara a tu nombre como responsable."
+              : props.canAssignDoctor
+                ? "Debes adjudicar la reserva a un doctor activo de la misma sucursal de la sala."
+                : "Verifica que la reserva tenga un responsable doctor correcto antes de guardarla."
+          }}
         </p>
       </div>
     </div>
@@ -678,6 +876,25 @@ function handleSubmit() {
   color: var(--text);
   padding: 0.8rem 0.9rem;
   outline: none;
+}
+
+.appointment-form__readonly-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 8px;
+  background: var(--hero-surface-alt);
+  border: 1px solid rgba(17, 184, 159, 0.18);
+}
+
+.appointment-form__readonly-card strong {
+  color: var(--primary-dark);
+}
+
+.appointment-form__readonly-card span {
+  color: var(--text-soft);
+  font-size: 0.9rem;
 }
 
 .appointment-form__patient-panel {
@@ -819,6 +1036,10 @@ function handleSubmit() {
   margin: 0;
   color: var(--text-soft);
   font-size: 0.9rem;
+}
+
+.appointment-form__helper--error {
+  color: #b8392d;
 }
 
 .appointment-form__error {

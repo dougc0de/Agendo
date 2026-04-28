@@ -30,6 +30,8 @@ function createDefaultForm() {
         consultationDurationMinutes: 30,
         procedureDurationEnabled: false,
         procedureDurationMinutes: 60,
+        procedureTurnoverEnabled: false,
+        procedureTurnoverMinutes: 15,
         consultationOpenTime: "08:00",
         consultationCloseTime: "17:00",
         consultationNoClosing: false,
@@ -55,10 +57,12 @@ watch(
 
 function handleSubmit() {
     emit("submit", {
-        consultationDurationEnabled: Boolean(form.consultationDurationEnabled),
+        consultationDurationEnabled: true,
         consultationDurationMinutes: Number(form.consultationDurationMinutes),
-        procedureDurationEnabled: Boolean(form.procedureDurationEnabled),
+        procedureDurationEnabled: true,
         procedureDurationMinutes: Number(form.procedureDurationMinutes),
+        procedureTurnoverEnabled: Boolean(form.procedureTurnoverEnabled),
+        procedureTurnoverMinutes: Number(form.procedureTurnoverMinutes),
         consultationOpenTime: form.consultationOpenTime,
         consultationCloseTime: form.consultationNoClosing ? null : form.consultationCloseTime,
         consultationNoClosing: Boolean(form.consultationNoClosing),
@@ -78,17 +82,10 @@ function handleSubmit() {
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
         <h3>Consulta</h3>
-        <p>Decide si quieres guardar un tiempo de referencia para consultas o dejar que cada reserva lo defina libremente.</p>
+        <p>Define el tiempo base que tu clinica suele usar como referencia para consultas y la ventana operativa del servicio.</p>
       </div>
 
       <div class="account-settings-form__grid">
-        <label class="account-settings-form__checkbox">
-          <input
-            v-model="form.consultationDurationEnabled"
-            type="checkbox"
-          >
-          <span>Usar tiempo de referencia para consultas</span>
-        </label>
         <BaseInput
           :model-value="form.consultationDurationMinutes"
           label="Tiempo de referencia de consultas"
@@ -96,8 +93,7 @@ function handleSubmit() {
           min="5"
           max="480"
           placeholder="30"
-          :required="form.consultationDurationEnabled"
-          :disabled="!form.consultationDurationEnabled"
+          :required="true"
           @update:model-value="form.consultationDurationMinutes = $event"
         />
         <BaseInput
@@ -128,17 +124,10 @@ function handleSubmit() {
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
         <h3>Procedimiento</h3>
-        <p>Los procedimientos respetan la ventana operativa, pero el tiempo real lo define el doctor al reservar.</p>
+        <p>Configura el tiempo base de referencia y si la sala debe reservar minutos extra de preparacion o limpieza despues de cada procedimiento.</p>
       </div>
 
       <div class="account-settings-form__grid">
-        <label class="account-settings-form__checkbox">
-          <input
-            v-model="form.procedureDurationEnabled"
-            type="checkbox"
-          >
-          <span>Guardar tiempo de referencia para procedimientos</span>
-        </label>
         <BaseInput
           :model-value="form.procedureDurationMinutes"
           label="Tiempo de referencia de procedimientos"
@@ -146,8 +135,7 @@ function handleSubmit() {
           min="5"
           max="480"
           placeholder="60"
-          :required="form.procedureDurationEnabled"
-          :disabled="!form.procedureDurationEnabled"
+          :required="true"
           @update:model-value="form.procedureDurationMinutes = $event"
         />
         <BaseInput
@@ -172,6 +160,24 @@ function handleSubmit() {
           >
           <span>Sin cierre para procedimientos</span>
         </label>
+        <label class="account-settings-form__checkbox">
+          <input
+            v-model="form.procedureTurnoverEnabled"
+            type="checkbox"
+          >
+          <span>Aplicar tiempo entre procedimientos por uso de sala</span>
+        </label>
+        <BaseInput
+          :model-value="form.procedureTurnoverMinutes"
+          label="Minutos de separacion despues del procedimiento"
+          type="number"
+          min="5"
+          max="480"
+          placeholder="15"
+          :required="form.procedureTurnoverEnabled"
+          :disabled="!form.procedureTurnoverEnabled"
+          @update:model-value="form.procedureTurnoverMinutes = $event"
+        />
         <label class="account-settings-form__field">
           <span class="account-settings-form__label">Politica procedural</span>
           <select
@@ -242,7 +248,8 @@ function handleSubmit() {
 
     <div class="account-settings-form__tips">
       <p>Las reservas activas se calculan segun la hora final y la zona horaria de la cuenta.</p>
-      <p>Los tiempos de referencia no se aplican automaticamente en reservas; solo sirven como politica interna si tu clinica decide usarlos.</p>
+      <p>Los tiempos de referencia ayudan a estandarizar la agenda, pero el doctor aun puede ajustar la duracion real al reservar.</p>
+      <p>Si activas la separacion entre procedimientos, la sala quedara bloqueada esos minutos antes de permitir la siguiente reserva.</p>
       <p>La recepcion ejecuta la modalidad procedural definida aqui y luego genera la factura imprimible desde Finanzas.</p>
       <p>Si una factura usa una moneda distinta a la base de la cuenta, recepcion puede ajustarla manualmente para ese caso.</p>
     </div>
@@ -326,7 +333,7 @@ function handleSubmit() {
   width: 100%;
   border: 1px solid #bfd4dc;
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   padding: 0.8rem 0.9rem;
   outline: none;

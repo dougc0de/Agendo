@@ -355,6 +355,8 @@ export async function signupWorkspaceOwner(payload) {
                     consultationDurationMinutes: 30,
                     procedureDurationEnabled: false,
                     procedureDurationMinutes: 60,
+                    procedureTurnoverEnabled: false,
+                    procedureTurnoverMinutes: 15,
                     consultationOpenTime: clinic.horaApertura,
                     consultationCloseTime: clinic.horaCierre,
                     consultationNoClosing: false,

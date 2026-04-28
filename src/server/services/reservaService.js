@@ -12,8 +12,14 @@ import {
 import { buscarSalaPorId } from "../repositories/salaRepository.js";
 import { buscarPacientePorId as buscarPacientePorIdRepository } from "../repositories/pacienteRepository.js";
 import { listarCobrosPorReservationIds } from "../repositories/financeRepository.js";
+import { buscarUsuarioInternoPorId } from "../repositories/workspaceMemberRepository.js";
 import { obtenerConfiguracionOperativaNormalizada } from "./workspaceSettingsService.js";
-import { canViewAllPastReservations } from "../../shared/roles.js";
+import {
+    canAccessFinance,
+    canViewAllPastReservations,
+    isDoctorUser,
+    normalizeRole
+} from "../../shared/roles.js";
 
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
 const TIPOS_ATENCION_PERMITIDOS = ["consulta", "procedimiento"];
@@ -44,6 +50,59 @@ function resolveUserId(auth) {
     }
 
     return userId;
+}
+
+function actorPuedeAsignarDoctorResponsable(auth) {
+    return canAccessFinance({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+}
+
+function resolverUsuarioResponsable(datosReserva, auth, options = {}) {
+    const actorUserId = resolveUserId(auth);
+    const actorEsDoctor = isDoctorUser({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+    const currentResponsibleUserId =
+        Number(options.currentResponsibleUserId ?? 0) || null;
+
+    if (!actorUserId) {
+        return {
+            ok: false,
+            msg: "No autorizado. Falta el usuario de sesion."
+        };
+    }
+
+    if (actorEsDoctor) {
+        return {
+            ok: true,
+            data: currentResponsibleUserId ?? actorUserId
+        };
+    }
+
+    if (!actorPuedeAsignarDoctorResponsable(auth)) {
+        return {
+            ok: false,
+            msg: "No autorizado. Tu rol no puede asignar responsables en reservas."
+        };
+    }
+
+    const requestedResponsibleUserId =
+        Number(datosReserva?.usuarioId ?? currentResponsibleUserId ?? 0) || null;
+
+    if (!requestedResponsibleUserId) {
+        return {
+            ok: false,
+            msg: "Debes seleccionar un doctor responsable para esta reserva."
+        };
+    }
+
+    return {
+        ok: true,
+        data: requestedResponsibleUserId
+    };
 }
 
 function normalizarFecha(fecha) {
@@ -354,8 +413,58 @@ async function obtenerSala(salaId, workspaceId) {
     return {
         ok: true,
         data: {
-            sala
+            sala,
+            filaSala
         }
+    };
+}
+
+function doctorInternoEstaActivo(filaUsuario) {
+    return filaUsuario?.membership_estado === "activo" && filaUsuario?.user_estado === "activo";
+}
+
+function doctorPerteneceALaSucursalDeSala(filaUsuario, filaSala) {
+    const doctorBranchId = Number(filaUsuario?.sucursal_id ?? 0) || null;
+    const roomBranchId = Number(filaSala?.sucursal_id ?? 0) || null;
+    return doctorBranchId === roomBranchId;
+}
+
+async function validarDoctorResponsable(usuarioId, workspaceId, filaSala) {
+    const filaUsuario = await buscarUsuarioInternoPorId(usuarioId, workspaceId);
+
+    if (!filaUsuario) {
+        return {
+            ok: false,
+            msg: "El doctor responsable seleccionado no existe en esta cuenta."
+        };
+    }
+
+    const role = normalizeRole(filaUsuario.membership_role || filaUsuario.rol);
+
+    if (role !== "doctor") {
+        return {
+            ok: false,
+            msg: "El responsable seleccionado debe ser un doctor activo de la misma sucursal de la sala."
+        };
+    }
+
+    if (!doctorInternoEstaActivo(filaUsuario)) {
+        return {
+            ok: false,
+            msg: "El doctor responsable seleccionado esta inactivo."
+        };
+    }
+
+    if (!doctorPerteneceALaSucursalDeSala(filaUsuario, filaSala)) {
+        return {
+            ok: false,
+            msg: "El doctor responsable debe pertenecer a la misma sucursal de la sala."
+        };
+    }
+
+    return {
+        ok: true,
+        data: filaUsuario
     };
 }
 
@@ -397,6 +506,76 @@ function validarReservaContraConfiguracionOperativa(datosReserva, settings) {
     return {
         ok: true
     };
+}
+
+function horaAMinutos(hora) {
+    const normalizedTime = normalizarHora(hora);
+
+    if (!normalizedTime) {
+        return null;
+    }
+
+    const [hours, minutes] = normalizedTime.split(":").map((value) => Number(value));
+
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+        return null;
+    }
+
+    return hours * 60 + minutes;
+}
+
+function reservaConsumeAgenda(datosReserva) {
+    return normalizarTexto(datosReserva?.estado).toLowerCase() !== "cancelada";
+}
+
+function reservaEsProcedimiento(datosReserva) {
+    return normalizarTipoAtencion(datosReserva?.tipoAtencion ?? datosReserva?.tipo_atencion) === "procedimiento";
+}
+
+function hayConflictoPorBufferDeProcedimiento(nuevaReserva, reservaExistente, settings) {
+    if (!settings?.procedureTurnoverEnabled) {
+        return false;
+    }
+
+    const turnoverMinutes = Number(settings?.procedureTurnoverMinutes ?? 0);
+
+    if (!Number.isInteger(turnoverMinutes) || turnoverMinutes <= 0) {
+        return false;
+    }
+
+    if (!reservaConsumeAgenda(nuevaReserva) || !reservaConsumeAgenda(reservaExistente)) {
+        return false;
+    }
+
+    const newStartMinutes = horaAMinutos(nuevaReserva.horaInicio);
+    const newEndMinutes = horaAMinutos(nuevaReserva.horaFin);
+    const existingStartMinutes = horaAMinutos(reservaExistente.hora_inicio);
+    const existingEndMinutes = horaAMinutos(reservaExistente.hora_fin);
+
+    if (
+        !Number.isInteger(newStartMinutes) ||
+        !Number.isInteger(newEndMinutes) ||
+        !Number.isInteger(existingStartMinutes) ||
+        !Number.isInteger(existingEndMinutes)
+    ) {
+        return false;
+    }
+
+    if (existingEndMinutes <= newStartMinutes) {
+        return (
+            reservaEsProcedimiento(reservaExistente) &&
+            newStartMinutes < existingEndMinutes + turnoverMinutes
+        );
+    }
+
+    if (newEndMinutes <= existingStartMinutes) {
+        return (
+            reservaEsProcedimiento(nuevaReserva) &&
+            newEndMinutes + turnoverMinutes > existingStartMinutes
+        );
+    }
+
+    return false;
 }
 
 function compareDateTimeToNow(fecha, hora, timeZone) {
@@ -840,6 +1019,16 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
         return resultadoSala;
     }
 
+    const validacionDoctorResponsable = await validarDoctorResponsable(
+        datosNormalizados.usuarioId,
+        workspaceId,
+        resultadoSala.data.filaSala
+    );
+
+    if (!validacionDoctorResponsable.ok) {
+        return validacionDoctorResponsable;
+    }
+
     const reservaDominio = construirReservaDominio(datosNormalizados);
     const validacionHorario = reservaDominio.validarHorario();
 
@@ -902,6 +1091,17 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
         return {
             ok: false,
             msg: "La sala ya tiene una reserva en ese horario."
+        };
+    }
+
+    const hayChoquePorBuffer = filasReservasExistentes.some((filaReservaExistente) =>
+        hayConflictoPorBufferDeProcedimiento(datosNormalizados, filaReservaExistente, settings)
+    );
+
+    if (hayChoquePorBuffer) {
+        return {
+            ok: false,
+            msg: `Debes dejar ${settings.procedureTurnoverMinutes} minutos de separacion despues de cada procedimiento en esta sala.`
         };
     }
 
@@ -1114,10 +1314,16 @@ export async function crearReserva(datosReserva, auth) {
             };
         }
 
+        const resultadoResponsable = resolverUsuarioResponsable(datosReserva, auth);
+
+        if (!resultadoResponsable.ok) {
+            return resultadoResponsable;
+        }
+
         const resultadoValidacion = await validarReservaContraContexto(
             {
                 ...datosReserva,
-                usuarioId
+                usuarioId: resultadoResponsable.data
             },
             auth
         );
@@ -1194,11 +1400,21 @@ export async function editarReserva(id, datosReserva, auth) {
             tipoConsulta: datosReserva?.tipoConsulta ?? filaReservaActual.tipo_consulta,
             appointmentOutcome:
                 datosReserva?.appointmentOutcome ?? filaReservaActual.appointment_outcome ?? "pendiente",
-            usuarioId,
+            usuarioId: filaReservaActual.usuario_id,
             pacienteId: datosReserva?.pacienteId ?? filaReservaActual.paciente_id,
             salaId: datosReserva?.salaId ?? filaReservaActual.sala_id,
             workspaceId
         };
+
+        const resultadoResponsable = resolverUsuarioResponsable(datosReserva, auth, {
+            currentResponsibleUserId: filaReservaActual.usuario_id
+        });
+
+        if (!resultadoResponsable.ok) {
+            return resultadoResponsable;
+        }
+
+        datosActualizados.usuarioId = resultadoResponsable.data;
 
         const resultadoValidacion = await validarReservaContraContexto(
             datosActualizados,

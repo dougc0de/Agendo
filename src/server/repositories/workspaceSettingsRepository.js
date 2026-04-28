@@ -24,6 +24,8 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
                     consultation_duration_minutes,
                     procedure_duration_enabled,
                     procedure_duration_minutes,
+                    procedure_turnover_enabled,
+                    procedure_turnover_minutes,
                     consultation_open_time,
                     consultation_close_time,
                     consultation_no_closing,
@@ -35,7 +37,7 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
                     default_procedure_pricing_mode,
                     default_currency_code
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             RETURNING *
         `,
         [
@@ -44,6 +46,8 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
             datosSettings.consultationDurationMinutes,
             datosSettings.procedureDurationEnabled,
             datosSettings.procedureDurationMinutes,
+            datosSettings.procedureTurnoverEnabled,
+            datosSettings.procedureTurnoverMinutes,
             datosSettings.consultationOpenTime,
             datosSettings.consultationCloseTime,
             datosSettings.consultationNoClosing,
@@ -69,16 +73,18 @@ export async function actualizarWorkspaceSettings(workspaceId, datosSettings, ex
                 consultation_duration_minutes = $3,
                 procedure_duration_enabled = $4,
                 procedure_duration_minutes = $5,
-                consultation_open_time = $6,
-                consultation_close_time = $7,
-                consultation_no_closing = $8,
-                procedure_open_time = $9,
-                procedure_close_time = $10,
-                procedure_no_closing = $11,
-                time_zone = $12,
-                procedure_pricing_policy = $13,
-                default_procedure_pricing_mode = $14,
-                default_currency_code = $15
+                procedure_turnover_enabled = $6,
+                procedure_turnover_minutes = $7,
+                consultation_open_time = $8,
+                consultation_close_time = $9,
+                consultation_no_closing = $10,
+                procedure_open_time = $11,
+                procedure_close_time = $12,
+                procedure_no_closing = $13,
+                time_zone = $14,
+                procedure_pricing_policy = $15,
+                default_procedure_pricing_mode = $16,
+                default_currency_code = $17
             WHERE workspace_id = $1
             RETURNING *
         `,
@@ -88,6 +94,8 @@ export async function actualizarWorkspaceSettings(workspaceId, datosSettings, ex
             datosSettings.consultationDurationMinutes,
             datosSettings.procedureDurationEnabled,
             datosSettings.procedureDurationMinutes,
+            datosSettings.procedureTurnoverEnabled,
+            datosSettings.procedureTurnoverMinutes,
             datosSettings.consultationOpenTime,
             datosSettings.consultationCloseTime,
             datosSettings.consultationNoClosing,

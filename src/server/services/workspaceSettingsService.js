@@ -12,8 +12,10 @@ import {
 
 const DEFAULT_CONSULTATION_DURATION = 30;
 const DEFAULT_PROCEDURE_DURATION = 60;
+const DEFAULT_PROCEDURE_TURNOVER_DURATION = 15;
 const DEFAULT_CONSULTATION_DURATION_ENABLED = false;
 const DEFAULT_PROCEDURE_DURATION_ENABLED = false;
+const DEFAULT_PROCEDURE_TURNOVER_ENABLED = false;
 const DEFAULT_OPEN_TIME = "08:00";
 const DEFAULT_CLOSE_TIME = "17:00";
 const DEFAULT_TIME_ZONE = "America/Costa_Rica";
@@ -54,6 +56,12 @@ function sanitizeSettings(row) {
         ),
         procedureDurationMinutes: Number(
             row.procedure_duration_minutes ?? DEFAULT_PROCEDURE_DURATION
+        ),
+        procedureTurnoverEnabled: Boolean(
+            row.procedure_turnover_enabled ?? DEFAULT_PROCEDURE_TURNOVER_ENABLED
+        ),
+        procedureTurnoverMinutes: Number(
+            row.procedure_turnover_minutes ?? DEFAULT_PROCEDURE_TURNOVER_DURATION
         ),
         consultationOpenTime: normalizeTime(
             row.consultation_open_time,
@@ -208,6 +216,8 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
             consultationDurationMinutes: DEFAULT_CONSULTATION_DURATION,
             procedureDurationEnabled: DEFAULT_PROCEDURE_DURATION_ENABLED,
             procedureDurationMinutes: DEFAULT_PROCEDURE_DURATION,
+            procedureTurnoverEnabled: DEFAULT_PROCEDURE_TURNOVER_ENABLED,
+            procedureTurnoverMinutes: DEFAULT_PROCEDURE_TURNOVER_DURATION,
             consultationOpenTime: DEFAULT_OPEN_TIME,
             consultationCloseTime: DEFAULT_CLOSE_TIME,
             consultationNoClosing: false,
@@ -282,6 +292,9 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
         const procedureDurationEnabled = normalizeBoolean(
             payload?.procedureDurationEnabled ?? currentSettings.procedureDurationEnabled
         );
+        const procedureTurnoverEnabled = normalizeBoolean(
+            payload?.procedureTurnoverEnabled ?? currentSettings.procedureTurnoverEnabled
+        );
         const consultationNoClosing = normalizeBoolean(payload?.consultationNoClosing);
         const procedureNoClosing = normalizeBoolean(payload?.procedureNoClosing);
         const timeZone = String(payload?.timeZone ?? currentSettings.timeZone).trim();
@@ -320,6 +333,17 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
 
         if (!procedureDurationResult.ok) {
             return procedureDurationResult;
+        }
+
+        const procedureTurnoverResult = resolveReferenceDuration({
+            value: payload?.procedureTurnoverMinutes,
+            fallback: currentSettings.procedureTurnoverMinutes,
+            enabled: procedureTurnoverEnabled,
+            label: "separacion entre procedimientos"
+        });
+
+        if (!procedureTurnoverResult.ok) {
+            return procedureTurnoverResult;
         }
 
         if (!timeZone) {
@@ -379,6 +403,8 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             consultationDurationMinutes: consultationDurationResult.data,
             procedureDurationEnabled,
             procedureDurationMinutes: procedureDurationResult.data,
+            procedureTurnoverEnabled,
+            procedureTurnoverMinutes: procedureTurnoverResult.data,
             consultationOpenTime: consultationSchedule.data.openTime,
             consultationCloseTime: consultationSchedule.data.closeTime,
             consultationNoClosing: consultationSchedule.data.noClosing,

@@ -184,12 +184,12 @@ function isActiveLink(link) {
   gap: 1rem;
   padding: 1rem 1.5rem;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 250, 248, 0.92)),
-    radial-gradient(circle at top right, rgba(255, 143, 90, 0.08), transparent 30%),
-    radial-gradient(circle at top left, rgba(17, 184, 159, 0.08), transparent 30%);
+    linear-gradient(180deg, rgba(244, 250, 252, 0.94), rgba(232, 241, 245, 0.9)),
+    radial-gradient(circle at top right, rgba(255, 143, 90, 0.1), transparent 30%),
+    radial-gradient(circle at top left, rgba(17, 184, 159, 0.1), transparent 30%);
   border-bottom: 1px solid var(--hero-border);
   backdrop-filter: blur(14px);
-  box-shadow: 0 18px 40px rgba(17, 39, 46, 0.08);
+  box-shadow: 0 18px 40px rgba(17, 39, 46, 0.12);
   position: sticky;
   top: 0;
   z-index: 30;

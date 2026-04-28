@@ -21,6 +21,8 @@ const settings = ref({
     consultationDurationMinutes: 30,
     procedureDurationEnabled: false,
     procedureDurationMinutes: 60,
+    procedureTurnoverEnabled: false,
+    procedureTurnoverMinutes: 15,
     consultationOpenTime: "08:00",
     consultationCloseTime: "17:00",
     consultationNoClosing: false,
@@ -60,15 +62,17 @@ function formatPricingMode(mode) {
 const statCards = computed(() => [
     {
         label: "Consultas",
-        value: settings.value.consultationDurationEnabled
-            ? `${Number(settings.value.consultationDurationMinutes ?? 30)} min ref.`
-            : "Tiempo libre"
+        value: `${Number(settings.value.consultationDurationMinutes ?? 30)} min base`
     },
     {
         label: "Procedimientos",
-        value: settings.value.procedureDurationEnabled
-            ? `${Number(settings.value.procedureDurationMinutes ?? 60)} min ref.`
-            : "Tiempo libre"
+        value: `${Number(settings.value.procedureDurationMinutes ?? 60)} min base`
+    },
+    {
+        label: "Separacion de sala",
+        value: settings.value.procedureTurnoverEnabled
+            ? `${Number(settings.value.procedureTurnoverMinutes ?? 15)} min activos`
+            : "Sin separacion extra"
     },
     {
         label: "Horario consulta",
@@ -99,6 +103,9 @@ async function fetchSettings() {
             procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
             procedureDurationMinutes:
                 Number(response.data?.procedureDurationMinutes ?? 60) || 60,
+            procedureTurnoverEnabled: Boolean(response.data?.procedureTurnoverEnabled),
+            procedureTurnoverMinutes:
+                Number(response.data?.procedureTurnoverMinutes ?? 15) || 15,
             consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
             consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
             consultationNoClosing: Boolean(response.data?.consultationNoClosing),
@@ -122,6 +129,8 @@ async function fetchSettings() {
             consultationDurationMinutes: 30,
             procedureDurationEnabled: false,
             procedureDurationMinutes: 60,
+            procedureTurnoverEnabled: false,
+            procedureTurnoverMinutes: 15,
             consultationOpenTime: "08:00",
             consultationCloseTime: "17:00",
             consultationNoClosing: false,
@@ -152,6 +161,9 @@ async function handleSaveSettings(payload) {
             procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
             procedureDurationMinutes:
                 Number(response.data?.procedureDurationMinutes ?? 60) || 60,
+            procedureTurnoverEnabled: Boolean(response.data?.procedureTurnoverEnabled),
+            procedureTurnoverMinutes:
+                Number(response.data?.procedureTurnoverMinutes ?? 15) || 15,
             consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
             consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
             consultationNoClosing: Boolean(response.data?.consultationNoClosing),
@@ -221,7 +233,7 @@ onMounted(() => {
               <span class="settings-eyebrow">Control administrativo</span>
               <h1>Configuraciones de atencion</h1>
               <p>
-              Define tiempos de referencia opcionales, horario operativo, moneda base y la modalidad procedural que ejecutara recepcion.
+              Define tiempos base, ventanas operativas, separacion entre procedimientos, moneda base y la modalidad procedural que ejecutara recepcion.
               </p>
             </div>
         </section>
@@ -253,7 +265,7 @@ onMounted(() => {
               <div>
                 <span class="settings-panel__eyebrow">Fuente operativa</span>
                 <h2>Agenda de la cuenta</h2>
-                <p>Estas reglas controlan el horario de atencion, los tiempos de referencia opcionales y la forma en que se factura cada procedimiento.</p>
+                <p>Estas reglas controlan el horario de atencion, los tiempos base de agenda, la separacion de sala entre procedimientos y la forma en que se factura cada procedimiento.</p>
               </div>
             </div>
 
