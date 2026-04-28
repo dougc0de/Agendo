@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import AppointmentTable from "../components/appointments/AppointmentTable.vue";
 import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
 import KpiMetricCard from "../components/dashboard/KpiMetricCard.vue";
@@ -438,10 +439,20 @@ const upcomingAppointments = computed(() =>
             const rightDate = toAppointmentDate(right)?.getTime() ?? 0;
             return leftDate - rightDate;
         })
-        .slice(0, 3)
+        .slice(0, 6)
 );
 
 const nextAppointment = computed(() => upcomingAppointments.value[0] ?? null);
+const dashboardAppointmentRows = computed(() => upcomingAppointments.value);
+const dashboardAppointmentSummary = computed(() => ({
+    total: dashboardAppointmentRows.value.length,
+    confirmed: dashboardAppointmentRows.value.filter((appointment) => appointment.estado === "confirmada")
+        .length,
+    pending: dashboardAppointmentRows.value.filter((appointment) => appointment.estado === "pendiente")
+        .length,
+    paid: dashboardAppointmentRows.value.filter((appointment) => appointment.financialStatus === "pagado")
+        .length
+}));
 
 const agendaPreviewDays = computed(() => {
     const todayKey = getTodayDateKey(dashboardTimeZone.value);
@@ -1216,6 +1227,35 @@ onMounted(() => {
                 </article>
               </div>
             </article>
+
+            <article
+              v-if="canSeeOperationalDashboard"
+              class="dashboard-panel dashboard-panel--full"
+            >
+              <div class="dashboard-panel__heading">
+                <div>
+                  <p class="dashboard-panel__eyebrow">Reservas operativas</p>
+                  <h2>Proximas reservas de la sucursal</h2>
+                  <p>Lectura rapida por filas en escritorio y por tarjetas separadas en movil.</p>
+                </div>
+              </div>
+
+              <div class="dashboard-appointment-summary">
+                <span>{{ dashboardAppointmentSummary.total }} visibles</span>
+                <span>{{ dashboardAppointmentSummary.confirmed }} confirmadas</span>
+                <span>{{ dashboardAppointmentSummary.pending }} pendientes</span>
+                <span>{{ dashboardAppointmentSummary.paid }} pagadas</span>
+              </div>
+
+              <AppointmentTable
+                :appointments="dashboardAppointmentRows"
+                :loading="loading"
+                :show-actions="false"
+                :show-user="true"
+                :show-payment="true"
+                empty-message="No hay reservas operativas visibles para este corte."
+              />
+            </article>
           </section>
         </template>
 
@@ -1228,41 +1268,25 @@ onMounted(() => {
                     {{ canSeePersonalDashboard ? "Mi agenda" : "Agenda" }}
                   </p>
                   <h2>{{ canSeePersonalDashboard ? "Mis reservas proximas" : "Reservas proximas" }}</h2>
+                  <p>Cada reserva se presenta por separado con su estado, cobro y contexto principal.</p>
                 </div>
               </div>
 
-              <p v-if="loading" class="dashboard-state">
-                Cargando reservas...
-              </p>
-              <p v-else-if="error" class="dashboard-state dashboard-state--error">
-                {{ error }}
-              </p>
-              <ul v-else-if="upcomingAppointments.length" class="dashboard-appointment-list">
-                <li
-                  v-for="appointment in upcomingAppointments"
-                  :key="appointment.id"
-                  class="dashboard-appointment-item"
-                >
-                  <div class="dashboard-appointment-item__content">
-                    <div class="dashboard-appointment-item__order">
-                      <span class="dashboard-info-chip dashboard-info-chip--time">
-                        {{ formatAppointmentMoment(appointment) }}
-                      </span>
-                      <span class="dashboard-info-chip">
-                        {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
-                      </span>
-                      <span class="dashboard-info-chip">
-                        {{ appointment.tipoConsulta }}
-                      </span>
-                    </div>
-                    <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
-                    <p>{{ appointment.descripcion || "Reserva lista para atencion." }}</p>
-                  </div>
-                </li>
-              </ul>
-              <p v-else class="dashboard-state">
-                No hay reservas activas para mostrar.
-              </p>
+              <div class="dashboard-appointment-summary">
+                <span>{{ dashboardAppointmentSummary.total }} visibles</span>
+                <span>{{ dashboardAppointmentSummary.confirmed }} confirmadas</span>
+                <span>{{ dashboardAppointmentSummary.pending }} pendientes</span>
+                <span>{{ dashboardAppointmentSummary.paid }} pagadas</span>
+              </div>
+
+              <AppointmentTable
+                :appointments="dashboardAppointmentRows"
+                :loading="loading"
+                :show-actions="false"
+                :show-user="!canSeePersonalDashboard"
+                :show-payment="true"
+                empty-message="No hay reservas activas para mostrar."
+              />
             </article>
 
             <article class="dashboard-panel dashboard-panel--wide">
@@ -1530,6 +1554,10 @@ onMounted(() => {
   gap: 1rem;
 }
 
+.dashboard-panel--full {
+  grid-column: 1 / -1;
+}
+
 .dashboard-panel--wide {
   min-height: 100%;
 }
@@ -1548,6 +1576,20 @@ onMounted(() => {
   padding: 0;
   margin: 0;
   list-style: none;
+}
+
+.dashboard-appointment-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.dashboard-appointment-summary span {
+  padding: 0.45rem 0.72rem;
+  border-radius: 999px;
+  background: #f4f8fa;
+  border: 1px solid rgba(17, 184, 159, 0.1);
+  color: var(--text-soft);
 }
 
 .dashboard-appointment-item {

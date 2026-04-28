@@ -50,6 +50,13 @@ const props = defineProps({
 
 defineEmits(["edit", "delete"]);
 
+const timeStatusLabels = {
+    pasada: "Ya paso",
+    en_curso: "En curso",
+    proxima_hoy: "Viene hoy",
+    programada: "Programada"
+};
+
 function appointmentTimeRange(appointment) {
     return `${appointment.horaInicio} - ${appointment.horaFin}`;
 }
@@ -76,6 +83,10 @@ function formatPaymentDetail(appointment) {
 function paymentBadgeClass(appointment) {
     return `appointment-table__badge--payment-${appointment.financialStatus || "sin_factura"}`;
 }
+
+function formatTimeStatusLabel(appointment) {
+    return timeStatusLabels[appointment?.timeStatus] ?? null;
+}
 </script>
 
 <template>
@@ -95,45 +106,69 @@ function paymentBadgeClass(appointment) {
           :key="`card-${appointment.id}`"
           class="appointment-table__card"
         >
-          <div class="appointment-table__card-order">
-            <span class="appointment-table__chip appointment-table__chip--time">
-              {{ appointment.fecha }}
-            </span>
-            <span class="appointment-table__chip appointment-table__chip--time">
-              {{ appointmentTimeRange(appointment) }}
-            </span>
-            <span class="appointment-table__chip">
-              {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
-            </span>
+          <div class="appointment-table__card-header">
+            <div class="appointment-table__card-order">
+              <span class="appointment-table__chip appointment-table__chip--date">
+                {{ appointment.fecha }}
+              </span>
+              <span class="appointment-table__chip appointment-table__chip--time">
+                {{ appointmentTimeRange(appointment) }}
+              </span>
+            </div>
+
+            <div class="appointment-table__card-meta">
+              <span
+                class="appointment-table__badge"
+                :class="`appointment-table__badge--${appointment.estado}`"
+              >
+                {{ appointment.estado }}
+              </span>
+              <span
+                v-if="props.showOutcome"
+                class="appointment-table__badge appointment-table__badge--outcome"
+                :class="`appointment-table__badge--outcome-${appointment.appointmentOutcome || 'pendiente'}`"
+              >
+                {{ formatOutcome(appointment.appointmentOutcome) }}
+              </span>
+              <span
+                v-if="props.showPayment"
+                class="appointment-table__badge appointment-table__badge--payment"
+                :class="paymentBadgeClass(appointment)"
+              >
+                {{ formatPaymentLabel(appointment) }}
+              </span>
+            </div>
           </div>
 
-          <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
-          <p>{{ appointment.tipoConsulta }}</p>
+          <div class="appointment-table__card-identity">
+            <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
+            <p>{{ appointment.descripcion || "Reserva lista para atencion." }}</p>
+          </div>
 
-          <div class="appointment-table__card-meta">
-            <span v-if="props.showUser">
-              {{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}
-            </span>
-            <span
-              v-if="props.showOutcome"
-              class="appointment-table__badge appointment-table__badge--outcome"
-              :class="`appointment-table__badge--outcome-${appointment.appointmentOutcome || 'pendiente'}`"
-            >
-              {{ formatOutcome(appointment.appointmentOutcome) }}
-            </span>
-            <span
-              v-if="props.showPayment"
-              class="appointment-table__badge appointment-table__badge--payment"
-              :class="paymentBadgeClass(appointment)"
-            >
-              {{ formatPaymentLabel(appointment) }}
-            </span>
-            <span
-              class="appointment-table__badge"
-              :class="`appointment-table__badge--${appointment.estado}`"
-            >
-              {{ appointment.estado }}
-            </span>
+          <div class="appointment-table__card-grid">
+            <div class="appointment-table__data-point">
+              <span>Procedimiento</span>
+              <strong>{{ appointment.tipoConsulta || "Sin detalle" }}</strong>
+            </div>
+            <div class="appointment-table__data-point">
+              <span>Sala</span>
+              <strong>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</strong>
+            </div>
+            <div v-if="props.showUser" class="appointment-table__data-point">
+              <span>Responsable</span>
+              <strong>{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</strong>
+            </div>
+            <div v-if="props.showPayment" class="appointment-table__data-point">
+              <span>Cobro</span>
+              <strong>{{ formatPaymentLabel(appointment) }}</strong>
+              <small v-if="formatPaymentDetail(appointment)">
+                {{ formatPaymentDetail(appointment) }}
+              </small>
+            </div>
+            <div v-if="formatTimeStatusLabel(appointment)" class="appointment-table__data-point">
+              <span>Momento</span>
+              <strong>{{ formatTimeStatusLabel(appointment) }}</strong>
+            </div>
           </div>
 
           <div v-if="props.showActions" class="appointment-table__card-actions">
@@ -161,40 +196,42 @@ function paymentBadgeClass(appointment) {
         <table class="appointment-table__table">
           <thead>
             <tr>
-              <th>Paciente</th>
               <th>Fecha</th>
+              <th>Hora</th>
+              <th>Paciente</th>
+              <th>Procedimiento</th>
               <th>Sala</th>
-              <th>Tiempo de reserva</th>
-              <th>Tipo</th>
               <th>Estado</th>
+              <th v-if="props.showPayment">Cobro</th>
               <th v-if="props.showOutcome">Resultado</th>
-              <th v-if="props.showPayment">Pago</th>
-              <th v-if="props.showUser">Usuario</th>
+              <th v-if="props.showUser">Responsable</th>
               <th v-if="props.showActions">Opciones</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="appointment in props.appointments" :key="appointment.id">
-              <td>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</td>
               <td>{{ appointment.fecha }}</td>
-              <td>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</td>
-              <td>{{ appointmentTimeRange(appointment) }}</td>
-              <td>{{ appointment.tipoConsulta }}</td>
               <td>
-                <span
-                  class="appointment-table__badge"
-                  :class="`appointment-table__badge--${appointment.estado}`"
-                >
-                  {{ appointment.estado }}
-                </span>
+                <strong>{{ appointmentTimeRange(appointment) }}</strong>
+                <small v-if="formatTimeStatusLabel(appointment)">
+                  {{ formatTimeStatusLabel(appointment) }}
+                </small>
               </td>
-              <td v-if="props.showOutcome">
-                <span
-                  class="appointment-table__badge appointment-table__badge--outcome"
-                  :class="`appointment-table__badge--outcome-${appointment.appointmentOutcome || 'pendiente'}`"
-                >
-                  {{ formatOutcome(appointment.appointmentOutcome) }}
-                </span>
+              <td>
+                <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
+                <small>{{ appointment.descripcion || "Reserva operativa." }}</small>
+              </td>
+              <td>{{ appointment.tipoConsulta || "Sin detalle" }}</td>
+              <td>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</td>
+              <td>
+                <div class="appointment-table__status-stack">
+                  <span
+                    class="appointment-table__badge"
+                    :class="`appointment-table__badge--${appointment.estado}`"
+                  >
+                    {{ appointment.estado }}
+                  </span>
+                </div>
               </td>
               <td v-if="props.showPayment">
                 <div class="appointment-table__payment">
@@ -209,7 +246,17 @@ function paymentBadgeClass(appointment) {
                   </small>
                 </div>
               </td>
-              <td v-if="props.showUser">{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</td>
+              <td v-if="props.showOutcome">
+                <span
+                  class="appointment-table__badge appointment-table__badge--outcome"
+                  :class="`appointment-table__badge--outcome-${appointment.appointmentOutcome || 'pendiente'}`"
+                >
+                  {{ formatOutcome(appointment.appointmentOutcome) }}
+                </span>
+              </td>
+              <td v-if="props.showUser">
+                {{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}
+              </td>
               <td v-if="props.showActions" class="appointment-table__actions-cell">
                 <div class="appointment-table__actions">
                   <BaseButton
@@ -241,7 +288,8 @@ function paymentBadgeClass(appointment) {
 <style scoped>
 .appointment-table {
   background: #fff;
-  border-radius: 8px;
+  border-radius: 24px;
+  border: 1px solid rgba(17, 184, 159, 0.12);
   overflow: hidden;
 }
 
@@ -259,22 +307,37 @@ function paymentBadgeClass(appointment) {
 .appointment-table__cards {
   display: none;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 1rem;
   padding: 1rem;
 }
 
 .appointment-table__card {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 1rem;
   padding: 1rem;
-  border-radius: 18px;
-  background: #f9fcfd;
-  border: 1px solid rgba(17, 184, 159, 0.12);
-  box-shadow: inset 4px 0 0 rgba(17, 184, 159, 0.16);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
+  border: 1px solid rgba(17, 184, 159, 0.14);
+  box-shadow: 0 16px 32px rgba(16, 38, 44, 0.06);
 }
 
-.appointment-table__card strong {
+.appointment-table__card-header,
+.appointment-table__card-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.appointment-table__card-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.appointment-table__card strong,
+.appointment-table__data-point strong {
   color: var(--primary-dark);
 }
 
@@ -284,21 +347,34 @@ function paymentBadgeClass(appointment) {
 }
 
 .appointment-table__card-order,
-.appointment-table__card-meta {
+.appointment-table__card-meta,
+.appointment-table__status-stack {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
   align-items: center;
 }
 
-.appointment-table__card-meta {
-  justify-content: space-between;
+.appointment-table__card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 0.95rem 0;
+  border-top: 1px solid #e1ecef;
+  border-bottom: 1px solid #e1ecef;
 }
 
-.appointment-table__card-actions {
+.appointment-table__data-point {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.appointment-table__data-point span,
+.appointment-table__data-point small {
+  color: var(--text-soft);
+  font-size: 0.82rem;
 }
 
 .appointment-table__chip {
@@ -310,6 +386,10 @@ function paymentBadgeClass(appointment) {
   border: 1px solid rgba(17, 184, 159, 0.1);
   color: var(--text-soft);
   font-size: 0.84rem;
+}
+
+.appointment-table__chip--date {
+  background: #f4f7f9;
 }
 
 .appointment-table__chip--time {
@@ -334,10 +414,36 @@ function paymentBadgeClass(appointment) {
   vertical-align: middle;
 }
 
+.appointment-table th:not(:last-child),
+.appointment-table td:not(:last-child) {
+  border-inline-end: 1px solid #eef4f6;
+}
+
 .appointment-table th {
   color: var(--text);
   font-size: 0.95rem;
   background: #f8fbfc;
+  white-space: nowrap;
+}
+
+.appointment-table tbody tr {
+  transition: background-color 160ms ease;
+}
+
+.appointment-table tbody tr:hover {
+  background: #fbfdfe;
+}
+
+.appointment-table td strong {
+  display: block;
+  color: var(--primary-dark);
+}
+
+.appointment-table td small {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--text-soft);
+  font-size: 0.82rem;
 }
 
 .appointment-table__badge {
@@ -431,7 +537,7 @@ function paymentBadgeClass(appointment) {
 
 @media (max-width: 920px) {
   .appointment-table__table {
-    min-width: 780px;
+    min-width: 920px;
   }
 }
 
@@ -444,8 +550,18 @@ function paymentBadgeClass(appointment) {
     display: none;
   }
 
+  .appointment-table__card-header,
+  .appointment-table__card-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .appointment-table__card-grid {
+    grid-template-columns: 1fr;
+  }
+
   .appointment-table__card-actions :deep(.base-button) {
-    flex: 1 1 160px;
+    width: 100%;
   }
 }
 </style>

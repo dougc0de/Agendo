@@ -4,6 +4,7 @@ import {
     actualizarCobro,
     confirmarPagoCobro,
     crearCobro,
+    listarReservasFacturables,
     obtenerReporteOperacionPdf,
     obtenerResumenFinanciero
 } from "../services/financeService.js";
@@ -44,6 +45,16 @@ router.get("/cobros", async (req, res) => {
 
 router.get("/reportes-operacion", async (req, res) => {
     const resultado = await listarCobros(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/reservas-facturables", async (req, res) => {
+    const resultado = await listarReservasFacturables(req.query, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);

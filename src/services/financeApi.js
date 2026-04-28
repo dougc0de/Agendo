@@ -23,6 +23,10 @@ export async function getFinanceOperationReports(filters = {}) {
     return apiRequest(`/finanzas/reportes-operacion${buildQueryString(filters)}`);
 }
 
+export async function getFinanceBillableReservations(filters = {}) {
+    return apiRequest(`/finanzas/reservas-facturables${buildQueryString(filters)}`);
+}
+
 export async function createFinanceCharge(payload) {
     return apiRequest("/finanzas/cobros", {
         method: "POST",

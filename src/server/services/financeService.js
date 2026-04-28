@@ -5,6 +5,7 @@ import {
     buscarCobroPorId,
     buscarCobroPorReservaId,
     crearCobro as crearCobroRepository,
+    listarCobrosPorReservationIds,
     listarCobrosPorWorkspaceId,
     listarLineasInsumosPorChargeIds,
     reemplazarLineasInsumos
@@ -69,6 +70,14 @@ function normalizarFecha(valor) {
     }
 
     return String(valor).slice(0, 10);
+}
+
+function normalizarHora(valor) {
+    if (!valor) {
+        return null;
+    }
+
+    return String(valor).slice(0, 5);
 }
 
 function normalizarEstadoCobro(valor) {
@@ -299,6 +308,53 @@ function estaDentroDelRango(fecha, from, to) {
     return true;
 }
 
+function getCurrentZonedDateTime(timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
+    const partMap = {};
+
+    for (const part of formatter.formatToParts(new Date())) {
+        if (part.type !== "literal") {
+            partMap[part.type] = part.value;
+        }
+    }
+
+    return {
+        date: `${partMap.year}-${partMap.month}-${partMap.day}`,
+        time: `${partMap.hour}:${partMap.minute}`
+    };
+}
+
+function compareDateTimeToNow(fecha, hora, timeZone) {
+    const current = getCurrentZonedDateTime(timeZone);
+    const reservationDate = normalizarFecha(fecha);
+    const reservationTime = normalizarHora(hora);
+
+    if (!reservationDate || !reservationTime) {
+        return 1;
+    }
+
+    const reservationKey = `${reservationDate}T${reservationTime}`;
+    const currentKey = `${current.date}T${current.time}`;
+
+    if (reservationKey < currentKey) {
+        return -1;
+    }
+
+    if (reservationKey > currentKey) {
+        return 1;
+    }
+
+    return 0;
+}
+
 function cumpleFiltrosReservaParaResumen(filaReserva, filtros = {}) {
     const from = normalizarFecha(filtros.from);
     const to = normalizarFecha(filtros.to);
@@ -342,6 +398,39 @@ function cumpleFiltrosReservaParaResumen(filaReserva, filtros = {}) {
     }
 
     return true;
+}
+
+function formatearReservaFacturable(filaReserva) {
+    return {
+        id: filaReserva.id,
+        fecha: normalizarFecha(filaReserva.fecha),
+        horaInicio: normalizarHora(filaReserva.hora_inicio),
+        horaFin: normalizarHora(filaReserva.hora_fin),
+        descripcion: filaReserva.descripcion ?? "",
+        estado: filaReserva.estado,
+        tipoAtencion: filaReserva.tipo_atencion ?? "procedimiento",
+        tipoConsulta: filaReserva.tipo_consulta ?? "",
+        usuarioId: filaReserva.usuario_id,
+        usuarioNombre: filaReserva.usuario_nombre ?? null,
+        pacienteId: filaReserva.paciente_id,
+        pacienteNombre: filaReserva.paciente_nombre ?? null,
+        pacienteTelefono: filaReserva.paciente_telefono ?? null,
+        pacienteCorreo: filaReserva.paciente_correo ?? null,
+        salaId: filaReserva.sala_id,
+        salaNombre: filaReserva.sala_nombre ?? null,
+        branchId: filaReserva.sucursal_id ?? null,
+        branchName: filaReserva.sucursal_nombre ?? null,
+        confirmedAt: filaReserva.confirmed_at ?? null
+    };
+}
+
+function esReservaFacturable(filaReserva, chargeMap, timeZone) {
+    return (
+        filaReserva.tipo_atencion === "procedimiento" &&
+        filaReserva.estado === "confirmada" &&
+        compareDateTimeToNow(filaReserva.fecha, filaReserva.hora_inicio, timeZone) <= 0 &&
+        !chargeMap.has(Number(filaReserva.id))
+    );
 }
 
 function buildUsageStats(rows) {
@@ -790,6 +879,58 @@ export async function listarCobros(filtros, auth) {
         return {
             ok: false,
             msg: `Error al listar los reportes operativos: ${error.message}`
+        };
+    }
+}
+
+export async function listarReservasFacturables(filtros, auth) {
+    try {
+        const workspaceId = resolveWorkspaceId(auth);
+
+        if (!workspaceId) {
+            return {
+                ok: false,
+                msg: "No autorizado. Falta el contexto de la cuenta."
+            };
+        }
+
+        if (!hasFinanceAccess(auth)) {
+            return {
+                ok: false,
+                msg: "No autorizado. No tienes acceso al modulo financiero."
+            };
+        }
+
+        const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
+        const reservationRows = await listarReservasRepository(workspaceId);
+        const chargeMap = new Map(
+            (
+                await listarCobrosPorReservationIds(
+                    reservationRows.map((row) => Number(row.id)),
+                    workspaceId
+                )
+            ).map((chargeRow) => [Number(chargeRow.reservation_id), chargeRow])
+        );
+
+        return {
+            ok: true,
+            msg: "Reservas facturables listadas correctamente.",
+            data: reservationRows
+                .filter((filaReserva) => cumpleFiltrosReservaParaResumen(filaReserva, filtros))
+                .filter((filaReserva) =>
+                    esReservaFacturable(filaReserva, chargeMap, settings.timeZone)
+                )
+                .sort((left, right) => {
+                    const leftKey = `${normalizarFecha(left.fecha)}T${normalizarHora(left.hora_inicio)}`;
+                    const rightKey = `${normalizarFecha(right.fecha)}T${normalizarHora(right.hora_inicio)}`;
+                    return rightKey.localeCompare(leftKey);
+                })
+                .map((filaReserva) => formatearReservaFacturable(filaReserva))
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            msg: `Error al listar las reservas facturables: ${error.message}`
         };
     }
 }

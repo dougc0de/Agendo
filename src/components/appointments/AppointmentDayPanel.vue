@@ -31,6 +31,14 @@ const timeStatusLabels = {
 };
 
 const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
+
+function formatPaymentLabel(appointment) {
+    return appointment?.paymentLabel || "No pagado";
+}
+
+function paymentBadgeClass(appointment) {
+    return `appointment-day-panel__chip--payment-${appointment?.financialStatus || "sin_factura"}`;
+}
 </script>
 
 <template>
@@ -61,35 +69,62 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
         @click="emit('open-appointment', appointment)"
       >
         <div class="appointment-day-panel__item-main">
-          <div class="appointment-day-panel__item-order">
-            <span class="appointment-day-panel__time">
-              {{ appointment.horaInicio }} - {{ appointment.horaFin }}
-            </span>
-            <span class="appointment-day-panel__chip appointment-day-panel__chip--room">
-              {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
-            </span>
-            <span class="appointment-day-panel__chip appointment-day-panel__chip--type">
-              {{ appointment.tipoConsulta }}
-            </span>
+          <div class="appointment-day-panel__item-header">
+            <div class="appointment-day-panel__item-order">
+              <span class="appointment-day-panel__time">
+                {{ appointment.horaInicio }} - {{ appointment.horaFin }}
+              </span>
+              <span
+                class="appointment-day-panel__chip"
+                :class="`appointment-day-panel__chip--${appointment.estado}`"
+              >
+                {{ appointment.estado }}
+              </span>
+              <span
+                class="appointment-day-panel__chip"
+                :class="`appointment-day-panel__chip--time-${appointment.timeStatus}`"
+              >
+                {{ timeStatusLabels[appointment.timeStatus] ?? "Programada" }}
+              </span>
+              <span
+                class="appointment-day-panel__chip"
+                :class="paymentBadgeClass(appointment)"
+              >
+                {{ formatPaymentLabel(appointment) }}
+              </span>
+            </div>
           </div>
 
-          <div>
+          <div class="appointment-day-panel__identity">
             <strong>{{ appointment.pacienteNombre || `Paciente #${appointment.pacienteId}` }}</strong>
             <p>{{ appointment.descripcion || "Reserva operativa del dia." }}</p>
           </div>
 
+          <div class="appointment-day-panel__details">
+            <div class="appointment-day-panel__detail">
+              <span>Procedimiento</span>
+              <strong>{{ appointment.tipoConsulta || "Sin detalle" }}</strong>
+            </div>
+            <div class="appointment-day-panel__detail">
+              <span>Sala</span>
+              <strong>{{ appointment.salaNombre || `Sala #${appointment.salaId}` }}</strong>
+            </div>
+            <div class="appointment-day-panel__detail">
+              <span>Responsable</span>
+              <strong>{{ appointment.usuarioNombre || `Usuario #${appointment.usuarioId}` }}</strong>
+            </div>
+            <div class="appointment-day-panel__detail">
+              <span>Detalle de cobro</span>
+              <strong>{{ appointment.paymentDetailLabel || appointment.financialStatus || "sin factura" }}</strong>
+            </div>
+          </div>
+
           <div class="appointment-day-panel__meta">
-            <span
-              class="appointment-day-panel__chip"
-              :class="`appointment-day-panel__chip--${appointment.estado}`"
-            >
-              {{ appointment.estado }}
+            <span class="appointment-day-panel__chip appointment-day-panel__chip--room">
+              {{ appointment.salaNombre || `Sala #${appointment.salaId}` }}
             </span>
-            <span
-              class="appointment-day-panel__chip"
-              :class="`appointment-day-panel__chip--time-${appointment.timeStatus}`"
-            >
-              {{ timeStatusLabels[appointment.timeStatus] ?? "Programada" }}
+            <span class="appointment-day-panel__chip appointment-day-panel__chip--type">
+              {{ appointment.tipoConsulta || "Sin detalle" }}
             </span>
           </div>
         </div>
@@ -169,31 +204,38 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
 
 .appointment-day-panel__item {
   border: 1px solid rgba(17, 184, 159, 0.12);
-  border-radius: 20px;
-  background: #fff;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fcfd 100%);
   padding: 1rem;
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 4px 0 0 rgba(17, 184, 159, 0.18);
+  box-shadow: 0 16px 30px rgba(16, 38, 44, 0.06);
 }
 
 .appointment-day-panel__item-main {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.9rem;
 }
 
-.appointment-day-panel__item-order {
+.appointment-day-panel__item-header,
+.appointment-day-panel__item-order,
+.appointment-day-panel__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.48rem;
+}
+
+.appointment-day-panel__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .appointment-day-panel__time {
   display: inline-flex;
   color: var(--text-soft);
   font-size: 0.82rem;
-  margin-bottom: 0.32rem;
 }
 
 .appointment-day-panel__item strong {
@@ -206,10 +248,24 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
   color: var(--text-soft);
 }
 
-.appointment-day-panel__meta {
+.appointment-day-panel__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 0.95rem 0;
+  border-top: 1px solid #e1ecef;
+  border-bottom: 1px solid #e1ecef;
+}
+
+.appointment-day-panel__detail {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.48rem;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.appointment-day-panel__detail span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
 }
 
 .appointment-day-panel__chip {
@@ -246,6 +302,23 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
   color: #b8392d;
 }
 
+.appointment-day-panel__chip--payment-pagado {
+  background: rgba(17, 184, 159, 0.14);
+  color: var(--primary-dark);
+}
+
+.appointment-day-panel__chip--payment-pendiente,
+.appointment-day-panel__chip--payment-sin_factura {
+  background: rgba(242, 159, 56, 0.16);
+  color: #9b6112;
+}
+
+.appointment-day-panel__chip--payment-anulado,
+.appointment-day-panel__chip--payment-exonerado {
+  background: rgba(235, 85, 69, 0.14);
+  color: #b8392d;
+}
+
 .appointment-day-panel__chip--time-pasada {
   background: #eef2f4;
   color: #5c7384;
@@ -272,5 +345,11 @@ const headerLabel = computed(() => formatLongDayLabel(props.dateKey));
   border-radius: 18px;
   background: var(--hero-surface-alt);
   color: var(--text-soft);
+}
+
+@media (max-width: 760px) {
+  .appointment-day-panel__details {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

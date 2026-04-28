@@ -18,6 +18,8 @@ import { canViewAllPastReservations } from "../../shared/roles.js";
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
 const TIPOS_ATENCION_PERMITIDOS = ["consulta", "procedimiento"];
 const RESULTADOS_RESERVA_PERMITIDOS = ["pendiente", "atendida", "no_show", "cancelada"];
+const PAST_RESERVATION_ERROR_MESSAGE =
+    "La fecha u hora de la reserva ya transcurrieron. Revisalas una vez mas.";
 
 function esIdValido(valor) {
     const numero = Number(valor);
@@ -397,6 +399,29 @@ function validarReservaContraConfiguracionOperativa(datosReserva, settings) {
     };
 }
 
+function compareDateTimeToNow(fecha, hora, timeZone) {
+    const current = getCurrentZonedDateTime(timeZone);
+    const reservationDate = normalizarFecha(fecha);
+    const reservationTime = normalizarHora(hora);
+
+    if (!reservationDate || !reservationTime) {
+        return 1;
+    }
+
+    const reservationKey = `${reservationDate}T${reservationTime}`;
+    const currentKey = `${current.date}T${current.time}`;
+
+    if (reservationKey < currentKey) {
+        return -1;
+    }
+
+    if (reservationKey > currentKey) {
+        return 1;
+    }
+
+    return 0;
+}
+
 function getCurrentZonedDateTime(timeZone) {
     const formatter = new Intl.DateTimeFormat("en-CA", {
         timeZone,
@@ -427,49 +452,11 @@ function getCurrentZonedDateTime(timeZone) {
 }
 
 function compareReservationEndToNow(filaReserva, timeZone) {
-    const current = getCurrentZonedDateTime(timeZone);
-    const reservationDate = normalizarFecha(filaReserva.fecha);
-    const reservationEnd = normalizarHora(filaReserva.hora_fin);
-
-    if (!reservationDate || !reservationEnd) {
-        return 1;
-    }
-
-    const reservationKey = `${reservationDate}T${reservationEnd}`;
-    const currentKey = `${current.date}T${current.time}`;
-
-    if (reservationKey < currentKey) {
-        return -1;
-    }
-
-    if (reservationKey > currentKey) {
-        return 1;
-    }
-
-    return 0;
+    return compareDateTimeToNow(filaReserva.fecha, filaReserva.hora_fin, timeZone);
 }
 
 function compareReservationStartToNow(filaReserva, timeZone) {
-    const current = getCurrentZonedDateTime(timeZone);
-    const reservationDate = normalizarFecha(filaReserva.fecha);
-    const reservationStart = normalizarHora(filaReserva.hora_inicio);
-
-    if (!reservationDate || !reservationStart) {
-        return 1;
-    }
-
-    const reservationKey = `${reservationDate}T${reservationStart}`;
-    const currentKey = `${current.date}T${current.time}`;
-
-    if (reservationKey < currentKey) {
-        return -1;
-    }
-
-    if (reservationKey > currentKey) {
-        return 1;
-    }
-
-    return 0;
+    return compareDateTimeToNow(filaReserva.fecha, filaReserva.hora_inicio, timeZone);
 }
 
 function esReservaPasada(filaReserva, timeZone) {
@@ -497,6 +484,43 @@ function resolveTimeStatus(filaReserva, timeZone) {
     }
 
     return "programada";
+}
+
+function validarReservaNoIniciadaEnPasado(datosReserva, settings) {
+    if (
+        compareDateTimeToNow(
+            datosReserva.fecha,
+            datosReserva.horaInicio,
+            settings.timeZone
+        ) < 0
+    ) {
+        return {
+            ok: false,
+            msg: PAST_RESERVATION_ERROR_MESSAGE
+        };
+    }
+
+    return {
+        ok: true
+    };
+}
+
+function debeOcultarseEnAgendaOperativa(filaReserva, financialCharge, timeZone) {
+    return (
+        deriveFinancialStatus(financialCharge) === "pagado" &&
+        compareReservationStartToNow(filaReserva, timeZone) <= 0
+    );
+}
+
+async function construirMapaCobrosPorReserva(filasReservas, workspaceId) {
+    const reservationIds = filasReservas
+        .map((filaReserva) => Number(filaReserva.id))
+        .filter((reservationId) => Number.isInteger(reservationId) && reservationId > 0);
+    const chargeRows = await listarCobrosPorReservationIds(reservationIds, workspaceId);
+
+    return new Map(
+        chargeRows.map((filaCobro) => [Number(filaCobro.reservation_id), filaCobro])
+    );
 }
 
 function crearEstadoReservaExtendido(filaReserva, actorUserId) {
@@ -836,6 +860,15 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
         return validacionOperativa;
     }
 
+    const validacionTemporal = validarReservaNoIniciadaEnPasado(
+        datosNormalizados,
+        settings
+    );
+
+    if (!validacionTemporal.ok) {
+        return validacionTemporal;
+    }
+
     const filaPaciente = await buscarPacientePorIdRepository(
         datosNormalizados.pacienteId,
         workspaceId
@@ -897,16 +930,29 @@ export async function listarReservas(auth) {
 
         const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
         const filasReservas = await listarReservasRepository(workspaceId);
+        const chargeMap = await construirMapaCobrosPorReserva(filasReservas, workspaceId);
         const reservasActivas = ordenarReservasPorInicio(
             filasReservas.filter(
                 (filaReserva) => !esReservaPasada(filaReserva, settings.timeZone)
+            ).filter(
+                (filaReserva) =>
+                    !debeOcultarseEnAgendaOperativa(
+                        filaReserva,
+                        chargeMap.get(Number(filaReserva.id)),
+                        settings.timeZone
+                    )
             )
         );
 
         return {
             ok: true,
             msg: "Reservas activas listadas correctamente.",
-            data: reservasActivas.map((filaReserva) => formatearReservaSalida(filaReserva))
+            data: reservasActivas.map((filaReserva) =>
+                formatearReservaSalida(filaReserva, {
+                    financialCharge: chargeMap.get(Number(filaReserva.id)),
+                    timeZone: settings.timeZone
+                })
+            )
         };
     } catch (error) {
         return {
@@ -938,15 +984,12 @@ export async function listarReservasPasadas(filters, auth) {
             ),
             "desc"
         );
-        const reservationIds = reservasPasadas.map((filaReserva) => Number(filaReserva.id));
-        const chargeRows = await listarCobrosPorReservationIds(reservationIds, workspaceId);
-        const chargeMap = new Map(
-            chargeRows.map((filaCobro) => [Number(filaCobro.reservation_id), filaCobro])
-        );
+        const chargeMap = await construirMapaCobrosPorReserva(reservasPasadas, workspaceId);
         const formattedReservations = reservasPasadas
             .map((filaReserva) =>
                 formatearReservaSalida(filaReserva, {
-                    financialCharge: chargeMap.get(Number(filaReserva.id))
+                    financialCharge: chargeMap.get(Number(filaReserva.id)),
+                    timeZone: settings.timeZone
                 })
             )
             .filter((reserva) =>
@@ -979,8 +1022,16 @@ export async function listarReservasCalendario(filters, auth) {
 
         const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
         const filasReservas = await listarReservasRepository(workspaceId);
+        const chargeMap = await construirMapaCobrosPorReserva(filasReservas, workspaceId);
         const reservasFiltradas = ordenarReservasPorInicio(
-            filtrarReservasCalendarioPorCriterio(filasReservas, filters, auth)
+            filtrarReservasCalendarioPorCriterio(filasReservas, filters, auth).filter(
+                (filaReserva) =>
+                    !debeOcultarseEnAgendaOperativa(
+                        filaReserva,
+                        chargeMap.get(Number(filaReserva.id)),
+                        settings.timeZone
+                    )
+            )
         );
 
         return {
@@ -993,6 +1044,7 @@ export async function listarReservasCalendario(filters, auth) {
                 ),
                 items: reservasFiltradas.map((filaReserva) =>
                     formatearReservaSalida(filaReserva, {
+                        financialCharge: chargeMap.get(Number(filaReserva.id)),
                         timeZone: settings.timeZone
                     })
                 )
@@ -1024,7 +1076,10 @@ export async function buscarReservaPorId(id, auth) {
             };
         }
 
-        const filaReserva = await buscarReservaPorIdRepository(id, workspaceId);
+        const [settings, filaReserva] = await Promise.all([
+            obtenerConfiguracionOperativaNormalizada(workspaceId),
+            buscarReservaPorIdRepository(id, workspaceId)
+        ]);
 
         if (!filaReserva) {
             return {
@@ -1033,10 +1088,15 @@ export async function buscarReservaPorId(id, auth) {
             };
         }
 
+        const chargeMap = await construirMapaCobrosPorReserva([filaReserva], workspaceId);
+
         return {
             ok: true,
             msg: "Reserva encontrada.",
-            data: formatearReservaSalida(filaReserva)
+            data: formatearReservaSalida(filaReserva, {
+                financialCharge: chargeMap.get(Number(filaReserva.id)),
+                timeZone: settings.timeZone
+            })
         };
     } catch (error) {
         return {

@@ -90,6 +90,8 @@ const fullMomentFormatter = new Intl.DateTimeFormat("es-CR", {
     dateStyle: "medium",
     timeStyle: "short"
 });
+const PAST_RESERVATION_ERROR_MESSAGE =
+    "La fecha u hora de la reserva ya transcurrieron. Revisalas una vez mas.";
 
 function toAppointmentDate(appointment) {
     const fecha = String(appointment?.fecha ?? "").trim();
@@ -111,6 +113,62 @@ function formatAppointmentMoment(appointment) {
     }
 
     return fullMomentFormatter.format(appointmentDate);
+}
+
+function getCurrentZonedDateTime(timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
+    const partMap = {};
+
+    for (const part of formatter.formatToParts(new Date())) {
+        if (part.type !== "literal") {
+            partMap[part.type] = part.value;
+        }
+    }
+
+    return {
+        date: `${partMap.year}-${partMap.month}-${partMap.day}`,
+        time: `${partMap.hour}:${partMap.minute}`
+    };
+}
+
+function compareAppointmentStartToNow(appointment, timeZone) {
+    const fecha = String(appointment?.fecha ?? "").trim().slice(0, 10);
+    const horaInicio = String(appointment?.horaInicio ?? "").trim().slice(0, 5);
+
+    if (!fecha || !horaInicio) {
+        return 1;
+    }
+
+    const current = getCurrentZonedDateTime(timeZone);
+    const appointmentKey = `${fecha}T${horaInicio}`;
+    const currentKey = `${current.date}T${current.time}`;
+
+    if (appointmentKey < currentKey) {
+        return -1;
+    }
+
+    if (appointmentKey > currentKey) {
+        return 1;
+    }
+
+    return 0;
+}
+
+function validarReservaNoIniciadaEnPasado(appointment) {
+    return (
+        compareAppointmentStartToNow(
+            appointment,
+            accountSettings.value.timeZone || "America/Costa_Rica"
+        ) >= 0
+    );
 }
 
 function updateRouteQuery(patch) {
@@ -595,6 +653,12 @@ async function handleCalendarRefresh() {
 async function handleSaveAppointment(payload) {
     pageError.value = "";
     modalError.value = "";
+
+    if (!validarReservaNoIniciadaEnPasado(payload)) {
+        modalError.value = PAST_RESERVATION_ERROR_MESSAGE;
+        return;
+    }
+
     let patientId = Number(payload?.paciente?.pacienteId);
     let createdPatient = null;
 
@@ -909,7 +973,9 @@ onMounted(() => {
                 <AppointmentTable
                   :appointments="filteredAppointments"
                   :loading="loading"
+                  :show-user="true"
                   :show-outcome="false"
+                  :show-payment="true"
                   @edit="openEditModal"
                   @delete="handleDeleteAppointment"
                 />

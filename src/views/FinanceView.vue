@@ -11,11 +11,10 @@ import InventoryItemForm from "../components/finance/InventoryItemForm.vue";
 import AppFooter from "../components/layout/AppFooter.vue";
 import AppNavbar from "../components/layout/AppNavbar.vue";
 import {
-    getAppointmentById,
-    getAppointments,
-    getPastAppointments
+    getAppointmentById
 } from "../services/appointmentApi.js";
 import {
+    getFinanceBillableReservations,
     confirmFinanceOperationReportPayment,
     createFinanceInventoryMovement,
     createFinanceInventoryItem,
@@ -303,7 +302,9 @@ const pendingReports = computed(() =>
 const paidReports = computed(() =>
     reports.value.filter(
         (report) =>
-            report.financialStatus === "pagado" || report.financialStatus === "anulado"
+            report.financialStatus === "pagado" ||
+            report.financialStatus === "anulado" ||
+            report.financialStatus === "exonerado"
     )
 );
 const displayedReports = computed(() =>
@@ -528,67 +529,25 @@ async function loadSelectedReservation(reservationId, options = {}) {
 
 async function fetchReservationOptions() {
     try {
-        const [activeResponse, pastResponse, reportsResponse] = await Promise.all([
-            getAppointments(),
-            getPastAppointments(),
-            getFinanceOperationReports()
-        ]);
-        const existingReports = reportsResponse.data ?? [];
-        const usedReservationIds = new Set(
-            existingReports
-                .filter((report) =>
-                    reportModalMode.value === "edit" && currentReport.value.id
-                        ? report.id !== currentReport.value.id
-                        : true
-                )
-                .map((report) => Number(report.reservationId))
+        const response = await getFinanceBillableReservations(filters.value);
+        const billableReservations = response.data ?? [];
+        const currentReservation =
+            reportModalMode.value === "edit" && currentReport.value.reservationId
+                ? buildReservationSummaryFromReport(currentReport.value)
+                : null;
+        const reservationMap = new Map(
+            billableReservations.map((reservation) => [Number(reservation.id), reservation])
         );
 
-        const todayKey = new Intl.DateTimeFormat("en-CA", {
-            timeZone: settings.value.timeZone ?? "America/Costa_Rica",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit"
-        })
-            .format(new Date())
-            .replaceAll("/", "-");
+        if (currentReservation?.id && !reservationMap.has(Number(currentReservation.id))) {
+            reservationMap.set(Number(currentReservation.id), currentReservation);
+        }
 
-        reservationOptions.value = [
-            ...(activeResponse.data ?? []),
-            ...(pastResponse.data ?? [])
-        ].filter((reservation) => {
-            if (reservation.tipoAtencion !== "procedimiento") {
-                return false;
-            }
-
-            if (
-                reportModalMode.value === "edit" &&
-                Number(currentReport.value.reservationId) === Number(reservation.id)
-            ) {
-                return true;
-            }
-
-            return !usedReservationIds.has(Number(reservation.id));
-        })
-            .sort((left, right) => {
-                const leftDate = String(left.fecha ?? "");
-                const rightDate = String(right.fecha ?? "");
-                const leftGroup = leftDate === todayKey ? 0 : leftDate < todayKey ? 1 : 2;
-                const rightGroup = rightDate === todayKey ? 0 : rightDate < todayKey ? 1 : 2;
-
-                if (leftGroup !== rightGroup) {
-                    return leftGroup - rightGroup;
-                }
-
-                const leftKey = `${leftDate}T${String(left.horaFin ?? left.horaInicio ?? "00:00").slice(0, 5)}`;
-                const rightKey = `${rightDate}T${String(right.horaFin ?? right.horaInicio ?? "00:00").slice(0, 5)}`;
-
-                if (leftGroup === 2) {
-                    return leftKey.localeCompare(rightKey);
-                }
-
-                return rightKey.localeCompare(leftKey);
-            });
+        reservationOptions.value = [...reservationMap.values()].sort((left, right) => {
+            const leftKey = `${String(left.fecha ?? "")}T${String(left.horaInicio ?? "00:00").slice(0, 5)}`;
+            const rightKey = `${String(right.fecha ?? "")}T${String(right.horaInicio ?? "00:00").slice(0, 5)}`;
+            return rightKey.localeCompare(leftKey);
+        });
     } catch {
         reservationOptions.value = [];
     }
@@ -1195,7 +1154,7 @@ onMounted(() => {
               :class="{ 'finance-tabs__button--active': billingView === 'pagadas' }"
               @click="billingView = 'pagadas'"
             >
-              Pagadas
+              Pagadas y cerradas
             </button>
           </section>
 
@@ -1209,7 +1168,7 @@ onMounted(() => {
                       billingView === "por_facturar"
                         ? "Procedimientos listos para facturar"
                         : billingView === "pagadas"
-                          ? "Historico de reservas pagadas"
+                          ? "Historico de facturas pagadas y cierres archivados"
                           : "Cola de cobro pendiente"
                     }}
                   </h2>
@@ -1219,7 +1178,7 @@ onMounted(() => {
                       billingView === "por_facturar"
                         ? "Recepcion emite la factura solo una vez por procedimiento y luego el caso cambia de bandeja."
                         : billingView === "pagadas"
-                          ? "Aqui vive la lectura que el dueno necesita al cierre del dia o del mes: reservas cobradas, paciente, sala, fecha y monto."
+                          ? "Aqui se consolidan los cobros confirmados y los cierres archivables para lectura contable y operativa."
                           : "Estas reservas ya tienen factura emitida, pero todavia no cuentan como cobro realizado."
                     }}
                   </p>
