@@ -25,7 +25,7 @@ function resolveReservaStatus(resultado, fallbackStatus) {
 }
 
 router.get("/", async (req, res) => {
-    const resultado = await listarReservas(req.auth);
+    const resultado = await listarReservas(req.query, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveReservaStatus(resultado, 500)).json(resultado);

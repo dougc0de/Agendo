@@ -15,8 +15,8 @@ function buildQueryString(filters = {}) {
     return queryString ? `?${queryString}` : "";
 }
 
-export async function getAppointments() {
-    return apiRequest("/reservas");
+export async function getAppointments(filters = {}) {
+    return apiRequest(`/reservas${buildQueryString(filters)}`);
 }
 
 export async function getPastAppointments(filters = {}) {

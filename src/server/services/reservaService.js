@@ -3,7 +3,8 @@ import {
     crearReserva as crearReservaRepository,
     buscarReservaPorId as buscarReservaPorIdRepository,
     buscarReservasPorSalaYFecha as buscarReservasPorSalaYFechaRepository,
-    listarReservas as listarReservasRepository,
+    listarReservasHistorial as listarReservasHistorialRepository,
+    listarReservasVigentes as listarReservasVigentesRepository,
     actualizarReserva as actualizarReservaRepository,
     actualizarEstadoReserva as actualizarEstadoReservaRepository,
     actualizarResultadoReserva as actualizarResultadoReservaRepository,
@@ -638,8 +639,59 @@ function compareReservationStartToNow(filaReserva, timeZone) {
     return compareDateTimeToNow(filaReserva.fecha, filaReserva.hora_inicio, timeZone);
 }
 
-function esReservaPasada(filaReserva, timeZone) {
-    return compareReservationEndToNow(filaReserva, timeZone) < 0;
+function resolveOptionalReservationFilterId(value) {
+    return esIdValido(value) ? Number(value) : null;
+}
+
+function buildCommonReservationReadFilters(filters = {}) {
+    return {
+        clinicaId: resolveOptionalReservationFilterId(filters?.clinicaId),
+        from: normalizarFecha(filters?.from),
+        to: normalizarFecha(filters?.to),
+        patient: normalizarTexto(filters?.patient),
+        status: normalizarTexto(filters?.status).toLowerCase()
+    };
+}
+
+function resolveOperationalReservationReadFilters(filters = {}) {
+    const baseFilters = buildCommonReservationReadFilters(filters);
+
+    return {
+        ...baseFilters,
+        userId: resolveOptionalReservationFilterId(filters?.userId)
+    };
+}
+
+function resolvePastReservationReadFilters(filters = {}, auth) {
+    const baseFilters = buildCommonReservationReadFilters(filters);
+    const authUserId = resolveUserId(auth);
+    const requestedUserId = resolveOptionalReservationFilterId(filters?.userId);
+    const canViewAll = canViewAllPastReservations({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+
+    return {
+        ...baseFilters,
+        userId: canViewAll ? requestedUserId : authUserId
+    };
+}
+
+function resolveCalendarReservationReadFilters(filters = {}, auth) {
+    const baseFilters = buildCommonReservationReadFilters(filters);
+    const authUserId = resolveUserId(auth);
+    const requestedUserId = resolveOptionalReservationFilterId(filters?.userId);
+    const canViewAll = canViewAllPastReservations({
+        membershipRole: auth?.membershipRole,
+        userRole: auth?.userRole
+    });
+
+    return {
+        ...baseFilters,
+        patient: "",
+        status: "",
+        userId: canViewAll ? requestedUserId : authUserId
+    };
 }
 
 function resolveTimeStatus(filaReserva, timeZone) {
@@ -682,10 +734,6 @@ function validarReservaNoIniciadaEnPasado(datosReserva, settings) {
     return {
         ok: true
     };
-}
-
-function debeOcultarseEnAgendaOperativa(filaReserva, financialCharge, timeZone) {
-    return deriveFinancialStatus(financialCharge) === "pagado";
 }
 
 async function construirMapaCobrosPorReserva(filasReservas, workspaceId) {
@@ -860,98 +908,6 @@ function ordenarReservasPorInicio(filasReservas, direction = "asc") {
     });
 }
 
-function filtrarReservasPasadasPorCriterio(
-    filasReservas,
-    filters,
-    auth,
-    timeZone
-) {
-    const from = normalizarFecha(filters?.from);
-    const to = normalizarFecha(filters?.to);
-    const patientQuery = normalizarTexto(filters?.patient).toLowerCase();
-    const requestedUserId = Number(filters?.userId);
-    const status = normalizarTexto(filters?.status).toLowerCase();
-    const authUserId = resolveUserId(auth);
-    const canViewAll = canViewAllPastReservations({
-        membershipRole: auth?.membershipRole,
-        userRole: auth?.userRole
-    });
-
-    return filasReservas.filter((filaReserva) => {
-        if (!esReservaPasada(filaReserva, timeZone)) {
-            return false;
-        }
-
-        if (from && normalizarFecha(filaReserva.fecha) < from) {
-            return false;
-        }
-
-        if (to && normalizarFecha(filaReserva.fecha) > to) {
-            return false;
-        }
-
-        if (status && status !== "todos" && filaReserva.estado !== status) {
-            return false;
-        }
-
-        if (!canViewAll && filaReserva.usuario_id !== authUserId) {
-            return false;
-        }
-
-        if (canViewAll && esIdValido(requestedUserId) && filaReserva.usuario_id !== requestedUserId) {
-            return false;
-        }
-
-        if (patientQuery) {
-            const haystack = [
-                filaReserva.paciente_nombre,
-                filaReserva.paciente_telefono,
-                filaReserva.paciente_correo
-            ]
-                .join(" ")
-                .toLowerCase();
-
-            if (!haystack.includes(patientQuery)) {
-                return false;
-            }
-        }
-
-        return true;
-    });
-}
-
-function filtrarReservasCalendarioPorCriterio(
-    filasReservas,
-    filters,
-    auth
-) {
-    const from = normalizarFecha(filters?.from);
-    const to = normalizarFecha(filters?.to);
-    const authUserId = resolveUserId(auth);
-    const canViewAll = canViewAllPastReservations({
-        membershipRole: auth?.membershipRole,
-        userRole: auth?.userRole
-    });
-
-    return filasReservas.filter((filaReserva) => {
-        const reservationDate = normalizarFecha(filaReserva.fecha);
-
-        if (from && reservationDate < from) {
-            return false;
-        }
-
-        if (to && reservationDate > to) {
-            return false;
-        }
-
-        if (!canViewAll && filaReserva.usuario_id !== authUserId) {
-            return false;
-        }
-
-        return true;
-    });
-}
-
 function construirResumenCalendarioPorFecha(filasReservas, timeZone) {
     const summaryMap = filasReservas.reduce((accumulator, filaReserva) => {
         const dateKey = normalizarFecha(filaReserva.fecha);
@@ -1114,7 +1070,7 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
     };
 }
 
-export async function listarReservas(auth) {
+export async function listarReservas(filters, auth) {
     try {
         const workspaceId = resolveWorkspaceId(auth);
 
@@ -1126,25 +1082,18 @@ export async function listarReservas(auth) {
         }
 
         const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
-        const filasReservas = await listarReservasRepository(workspaceId);
-        const chargeMap = await construirMapaCobrosPorReserva(filasReservas, workspaceId);
-        const reservasActivas = ordenarReservasPorInicio(
-            filasReservas.filter(
-                (filaReserva) => !esReservaPasada(filaReserva, settings.timeZone)
-            ).filter(
-                (filaReserva) =>
-                    !debeOcultarseEnAgendaOperativa(
-                        filaReserva,
-                        chargeMap.get(Number(filaReserva.id)),
-                        settings.timeZone
-                    )
+        const reservasVigentes = ordenarReservasPorInicio(
+            await listarReservasVigentesRepository(
+                workspaceId,
+                resolveOperationalReservationReadFilters(filters)
             )
         );
+        const chargeMap = await construirMapaCobrosPorReserva(reservasVigentes, workspaceId);
 
         return {
             ok: true,
-            msg: "Reservas activas listadas correctamente.",
-            data: reservasActivas.map((filaReserva) =>
+            msg: "Reservas vigentes listadas correctamente.",
+            data: reservasVigentes.map((filaReserva) =>
                 formatearReservaSalida(filaReserva, {
                     financialCharge: chargeMap.get(Number(filaReserva.id)),
                     timeZone: settings.timeZone
@@ -1171,13 +1120,10 @@ export async function listarReservasPasadas(filters, auth) {
         }
 
         const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
-        const filasReservas = await listarReservasRepository(workspaceId);
         const reservasPasadas = ordenarReservasPorInicio(
-            filtrarReservasPasadasPorCriterio(
-                filasReservas,
-                filters,
-                auth,
-                settings.timeZone
+            await listarReservasHistorialRepository(
+                workspaceId,
+                resolvePastReservationReadFilters(filters, auth)
             ),
             "desc"
         );
@@ -1218,22 +1164,17 @@ export async function listarReservasCalendario(filters, auth) {
         }
 
         const settings = await obtenerConfiguracionOperativaNormalizada(workspaceId);
-        const filasReservas = await listarReservasRepository(workspaceId);
-        const chargeMap = await construirMapaCobrosPorReserva(filasReservas, workspaceId);
         const reservasFiltradas = ordenarReservasPorInicio(
-            filtrarReservasCalendarioPorCriterio(filasReservas, filters, auth).filter(
-                (filaReserva) =>
-                    !debeOcultarseEnAgendaOperativa(
-                        filaReserva,
-                        chargeMap.get(Number(filaReserva.id)),
-                        settings.timeZone
-                    )
+            await listarReservasVigentesRepository(
+                workspaceId,
+                resolveCalendarReservationReadFilters(filters, auth)
             )
         );
+        const chargeMap = await construirMapaCobrosPorReserva(reservasFiltradas, workspaceId);
 
         return {
             ok: true,
-            msg: "Calendario de reservas cargado correctamente.",
+            msg: "Calendario de reservas vigentes cargado correctamente.",
             data: {
                 summaryByDate: construirResumenCalendarioPorFecha(
                     reservasFiltradas,

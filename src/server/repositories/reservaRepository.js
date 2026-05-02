@@ -1,5 +1,121 @@
 import pool from "../db/connection.js";
 
+function appendOptionalPositiveIdFilter(clauses, params, expression, value) {
+    const numericValue = Number(value);
+
+    if (!Number.isInteger(numericValue) || numericValue <= 0) {
+        return;
+    }
+
+    params.push(numericValue);
+    clauses.push(`${expression} = $${params.length}`);
+}
+
+function appendOptionalDateFilter(clauses, params, expression, value, operator) {
+    const normalizedValue = String(value ?? "").trim().slice(0, 10);
+
+    if (!normalizedValue) {
+        return;
+    }
+
+    params.push(normalizedValue);
+    clauses.push(`${expression} ${operator} $${params.length}`);
+}
+
+function appendOptionalStatusFilter(clauses, params, expression, value) {
+    const normalizedValue = String(value ?? "").trim().toLowerCase();
+
+    if (!normalizedValue || normalizedValue === "todos") {
+        return;
+    }
+
+    params.push(normalizedValue);
+    clauses.push(`${expression} = $${params.length}`);
+}
+
+function appendOptionalPatientSearchFilter(clauses, params, value) {
+    const normalizedValue = String(value ?? "").trim();
+
+    if (!normalizedValue) {
+        return;
+    }
+
+    params.push(`%${normalizedValue}%`);
+    clauses.push(
+        `(
+            COALESCE(p.nombre, '') ILIKE $${params.length}
+            OR COALESCE(p.telefono, '') ILIKE $${params.length}
+            OR COALESCE(p.correo, '') ILIKE $${params.length}
+        )`
+    );
+}
+
+function buildReservationSelectQuery({
+    sourceExpression,
+    alias = "r",
+    workspaceId,
+    filters = {},
+    orderDirection = "desc"
+}) {
+    const normalizedOrderDirection = String(orderDirection).toLowerCase() === "asc"
+        ? "ASC"
+        : "DESC";
+    const params = [workspaceId];
+    const clauses = [`${alias}.workspace_id = $1`];
+
+    appendOptionalPositiveIdFilter(clauses, params, "s.clinica_id", filters.clinicaId);
+    appendOptionalPositiveIdFilter(clauses, params, `${alias}.usuario_id`, filters.userId);
+    appendOptionalDateFilter(clauses, params, `${alias}.fecha`, filters.from, ">=");
+    appendOptionalDateFilter(clauses, params, `${alias}.fecha`, filters.to, "<=");
+    appendOptionalStatusFilter(clauses, params, `${alias}.estado`, filters.status);
+    appendOptionalPatientSearchFilter(clauses, params, filters.patient);
+
+    return {
+        text: `
+            SELECT
+                ${alias}.*,
+                s.nombre AS sala_nombre,
+                s.sucursal_id AS sucursal_id,
+                su.nombre AS sucursal_nombre,
+                u.nombre AS usuario_nombre,
+                p.nombre AS paciente_nombre,
+                p.telefono AS paciente_telefono,
+                p.correo AS paciente_correo
+            FROM ${sourceExpression} ${alias}
+            LEFT JOIN salas s
+                ON s.id = ${alias}.sala_id
+               AND s.workspace_id = ${alias}.workspace_id
+            LEFT JOIN sucursales su
+                ON su.id = s.sucursal_id
+            LEFT JOIN usuarios u
+                ON u.id = ${alias}.usuario_id
+            LEFT JOIN pacientes p
+                ON p.id = ${alias}.paciente_id
+               AND p.workspace_id = ${alias}.workspace_id
+            WHERE ${clauses.join(" AND ")}
+            ORDER BY ${alias}.fecha ${normalizedOrderDirection}, ${alias}.hora_inicio ${normalizedOrderDirection}
+        `,
+        params
+    };
+}
+
+async function listarReservasDesdeFuente(
+    sourceExpression,
+    workspaceId,
+    filters = {},
+    executor = pool,
+    options = {}
+) {
+    const { text, params } = buildReservationSelectQuery({
+        sourceExpression,
+        workspaceId,
+        filters,
+        orderDirection: options.orderDirection ?? "desc"
+    });
+    const { rows } = await executor.query(text, params);
+    return rows;
+}
+
 export async function crearReserva(reserva, executor = pool) {
     const { rows } = await executor.query(
         `
@@ -100,35 +216,21 @@ export async function buscarReservasPorSalaYFecha(
 }
 
 export async function listarReservas(workspaceId, executor = pool) {
-    const { rows } = await executor.query(
-        `
-            SELECT
-                r.*,
-                s.nombre AS sala_nombre,
-                s.sucursal_id AS sucursal_id,
-                su.nombre AS sucursal_nombre,
-                u.nombre AS usuario_nombre,
-                p.nombre AS paciente_nombre,
-                p.telefono AS paciente_telefono,
-                p.correo AS paciente_correo
-            FROM reservas r
-            LEFT JOIN salas s
-                ON s.id = r.sala_id
-               AND s.workspace_id = r.workspace_id
-            LEFT JOIN sucursales su
-                ON su.id = s.sucursal_id
-            LEFT JOIN usuarios u
-                ON u.id = r.usuario_id
-            LEFT JOIN pacientes p
-                ON p.id = r.paciente_id
-               AND p.workspace_id = r.workspace_id
-            WHERE r.workspace_id = $1
-            ORDER BY r.fecha DESC, r.hora_inicio DESC
-        `,
-        [workspaceId]
-    );
+    return listarReservasDesdeFuente("reservas", workspaceId, {}, executor, {
+        orderDirection: "desc"
+    });
+}
 
-    return rows;
+export async function listarReservasVigentes(workspaceId, filters = {}, executor = pool) {
+    return listarReservasDesdeFuente("public.reservas_vigentes", workspaceId, filters, executor, {
+        orderDirection: "asc"
+    });
+}
+
+export async function listarReservasHistorial(workspaceId, filters = {}, executor = pool) {
+    return listarReservasDesdeFuente("public.reservas_historial", workspaceId, filters, executor, {
+        orderDirection: "desc"
+    });
 }
 
 export async function actualizarReserva(id, datos, workspaceId, executor = pool) {
