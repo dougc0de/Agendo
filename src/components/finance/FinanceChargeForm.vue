@@ -111,6 +111,14 @@ const pricingModeLabels = {
     solo_insumos: "Solo insumos o equipo usado",
     sala_mas_insumos: "Sala mas insumos"
 };
+const paymentStatusLabels = {
+    pendiente: "Pendiente",
+    parcial: "Abono parcial",
+    pagado: "Pagada",
+    anulado: "Anulada",
+    exonerado: "Exonerada",
+    sin_factura: "Sin factura"
+};
 
 const isPricingModeLocked = computed(() => props.pricingPolicy === "bloqueado");
 const activePricingModeLabel = computed(
@@ -118,13 +126,22 @@ const activePricingModeLabel = computed(
 );
 const shouldShowRoomCharge = computed(() => form.pricingMode !== "solo_insumos");
 const shouldShowSupplies = computed(() => form.pricingMode !== "solo_sala");
+const hasRegisteredPayments = computed(
+    () =>
+        Number(props.initialValue?.paymentCount ?? 0) > 0 ||
+        Number(props.initialValue?.paidAmount ?? 0) > 0 ||
+        (props.initialValue?.payments?.length ?? 0) > 0
+);
 const displayPaymentStatus = computed(() => {
     if (form.chargeDecision === "exonerado") {
-        return "anulado";
+        return "exonerado";
     }
 
-    return form.paymentStatus || "pendiente";
+    return props.initialValue?.financialStatus || form.paymentStatus || "pendiente";
 });
+const displayPaymentStatusLabel = computed(
+    () => paymentStatusLabels[displayPaymentStatus.value] ?? displayPaymentStatus.value
+);
 const showCurrencyReminder = computed(
     () => form.currencyCode !== (props.defaultCurrencyCode || DEFAULT_CURRENCY_CODE)
 );
@@ -167,7 +184,7 @@ const canEditChargeDetails = computed(() => {
     }
 
     if (props.mode === "edit") {
-        return true;
+        return !hasRegisteredPayments.value;
     }
 
     return !props.reservationLoading && !props.reservationError;
@@ -182,6 +199,10 @@ const canSubmit = computed(() => {
     }
 
     if (props.mode !== "edit" && props.reservationError) {
+        return false;
+    }
+
+    if (props.mode === "edit" && hasRegisteredPayments.value) {
         return false;
     }
 
@@ -714,6 +735,17 @@ function handleSubmit() {
       </div>
     </section>
 
+    <div
+      v-if="props.mode === 'edit' && hasRegisteredPayments"
+      class="finance-charge-form__policy-card"
+    >
+      <strong>Factura con abonos registrados</strong>
+      <p>
+        Esta factura ya tiene {{ props.initialValue?.paymentCount || 0 }} abono(s). Por seguridad,
+        la estructura financiera queda en solo lectura para no alterar la trazabilidad.
+      </p>
+    </div>
+
     <div class="finance-charge-form__grid">
       <BaseInput
         :model-value="form.procedureName"
@@ -774,14 +806,34 @@ function handleSubmit() {
       <div class="finance-charge-form__field">
         <span class="finance-charge-form__label">Estado de la factura</span>
         <div class="finance-charge-form__policy-card">
-          <strong>{{ displayPaymentStatus }}</strong>
+          <strong>{{ displayPaymentStatusLabel }}</strong>
           <p>
             {{
               displayPaymentStatus === "pagado"
-                ? "El pago ya fue confirmado en recepcion."
-                : displayPaymentStatus === "anulado"
-                  ? "Este caso quedo anulado por decision administrativa."
+                ? "La factura ya quedo completamente liquidada."
+                : displayPaymentStatus === "parcial"
+                  ? "La factura ya recibio uno o mas abonos y aun conserva saldo pendiente."
+                  : displayPaymentStatus === "exonerado"
+                    ? "Este caso quedo exonerado por decision administrativa."
                   : "La factura se emite primero y el pago se confirma despues."
+            }}
+          </p>
+          <p v-if="props.initialValue?.paidAmount > 0 || props.initialValue?.outstandingAmount > 0">
+            Abonado:
+            {{
+              new Intl.NumberFormat("es-CR", {
+                  style: "currency",
+                  currency: form.currencyCode,
+                  maximumFractionDigits: 2
+              }).format(Number(props.initialValue?.paidAmount || 0))
+            }}
+            · Saldo:
+            {{
+              new Intl.NumberFormat("es-CR", {
+                  style: "currency",
+                  currency: form.currencyCode,
+                  maximumFractionDigits: 2
+              }).format(Number(props.initialValue?.outstandingAmount || 0))
             }}
           </p>
         </div>

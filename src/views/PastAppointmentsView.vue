@@ -319,6 +319,7 @@ onMounted(() => {
                 <option value="pagado">Pagado</option>
                 <option value="no_pagado">No pagado</option>
                 <option value="pendiente">Pendiente</option>
+                <option value="parcial">Abono parcial</option>
                 <option value="anulado">Anulado</option>
                 <option value="exonerado">Exonerado</option>
                 <option value="sin_factura">Sin factura</option>

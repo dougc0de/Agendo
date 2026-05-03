@@ -299,7 +299,9 @@ const filteredReservationOptions = computed(() => {
     });
 });
 const pendingReports = computed(() =>
-    reports.value.filter((report) => report.financialStatus === "pendiente")
+    reports.value.filter((report) =>
+        report.financialStatus === "pendiente" || report.financialStatus === "parcial"
+    )
 );
 const paidReports = computed(() =>
     reports.value.filter(
@@ -360,11 +362,43 @@ function formatFinancialStatus(status) {
         {
             sin_factura: "Sin factura",
             pendiente: "Pendiente",
+            parcial: "Abono parcial",
             pagado: "Pagado",
             anulado: "Anulado",
             exonerado: "Exonerado"
         }[status] ?? status
     );
+}
+
+function formatPaymentCountLabel(count) {
+    const numericCount = Number(count ?? 0);
+
+    if (numericCount <= 0) {
+        return "Sin abonos";
+    }
+
+    return numericCount === 1 ? "1 abono" : `${numericCount} abonos`;
+}
+
+function formatPaymentDetail(report) {
+    if (billingView.value === "pagadas") {
+        return report.paymentCount > 1
+            ? `${formatPaymentCountLabel(report.paymentCount)} · cierre completo`
+            : report.paidAt
+              ? report.paidAt.slice(0, 10)
+              : "Sin fecha";
+    }
+
+    if (report.financialStatus === "parcial") {
+        return `${formatPaymentCountLabel(report.paymentCount)} · faltan ${formatCurrency(
+            report.outstandingAmount,
+            report.currencyCode
+        )}`;
+    }
+
+    return report.paymentCount > 0
+        ? formatPaymentCountLabel(report.paymentCount)
+        : "Sin abonos";
 }
 
 function formatInventoryStatus(status) {
@@ -893,7 +927,21 @@ function handleReportReservationChange(reservationId) {
 }
 
 function reportPrimaryActionLabel(report) {
-    return report.financialStatus === "pagado" ? "Ver detalle" : "Editar factura";
+    return report.financialStatus === "pagado" || report.paymentCount > 0
+        ? "Ver detalle"
+        : "Editar factura";
+}
+
+function canRegisterPayment(report) {
+    return (
+        report.chargeDecision === "cobrable" &&
+        report.paymentStatus === "pendiente" &&
+        Number(report.outstandingAmount ?? 0) > 0
+    );
+}
+
+function paymentActionLabel(report) {
+    return report.financialStatus === "parcial" ? "Registrar remanente" : "Registrar abono";
 }
 
 async function handleSaveReport(payload) {
@@ -1003,8 +1051,10 @@ async function handleConfirmPayment(payload) {
 
         feedback.value = response.msg;
         closePaymentModal();
-        billingView.value = "pagadas";
-        filters.value.paymentStatus = "pagado";
+        billingView.value =
+            Number(response.data?.outstandingAmount ?? 0) > 0 ? "pendientes" : "pagadas";
+        filters.value.paymentStatus =
+            billingView.value === "pagadas" ? "pagado" : "pendiente";
         await fetchFinanceData();
     } catch (requestError) {
         paymentModalError.value =
@@ -1368,7 +1418,9 @@ onMounted(() => {
                       <th>Sala</th>
                       <th>Responsable</th>
                       <th>Modalidad</th>
-                      <th>Total</th>
+                      <th>Total facturado</th>
+                      <th>Abonado</th>
+                      <th>Saldo</th>
                       <th>Pago</th>
                       <th>{{ billingView === "pagadas" ? "Pagado el" : "Detalle" }}</th>
                       <th>Decision</th>
@@ -1398,6 +1450,8 @@ onMounted(() => {
                         </span>
                       </td>
                       <td>{{ formatCurrency(report.totalBilledAmount, report.currencyCode) }}</td>
+                      <td>{{ formatCurrency(report.paidAmount, report.currencyCode) }}</td>
+                      <td>{{ formatCurrency(report.outstandingAmount, report.currencyCode) }}</td>
                       <td>
                         <span
                           class="finance-table__badge"
@@ -1408,11 +1462,7 @@ onMounted(() => {
                       </td>
                       <td>
                         <span class="finance-table__subtext finance-table__subtext--strong">
-                          {{
-                            billingView === "pagadas"
-                              ? (report.paidAt ? report.paidAt.slice(0, 10) : "Sin fecha")
-                              : formatFinancialStatus(report.financialStatus)
-                          }}
+                          {{ formatPaymentDetail(report) }}
                         </span>
                       </td>
                       <td>
@@ -1440,11 +1490,11 @@ onMounted(() => {
                           Imprimir factura
                         </BaseButton>
                         <BaseButton
-                          v-if="report.paymentStatus === 'pendiente' && report.chargeDecision === 'cobrable'"
+                          v-if="canRegisterPayment(report)"
                           size="sm"
                           @click="openPaymentModal(report)"
                         >
-                          Confirmar pago
+                          {{ paymentActionLabel(report) }}
                         </BaseButton>
                       </td>
                     </tr>
@@ -2086,8 +2136,8 @@ onMounted(() => {
 
     <BaseModal
       :open="paymentModalOpen"
-      title="Confirmar pago"
-      description="Registra cuando el paciente ya cancelo la factura emitida previamente."
+      :title="currentPaymentReport?.financialStatus === 'parcial' ? 'Registrar remanente' : 'Registrar abono'"
+      description="Registra el monto efectivamente cobrado y deja el saldo pendiente persistido en la factura."
       @close="closePaymentModal"
     >
       <FinancePaymentForm
@@ -2316,7 +2366,7 @@ onMounted(() => {
 
 .finance-table__table {
   width: 100%;
-  min-width: 1060px;
+  min-width: 1240px;
   border-collapse: collapse;
 }
 
@@ -2350,7 +2400,8 @@ onMounted(() => {
   text-transform: capitalize;
 }
 
-.finance-table__badge--pendiente {
+.finance-table__badge--pendiente,
+.finance-table__badge--parcial {
   background: rgba(242, 159, 56, 0.15);
   color: #9b6112;
 }

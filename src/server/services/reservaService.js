@@ -160,6 +160,10 @@ function deriveFinancialStatus(filaCobro) {
         return "sin_factura";
     }
 
+    if (filaCobro.financial_status) {
+        return filaCobro.financial_status;
+    }
+
     if (filaCobro.charge_decision === "exonerado") {
         return "exonerado";
     }
@@ -180,7 +184,16 @@ function deriveFinancialStatus(filaCobro) {
 }
 
 function derivePaymentLabel(financialStatus) {
-    return financialStatus === "pagado" ? "Pagado" : "No pagado";
+    return (
+        {
+            pendiente: "Pendiente",
+            parcial: "Abono parcial",
+            pagado: "Pagada",
+            anulado: "Anulada",
+            exonerado: "Exonerada",
+            sin_factura: "Sin factura"
+        }[financialStatus] ?? "Pendiente"
+    );
 }
 
 function matchesPastPaymentFilter(financialStatus, paymentStatusFilter) {
@@ -245,11 +258,16 @@ function formatearReservaSalida(filaReserva, options = {}) {
         paymentLabel: derivePaymentLabel(financialStatus),
         paymentDetailLabel:
             financialStatus === "pagado"
-                ? "pagado"
+                ? "liquidada"
+                : financialStatus === "parcial"
+                  ? "abono parcial"
                 : financialStatus === "sin_factura"
                   ? "sin factura"
                   : financialStatus,
-        paidAt: financialCharge?.paid_at ?? null,
+        paidAt:
+            financialCharge?.last_payment_at ??
+            financialCharge?.paid_at ??
+            null,
         chargeDecision: financialCharge?.charge_decision ?? null,
         totalBilledAmount: financialCharge
             ? Number(
@@ -257,6 +275,20 @@ function formatearReservaSalida(filaReserva, options = {}) {
                       financialCharge.amount ??
                       0
               )
+            : 0,
+        paidAmount: financialCharge
+            ? Number(financialCharge.paid_amount ?? 0)
+            : 0,
+        outstandingAmount: financialCharge
+            ? Number(
+                  financialCharge.outstanding_amount ??
+                      financialCharge.total_billed_amount ??
+                      financialCharge.amount ??
+                      0
+              )
+            : 0,
+        paymentCount: financialCharge
+            ? Number(financialCharge.payment_count ?? 0)
             : 0,
         currencyCode: financialCharge?.currency_code ?? null,
         ...(options.timeZone

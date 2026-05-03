@@ -4,10 +4,12 @@ import {
     actualizarPagoCobro as actualizarPagoCobroRepository,
     buscarCobroPorId,
     buscarCobroPorReservaId,
+    crearPagoCobro as crearPagoCobroRepository,
     crearCobro as crearCobroRepository,
     listarCobrosPorReservationIds,
     listarCobrosPorWorkspaceId,
     listarLineasInsumosPorChargeIds,
+    listarPagosPorChargeIds,
     reemplazarLineasInsumos
 } from "../repositories/financeRepository.js";
 import { buscarItemInventarioPorId } from "../repositories/inventoryRepository.js";
@@ -24,6 +26,10 @@ import {
     SUPPORTED_CURRENCY_CODES
 } from "../../shared/currencies.js";
 import { syncProcedureConsumption } from "./inventoryService.js";
+import { ChargeInvoice } from "../domain/finance/ChargeInvoice.js";
+import { ChargePayment } from "../domain/finance/ChargePayment.js";
+import { InvoiceStatusPolicy } from "../domain/finance/InvoiceStatusPolicy.js";
+import { Money } from "../domain/finance/Money.js";
 
 const ESTADOS_COBRO = ["pendiente", "pagado", "anulado"];
 const METODOS_PAGO = ["efectivo", "tarjeta", "transferencia", "otro"];
@@ -134,27 +140,30 @@ function deriveFinancialStatus(row) {
         return "sin_factura";
     }
 
-    if (row.charge_decision === "exonerado") {
-        return "exonerado";
+    if (row.financial_status) {
+        return row.financial_status;
     }
 
-    if (row.payment_status === "pagado") {
-        return "pagado";
-    }
-
-    if (row.payment_status === "anulado") {
-        return "anulado";
-    }
-
-    if (row.payment_status === "pendiente") {
-        return "pendiente";
-    }
-
-    return "sin_factura";
+    return InvoiceStatusPolicy.resolve({
+        chargeDecision: row.charge_decision ?? row.chargeDecision,
+        paymentStatus: row.payment_status ?? row.paymentStatus,
+        totalBilledAmount:
+            row.total_billed_amount ?? row.totalBilledAmount ?? row.amount ?? 0,
+        paidAmount: row.paid_amount ?? row.paidAmount ?? 0
+    });
 }
 
 function derivePaymentLabel(financialStatus) {
-    return financialStatus === "pagado" ? "Pagado" : "No pagado";
+    return (
+        {
+            pendiente: "Pendiente",
+            parcial: "Abono parcial",
+            pagado: "Pagada",
+            anulado: "Anulada",
+            exonerado: "Exonerada",
+            sin_factura: "Sin factura"
+        }[financialStatus] ?? "Pendiente"
+    );
 }
 
 function formatearLineaInsumo(linea) {
@@ -176,12 +185,46 @@ function formatearLineaInsumo(linea) {
     };
 }
 
-function formatearCobroSalida(filaCobro, supplies = []) {
+function formatearPagoSalida(filaPago) {
+    if (!filaPago) {
+        return null;
+    }
+
+    return {
+        id: filaPago.id,
+        chargeId: filaPago.charge_id,
+        workspaceId: filaPago.workspace_id,
+        amount: Number(filaPago.amount ?? 0),
+        currencyCode: filaPago.currency_code ?? DEFAULT_CURRENCY_CODE,
+        paymentMethod: filaPago.payment_method ?? null,
+        paidAt: filaPago.paid_at ?? null,
+        notes: filaPago.notes ?? "",
+        registeredByUserId: filaPago.registered_by_user_id ?? null,
+        createdAt: filaPago.created_at ?? null,
+        updatedAt: filaPago.updated_at ?? null
+    };
+}
+
+function buildChargeInvoiceFromRow(filaCobro, payments = []) {
+    return ChargeInvoice.fromRow(
+        filaCobro,
+        payments.map((payment) =>
+            payment instanceof ChargePayment ? payment : ChargePayment.fromRow(payment)
+        )
+    );
+}
+
+function formatearCobroSalida(filaCobro, supplies = [], payments = []) {
     if (!filaCobro) {
         return null;
     }
 
-    const financialStatus = deriveFinancialStatus(filaCobro);
+    const normalizedPayments = payments
+        .map((payment) => formatearPagoSalida(payment))
+        .filter(Boolean);
+    const invoice = buildChargeInvoiceFromRow(filaCobro, normalizedPayments);
+    const financialSnapshot = invoice.toFinancialSnapshot();
+    const financialStatus = financialSnapshot.financialStatus;
 
     return {
         id: filaCobro.id,
@@ -198,9 +241,9 @@ function formatearCobroSalida(filaCobro, supplies = []) {
         tipoAtencion: filaCobro.tipo_atencion,
         amount: Number(filaCobro.total_billed_amount ?? filaCobro.amount ?? 0),
         currencyCode: filaCobro.currency_code ?? DEFAULT_CURRENCY_CODE,
-        paymentStatus: filaCobro.payment_status,
+        paymentStatus: financialSnapshot.paymentStatus,
         paymentMethod: filaCobro.payment_method,
-        paidAt: filaCobro.paid_at ?? null,
+        paidAt: financialSnapshot.lastPaymentAt ?? filaCobro.paid_at ?? null,
         registeredByUserId: filaCobro.registered_by_user_id,
         notes: filaCobro.notes ?? "",
         pricingMode: filaCobro.pricing_mode ?? DEFAULT_PRICING_MODE,
@@ -208,6 +251,10 @@ function formatearCobroSalida(filaCobro, supplies = []) {
         suppliesTotalAmount: Number(filaCobro.supplies_total_amount ?? 0),
         suppliesTotalCost: Number(filaCobro.supplies_total_cost ?? 0),
         totalBilledAmount: Number(filaCobro.total_billed_amount ?? filaCobro.amount ?? 0),
+        paidAmount: financialSnapshot.paidAmount,
+        outstandingAmount: financialSnapshot.outstandingAmount,
+        paymentCount: financialSnapshot.paymentCount,
+        lastPaymentAt: financialSnapshot.lastPaymentAt ?? null,
         chargeDecision: filaCobro.charge_decision ?? "cobrable",
         waivedByUserId: filaCobro.waived_by_user_id ?? null,
         waivedByUserName: filaCobro.waived_by_user_nombre ?? null,
@@ -220,10 +267,58 @@ function formatearCobroSalida(filaCobro, supplies = []) {
         reservationUserName: filaCobro.reservation_user_nombre ?? null,
         financialStatus,
         paymentLabel: derivePaymentLabel(financialStatus),
+        paymentDetailLabel:
+            financialStatus === "parcial"
+                ? `Abonado ${financialSnapshot.paidAmount} / ${Number(
+                      filaCobro.total_billed_amount ?? filaCobro.amount ?? 0
+                  )}`
+                : derivePaymentLabel(financialStatus),
+        hasRegisteredPayments: financialSnapshot.hasRegisteredPayments,
         createdAt: filaCobro.created_at,
         updatedAt: filaCobro.updated_at,
-        supplies
+        supplies,
+        payments: normalizedPayments
     };
+}
+
+function groupRowsByChargeId(rows = [], accessor) {
+    const grouped = new Map();
+
+    for (const row of rows) {
+        const chargeId = Number(accessor(row));
+
+        if (!Number.isInteger(chargeId) || chargeId <= 0) {
+            continue;
+        }
+
+        if (!grouped.has(chargeId)) {
+            grouped.set(chargeId, []);
+        }
+
+        grouped.get(chargeId).push(row);
+    }
+
+    return grouped;
+}
+
+function sumPaymentsWithinRange(payments = [], from = null, to = null) {
+    return payments.reduce((sum, payment) => {
+        if (!estaDentroDelRango(payment?.paidAt ?? payment?.paid_at, from, to)) {
+            return sum;
+        }
+
+        return sum + Number(payment?.amount ?? 0);
+    }, 0);
+}
+
+function resolveCollectedRatio(collectedAmount, totalBilledAmount) {
+    const total = Number(totalBilledAmount ?? 0);
+
+    if (total <= 0) {
+        return 0;
+    }
+
+    return Math.min(Math.max(Number(collectedAmount ?? 0), 0), total) / total;
 }
 
 function cumpleFiltrosCobro(filaCobro, filtros = {}) {
@@ -283,7 +378,10 @@ function cumpleFiltrosCobro(filaCobro, filtros = {}) {
         return false;
     }
 
-    if (scope === "pendiente" && financialStatus === "pagado") {
+    if (
+        scope === "pendiente" &&
+        !["pendiente", "parcial"].includes(financialStatus)
+    ) {
         return false;
     }
 
@@ -507,20 +605,16 @@ async function obtenerReservaProcedural(reservationId, workspaceId, executor = u
 async function enriquecerCobrosConLineas(rows, workspaceId, executor = undefined) {
     const chargeIds = rows.map((row) => Number(row.id));
     const lineas = await listarLineasInsumosPorChargeIds(chargeIds, workspaceId, executor);
-    const grouped = new Map();
-
-    for (const linea of lineas) {
-        const chargeId = Number(linea.charge_id);
-
-        if (!grouped.has(chargeId)) {
-            grouped.set(chargeId, []);
-        }
-
-        grouped.get(chargeId).push(formatearLineaInsumo(linea));
-    }
+    const pagos = await listarPagosPorChargeIds(chargeIds, workspaceId, executor);
+    const groupedSupplies = groupRowsByChargeId(lineas, (linea) => linea.charge_id);
+    const groupedPayments = groupRowsByChargeId(pagos, (pago) => pago.charge_id);
 
     return rows.map((row) =>
-        formatearCobroSalida(row, grouped.get(Number(row.id)) ?? [])
+        formatearCobroSalida(
+            row,
+            (groupedSupplies.get(Number(row.id)) ?? []).map((linea) => formatearLineaInsumo(linea)),
+            groupedPayments.get(Number(row.id)) ?? []
+        )
     );
 }
 
@@ -595,6 +689,75 @@ async function prepararLineasInsumos(lineas, workspaceId, executor = undefined) 
     return {
         ok: true,
         data: prepared
+    };
+}
+
+function lineasInsumosCoinciden(existingSupplies = [], nextSupplies = []) {
+    if (existingSupplies.length !== nextSupplies.length) {
+        return false;
+    }
+
+    return existingSupplies.every((existingSupply, index) => {
+        const nextSupply = nextSupplies[index];
+
+        if (!nextSupply) {
+            return false;
+        }
+
+        return (
+            Number(existingSupply.inventoryItemId ?? existingSupply.inventory_item_id ?? 0) ===
+                Number(nextSupply.inventoryItemId ?? nextSupply.inventory_item_id ?? 0) &&
+            roundMoney(existingSupply.quantity ?? 0) === roundMoney(nextSupply.quantity ?? 0) &&
+            roundMoney(existingSupply.unitCost ?? existingSupply.unit_cost ?? 0) ===
+                roundMoney(nextSupply.unitCost ?? nextSupply.unit_cost ?? 0) &&
+            roundMoney(existingSupply.unitPrice ?? existingSupply.unit_price ?? 0) ===
+                roundMoney(nextSupply.unitPrice ?? nextSupply.unit_price ?? 0) &&
+            normalizarTexto(existingSupply.notes) === normalizarTexto(nextSupply.notes)
+        );
+    });
+}
+
+function canMutateChargeStructure(existingCharge) {
+    return Number(existingCharge?.paymentCount ?? existingCharge?.payment_count ?? 0) === 0;
+}
+
+function validarEdicionEstructuralFactura(existingCharge, nextData) {
+    if (!existingCharge || canMutateChargeStructure(existingCharge)) {
+        return {
+            ok: true
+        };
+    }
+
+    const existingPricingMode = normalizarModoCobro(
+        existingCharge?.pricingMode ?? existingCharge?.pricing_mode,
+        DEFAULT_PRICING_MODE
+    );
+    const existingCurrencyCode = normalizarMoneda(
+        existingCharge?.currencyCode ?? existingCharge?.currency_code
+    );
+    const existingRoomChargeAmount = roundMoney(
+        existingCharge?.roomChargeAmount ?? existingCharge?.room_charge_amount ?? 0
+    );
+    const existingChargeDecision = normalizarDecisionCobro(
+        existingCharge?.chargeDecision ?? existingCharge?.charge_decision,
+        "cobrable"
+    );
+
+    if (
+        existingPricingMode !== nextData.pricingMode ||
+        existingCurrencyCode !== nextData.currencyCode ||
+        existingRoomChargeAmount !== nextData.roomChargeAmount ||
+        existingChargeDecision !== nextData.chargeDecision ||
+        !lineasInsumosCoinciden(existingCharge?.supplies ?? [], nextData.supplies)
+    ) {
+        return {
+            ok: false,
+            msg: "La factura ya tiene abonos registrados. No se pueden cambiar moneda, modalidad, montos o insumos."
+        };
+    }
+
+    return {
+        ok: true
     };
 }
 
@@ -767,6 +930,18 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
         };
     }
 
+    const structuralEditValidation = validarEdicionEstructuralFactura(existingCharge, {
+        pricingMode,
+        currencyCode,
+        roomChargeAmount,
+        chargeDecision,
+        supplies: preparedSupplies
+    });
+
+    if (!structuralEditValidation.ok) {
+        return structuralEditValidation;
+    }
+
     const totalBilledAmount = roundMoney(roomChargeAmount + suppliesTotalAmount);
 
     let normalizedPaymentStatus = "pendiente";
@@ -787,7 +962,12 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
         paymentMethod = normalizarMetodoPago(
             existingCharge?.paymentMethod ?? existingCharge?.payment_method
         );
-        paidAt = existingCharge?.paidAt ?? existingCharge?.paid_at ?? null;
+        paidAt =
+            existingCharge?.lastPaymentAt ??
+            existingCharge?.last_payment_at ??
+            existingCharge?.paidAt ??
+            existingCharge?.paid_at ??
+            null;
     }
 
     if (chargeDecision === "exonerado" && !waiverReason) {
@@ -838,12 +1018,61 @@ function normalizarPayloadPago(payload = {}) {
         };
     }
 
+    const requestedAmount = normalizarMonto(payload.amount, null);
+
+    if (requestedAmount !== null && (!Number.isFinite(requestedAmount) || requestedAmount <= 0)) {
+        return {
+            ok: false,
+            msg: "El monto del abono no es valido."
+        };
+    }
+
     return {
         ok: true,
         data: {
-            paymentStatus: "pagado",
             paymentMethod,
-            paidAt
+            paidAt,
+            amount: requestedAmount === null ? null : roundMoney(requestedAmount),
+            notes: normalizarTexto(payload.notes) || null
+        }
+    };
+}
+
+function resolverMontoAbono(normalizedPayment, invoice) {
+    const outstandingAmount = invoice.outstandingAmount();
+
+    if (!outstandingAmount.isPositive()) {
+        return {
+            ok: false,
+            msg: "La factura indicada ya no tiene saldo pendiente."
+        };
+    }
+
+    const requestedAmount = normalizedPayment.amount;
+    const resolvedAmount = requestedAmount === null
+        ? outstandingAmount.toNumber()
+        : roundMoney(requestedAmount);
+    const amountMoney = Money.from(resolvedAmount);
+
+    if (!amountMoney.isPositive()) {
+        return {
+            ok: false,
+            msg: "El monto del abono debe ser mayor que cero."
+        };
+    }
+
+    if (amountMoney.isGreaterThan(outstandingAmount)) {
+        return {
+            ok: false,
+            msg: `El abono excede el saldo pendiente de ${outstandingAmount.toNumber()}.`
+        };
+    }
+
+    return {
+        ok: true,
+        data: {
+            ...normalizedPayment,
+            amount: amountMoney.toNumber()
         }
     };
 }
@@ -1293,63 +1522,107 @@ export async function confirmarPagoCobro(id, payload, auth) {
             };
         }
 
-        const charge = await buscarCobroPorId(chargeId, workspaceId);
-
-        if (!charge) {
-            return {
-                ok: false,
-                msg: "El reporte indicado no existe en esta cuenta."
-            };
-        }
-
-        if (charge.charge_decision === "exonerado") {
-            return {
-                ok: false,
-                msg: "Un caso exonerado no puede confirmarse como pagado."
-            };
-        }
-
-        if (charge.payment_status === "anulado") {
-            return {
-                ok: false,
-                msg: "Esta factura esta anulada y no puede confirmarse como pagada."
-            };
-        }
-
-        if (charge.payment_status === "pagado") {
-            return {
-                ok: true,
-                msg: "El pago ya estaba confirmado.",
-                data: formatearCobroSalida(charge)
-            };
-        }
-
         const normalizedPayment = normalizarPayloadPago(payload);
 
         if (!normalizedPayment.ok) {
             return normalizedPayment;
         }
 
-        await actualizarPagoCobroRepository(
-            chargeId,
-            workspaceId,
-            {
-                ...normalizedPayment.data,
-                registeredByUserId
+        return await withTransaction(async (client) => {
+            const charge = await buscarCobroPorId(chargeId, workspaceId, client);
+
+            if (!charge) {
+                return {
+                    ok: false,
+                    msg: "El reporte indicado no existe en esta cuenta."
+                };
             }
-        );
 
-        const updatedCharge = await buscarCobroPorId(chargeId, workspaceId);
-        const [formattedReport] = await enriquecerCobrosConLineas(
-            [updatedCharge],
-            workspaceId
-        );
+            const [existingReport] = await enriquecerCobrosConLineas(
+                [charge],
+                workspaceId,
+                client
+            );
+            const existingInvoice = buildChargeInvoiceFromRow(
+                existingReport,
+                existingReport?.payments ?? []
+            );
 
-        return {
-            ok: true,
-            msg: "Pago confirmado correctamente.",
-            data: formattedReport
-        };
+            if (charge.charge_decision === "exonerado") {
+                return {
+                    ok: false,
+                    msg: "Un caso exonerado no puede confirmarse como pagado."
+                };
+            }
+
+            if (charge.payment_status === "anulado") {
+                return {
+                    ok: false,
+                    msg: "Esta factura esta anulada y no puede confirmarse como pagada."
+                };
+            }
+
+            if (!existingInvoice.canRegisterPayment()) {
+                return {
+                    ok: true,
+                    msg: "La factura ya no tiene saldo pendiente.",
+                    data: existingReport
+                };
+            }
+
+            const resolvedPaymentAmount = resolverMontoAbono(
+                normalizedPayment.data,
+                existingInvoice
+            );
+
+            if (!resolvedPaymentAmount.ok) {
+                return resolvedPaymentAmount;
+            }
+
+            const createdPayment = new ChargePayment({
+                workspaceId,
+                chargeId,
+                amount: resolvedPaymentAmount.data.amount,
+                currencyCode: existingReport.currencyCode,
+                paymentMethod: resolvedPaymentAmount.data.paymentMethod,
+                paidAt: resolvedPaymentAmount.data.paidAt,
+                notes: resolvedPaymentAmount.data.notes,
+                registeredByUserId
+            });
+
+            await crearPagoCobroRepository(createdPayment.toPersistence(), client);
+
+            const paymentRows = await listarPagosPorChargeIds([chargeId], workspaceId, client);
+            const refreshedCharge = await buscarCobroPorId(chargeId, workspaceId, client);
+            const refreshedInvoice = buildChargeInvoiceFromRow(refreshedCharge, paymentRows);
+            const financialSnapshot = refreshedInvoice.toFinancialSnapshot();
+
+            await actualizarPagoCobroRepository(
+                chargeId,
+                workspaceId,
+                {
+                    paymentStatus: financialSnapshot.paymentStatus,
+                    paymentMethod: createdPayment.paymentMethod,
+                    paidAt: financialSnapshot.lastPaymentAt,
+                    registeredByUserId
+                },
+                client
+            );
+
+            const updatedCharge = await buscarCobroPorId(chargeId, workspaceId, client);
+            const [formattedReport] = await enriquecerCobrosConLineas(
+                [updatedCharge],
+                workspaceId,
+                client
+            );
+            const verb = formattedReport.outstandingAmount > 0 ? "Abono registrado" : "Pago confirmado";
+
+            return {
+                ok: true,
+                msg: `${verb} correctamente.`,
+                data: formattedReport
+            };
+        });
     } catch (error) {
         return {
             ok: false,
@@ -1380,6 +1653,11 @@ export async function obtenerResumenFinanciero(filtros, auth) {
         const filteredCharges = chargeRows.filter((row) => cumpleFiltrosCobro(row, filtros));
         const from = normalizarFecha(filtros.from);
         const to = normalizarFecha(filtros.to);
+        const paymentRows = await listarPagosPorChargeIds(
+            filteredCharges.map((row) => Number(row.id)),
+            workspaceId
+        );
+        const paymentsByChargeId = groupRowsByChargeId(paymentRows, (payment) => payment.charge_id);
         const reservationRows = (await listarReservasRepository(workspaceId)).filter((row) =>
             cumpleFiltrosReservaParaResumen(row, filtros)
         );
@@ -1403,7 +1681,17 @@ export async function obtenerResumenFinanciero(filtros, auth) {
             const suppliesCost = Number(row.supplies_total_cost ?? 0);
             const roomEntry = roomMap.get(Number(row.room_id));
             const userEntry = userMap.get(Number(row.reservation_user_id));
-            const withinPaidRange = estaDentroDelRango(row.paid_at, from, to);
+            const payments = (paymentsByChargeId.get(Number(row.id)) ?? []).map((payment) =>
+                formatearPagoSalida(payment)
+            );
+            const invoice = buildChargeInvoiceFromRow(row, payments);
+            const financialSnapshot = invoice.toFinancialSnapshot();
+            const collectedInRange = roundMoney(sumPaymentsWithinRange(payments, from, to));
+            const outstandingAmount = roundMoney(
+                row.outstanding_amount ?? invoice.outstandingAmount().toNumber()
+            );
+            const financialStatus = financialSnapshot.financialStatus;
+            const collectedRatio = resolveCollectedRatio(collectedInRange, billed);
 
             if (row.charge_decision === "exonerado") {
                 operacionesExoneradas += 1;
@@ -1411,27 +1699,35 @@ export async function obtenerResumenFinanciero(filtros, auth) {
                 continue;
             }
 
-            if (row.payment_status === "pagado" && withinPaidRange) {
-                ingresosCobrados += billed;
-                ingresosSala += roomCharge;
-                ingresosInsumos += suppliesRevenue;
-                costoInsumos += suppliesCost;
-                margenBrutoAproximado += billed - suppliesCost;
-                procedimientosCobrados += 1;
+            if (collectedInRange > 0) {
+                ingresosCobrados += collectedInRange;
+                ingresosSala += roomCharge * collectedRatio;
+                ingresosInsumos += suppliesRevenue * collectedRatio;
+                costoInsumos += suppliesCost * collectedRatio;
+                margenBrutoAproximado += collectedInRange - suppliesCost * collectedRatio;
 
                 if (row.pricing_mode === "sala_mas_insumos") {
-                    ingresosMixtos += billed;
+                    ingresosMixtos += collectedInRange;
                 }
 
                 if (roomEntry) {
-                    roomEntry.capitalGenerated += billed;
+                    roomEntry.capitalGenerated += collectedInRange;
                 }
 
                 if (userEntry) {
-                    userEntry.capitalGenerated += billed;
+                    userEntry.capitalGenerated += collectedInRange;
                 }
-            } else if (row.payment_status === "pendiente") {
-                ingresosPendientes += billed;
+            }
+
+            if (outstandingAmount > 0) {
+                ingresosPendientes += outstandingAmount;
+            }
+
+            if (
+                financialStatus === "pagado" &&
+                estaDentroDelRango(financialSnapshot.lastPaymentAt, from, to)
+            ) {
+                procedimientosCobrados += 1;
             }
         }
 

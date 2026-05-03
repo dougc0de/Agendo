@@ -10,7 +10,12 @@ const CHARGE_SELECT = `
         r.estado AS reservation_status,
         r.usuario_id AS reservation_user_id,
         u.nombre AS reservation_user_nombre,
-        uw.nombre AS waived_by_user_nombre
+        uw.nombre AS waived_by_user_nombre,
+        COALESCE(cf.paid_amount, 0) AS paid_amount,
+        COALESCE(cf.outstanding_amount, COALESCE(rc.total_billed_amount, rc.amount, 0)) AS outstanding_amount,
+        COALESCE(cf.payment_count, 0) AS payment_count,
+        COALESCE(cf.last_payment_at, rc.paid_at) AS last_payment_at,
+        cf.financial_status
     FROM reservation_charges rc
     INNER JOIN reservas r
         ON r.id = rc.reservation_id
@@ -22,6 +27,15 @@ const CHARGE_SELECT = `
         ON u.id = r.usuario_id
     LEFT JOIN usuarios uw
         ON uw.id = rc.waived_by_user_id
+    LEFT JOIN public.reservation_charge_financials cf
+        ON cf.charge_id = rc.id
+       AND cf.workspace_id = rc.workspace_id
+`;
+
+const CHARGE_PAYMENT_SELECT = `
+    SELECT
+        rcp.*
+    FROM reservation_charge_payments rcp
 `;
 
 export async function listarCobrosPorWorkspaceId(workspaceId, executor = pool) {
@@ -233,6 +247,56 @@ export async function actualizarPagoCobro(id, workspaceId, datosPago, executor =
     );
 
     return rows[0];
+}
+
+export async function crearPagoCobro(datosPago, executor = pool) {
+    const { rows } = await executor.query(
+        `
+            INSERT INTO reservation_charge_payments
+                (
+                    workspace_id,
+                    charge_id,
+                    amount,
+                    currency_code,
+                    payment_method,
+                    paid_at,
+                    notes,
+                    registered_by_user_id
+                )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `,
+        [
+            datosPago.workspaceId,
+            datosPago.chargeId,
+            datosPago.amount,
+            datosPago.currencyCode,
+            datosPago.paymentMethod,
+            datosPago.paidAt,
+            datosPago.notes,
+            datosPago.registeredByUserId
+        ]
+    );
+
+    return rows[0];
+}
+
+export async function listarPagosPorChargeIds(chargeIds, workspaceId, executor = pool) {
+    if (!Array.isArray(chargeIds) || !chargeIds.length) {
+        return [];
+    }
+
+    const { rows } = await executor.query(
+        `
+            ${CHARGE_PAYMENT_SELECT}
+            WHERE rcp.workspace_id = $1
+              AND rcp.charge_id = ANY($2::bigint[])
+            ORDER BY rcp.paid_at ASC, rcp.id ASC
+        `,
+        [workspaceId, chargeIds]
+    );
+
+    return rows;
 }
 
 export async function listarLineasInsumosPorChargeIds(chargeIds, workspaceId, executor = pool) {

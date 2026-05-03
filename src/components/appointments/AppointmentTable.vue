@@ -524,6 +524,7 @@ function formatTimeStatusLabel(appointment) {
 }
 
 .appointment-table__badge--payment-pendiente,
+.appointment-table__badge--payment-parcial,
 .appointment-table__badge--payment-sin_factura {
   background: rgba(242, 159, 56, 0.15);
   color: #9b6112;

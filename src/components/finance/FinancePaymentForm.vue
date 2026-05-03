@@ -29,7 +29,9 @@ function getLocalNowValue() {
 function createDefaultForm() {
     return {
         paymentMethod: "efectivo",
-        paidAt: getLocalNowValue()
+        amount: "",
+        paidAt: getLocalNowValue(),
+        notes: ""
     };
 }
 
@@ -46,9 +48,15 @@ const form = reactive(createDefaultForm());
 watch(
     () => props.report,
     (value) => {
+        const outstandingAmount = Number(
+            value?.outstandingAmount ?? value?.totalBilledAmount ?? 0
+        );
+
         Object.assign(form, createDefaultForm(), {
             paymentMethod: value?.paymentMethod || "efectivo",
-            paidAt: value?.paidAt ? String(value.paidAt).slice(0, 16) : getLocalNowValue()
+            amount: outstandingAmount > 0 ? outstandingAmount : "",
+            paidAt: getLocalNowValue(),
+            notes: ""
         });
     },
     { deep: true, immediate: true }
@@ -57,7 +65,9 @@ watch(
 function handleSubmit() {
     emit("submit", {
         paymentMethod: form.paymentMethod,
-        paidAt: form.paidAt
+        amount: form.amount,
+        paidAt: form.paidAt,
+        notes: form.notes
     });
 }
 </script>
@@ -73,9 +83,26 @@ function handleSubmit() {
       <span v-if="props.report?.totalBilledAmount !== undefined">
         Total: {{ formatCurrency(props.report?.totalBilledAmount, props.report?.currencyCode || "CRC") }}
       </span>
+      <span v-if="props.report?.paidAmount !== undefined">
+        Abonado: {{ formatCurrency(props.report?.paidAmount, props.report?.currencyCode || "CRC") }}
+      </span>
+      <span v-if="props.report?.outstandingAmount !== undefined">
+        Saldo pendiente: {{ formatCurrency(props.report?.outstandingAmount, props.report?.currencyCode || "CRC") }}
+      </span>
     </div>
 
     <div class="finance-payment-form__grid">
+      <BaseInput
+        :model-value="form.amount"
+        label="Monto del abono"
+        type="number"
+        min="0.01"
+        :max="props.report?.outstandingAmount || undefined"
+        step="0.01"
+        :required="true"
+        @update:model-value="form.amount = $event"
+      />
+
       <label class="finance-payment-form__field">
         <span class="finance-payment-form__label">Metodo de pago</span>
         <select v-model="form.paymentMethod" class="finance-payment-form__select">
@@ -95,6 +122,15 @@ function handleSubmit() {
       />
     </div>
 
+    <BaseInput
+      :model-value="form.notes"
+      label="Nota del pago"
+      as="textarea"
+      :rows="3"
+      placeholder="Ej. Primer abono recibido en caja"
+      @update:model-value="form.notes = $event"
+    />
+
     <p v-if="props.errorMessage" class="finance-payment-form__error">
       {{ props.errorMessage }}
     </p>
@@ -104,7 +140,7 @@ function handleSubmit() {
         Cancelar
       </BaseButton>
       <BaseButton type="submit" :disabled="props.submitting">
-        Confirmar pago
+        {{ props.report?.financialStatus === "parcial" ? "Registrar remanente" : "Registrar abono" }}
       </BaseButton>
     </div>
   </form>

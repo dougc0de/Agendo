@@ -308,6 +308,7 @@ function paymentBadgeClass(appointment) {
 }
 
 .appointment-day-panel__chip--payment-pendiente,
+.appointment-day-panel__chip--payment-parcial,
 .appointment-day-panel__chip--payment-sin_factura {
   background: rgba(242, 159, 56, 0.16);
   color: #9b6112;

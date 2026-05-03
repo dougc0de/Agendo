@@ -341,9 +341,13 @@ function normalizeFactRow(row) {
         durationMinutes: safeNumber(row.duration_minutes),
         chargeId: Number(row.charge_id ?? 0) || null,
         paymentStatus: row.payment_status ?? null,
+        financialStatus: row.financial_status ?? null,
         currencyCode: row.currency_code ?? null,
         chargeDecision: row.charge_decision ?? "cobrable",
         pricingMode: row.pricing_mode ?? null,
+        paymentCount: safeNumber(row.payment_count),
+        paidAmount: safeNumber(row.paid_amount),
+        outstandingAmount: safeNumber(row.outstanding_amount),
         paidRevenue: safeNumber(row.paid_revenue),
         pendingRevenue: safeNumber(row.pending_revenue),
         exoneratedAmount: safeNumber(row.exonerated_amount),
@@ -561,11 +565,14 @@ function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financial
     const confirmedFutureCount = futureFacts.filter(
         (fact) => fact.reservationStatus === "confirmada"
     ).length;
+    const fullyPaidFacts = facts.filter(
+        (fact) => fact.chargeDecision === "cobrable" && fact.financialStatus === "pagado"
+    );
     const paidFacts = facts.filter(
-        (fact) => fact.chargeDecision === "cobrable" && fact.paymentStatus === "pagado"
+        (fact) => fact.chargeDecision === "cobrable" && fact.paidRevenue > 0
     );
     const pendingChargeFacts = facts.filter(
-        (fact) => fact.chargeDecision === "cobrable" && fact.paymentStatus === "pendiente"
+        (fact) => fact.chargeDecision === "cobrable" && fact.pendingRevenue > 0
     );
     const paidRevenueRaw = paidFacts.reduce((sum, fact) => sum + fact.paidRevenue, 0);
     const pendingRevenueRaw = facts.reduce((sum, fact) => sum + fact.pendingRevenue, 0);
@@ -575,10 +582,10 @@ function buildMetrics(facts, { operationalMinutes = 0, currentDateKey, financial
         (sum, fact) => sum + safeNumber(fact.grossMarginAmount),
         0
     );
-    const paidChargeCount = paidFacts.filter((fact) => Boolean(fact.chargeId)).length;
+    const paidChargeCount = fullyPaidFacts.filter((fact) => Boolean(fact.chargeId)).length;
     const pendingChargeCount = pendingChargeFacts.filter((fact) => Boolean(fact.chargeId)).length;
     const paidReservationCount = new Set(
-        paidFacts.map((fact) => Number(fact.reservationId)).filter(Boolean)
+        fullyPaidFacts.map((fact) => Number(fact.reservationId)).filter(Boolean)
     ).size;
     const paidDoctorIds = new Set(
         paidFacts
