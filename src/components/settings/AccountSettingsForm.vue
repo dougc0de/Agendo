@@ -41,7 +41,26 @@ function createDefaultForm() {
         timeZone: "America/Costa_Rica",
         procedurePricingPolicy: "bloqueado",
         defaultProcedurePricingMode: "solo_sala",
-        defaultCurrencyCode: DEFAULT_CURRENCY_CODE
+        defaultCurrencyCode: DEFAULT_CURRENCY_CODE,
+        documentMode: "comprobante_simple",
+        taxesEnabled: false,
+        noShowPolicy: "informativo",
+        lateCancellationPolicy: "informativa",
+        allowReceptionManualCharges: true,
+        capabilityConfig: {
+            financeEnabled: true,
+            inventoryEnabled: false,
+            billableCatalogEnabled: true,
+            manualBillingEnabled: false,
+            partialPaymentsEnabled: false,
+            packagesEnabled: false,
+            membershipsEnabled: false,
+            rentalsEnabled: false,
+            commissionsEnabled: false,
+            depositsEnabled: false,
+            penaltiesEnabled: false,
+            whatsappEnabled: false
+        }
     };
 }
 
@@ -72,7 +91,26 @@ function handleSubmit() {
         timeZone: form.timeZone,
         procedurePricingPolicy: form.procedurePricingPolicy,
         defaultProcedurePricingMode: form.defaultProcedurePricingMode,
-        defaultCurrencyCode: form.defaultCurrencyCode
+        defaultCurrencyCode: form.defaultCurrencyCode,
+        documentMode: form.documentMode,
+        taxesEnabled: Boolean(form.taxesEnabled),
+        noShowPolicy: form.noShowPolicy,
+        lateCancellationPolicy: form.lateCancellationPolicy,
+        allowReceptionManualCharges: Boolean(form.allowReceptionManualCharges),
+        capabilityConfig: {
+            financeEnabled: Boolean(form.capabilityConfig.financeEnabled),
+            inventoryEnabled: Boolean(form.capabilityConfig.inventoryEnabled),
+            billableCatalogEnabled: Boolean(form.capabilityConfig.billableCatalogEnabled),
+            manualBillingEnabled: Boolean(form.capabilityConfig.manualBillingEnabled),
+            partialPaymentsEnabled: Boolean(form.capabilityConfig.partialPaymentsEnabled),
+            packagesEnabled: Boolean(form.capabilityConfig.packagesEnabled),
+            membershipsEnabled: Boolean(form.capabilityConfig.membershipsEnabled),
+            rentalsEnabled: Boolean(form.capabilityConfig.rentalsEnabled),
+            commissionsEnabled: Boolean(form.capabilityConfig.commissionsEnabled),
+            depositsEnabled: Boolean(form.capabilityConfig.depositsEnabled),
+            penaltiesEnabled: Boolean(form.capabilityConfig.penaltiesEnabled),
+            whatsappEnabled: Boolean(form.capabilityConfig.whatsappEnabled)
+        }
     });
 }
 </script>
@@ -227,6 +265,118 @@ function handleSubmit() {
 
     <div class="account-settings-form__section">
       <div class="account-settings-form__section-header">
+        <h3>Capacidades de la cuenta</h3>
+        <p>Activa o desactiva capas del producto segun el modelo operativo real de la clinica.</p>
+      </div>
+
+      <div class="account-settings-form__grid">
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.financeEnabled" type="checkbox">
+          <span>Finanzas activas</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.billableCatalogEnabled" type="checkbox">
+          <span>Catalogo facturable activo</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.manualBillingEnabled" type="checkbox">
+          <span>Cobros sin reserva</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.partialPaymentsEnabled" type="checkbox">
+          <span>Pagos parciales y remanentes</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.depositsEnabled" type="checkbox">
+          <span>Depositos y anticipos</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.penaltiesEnabled" type="checkbox">
+          <span>Penalidades operativas</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.inventoryEnabled" type="checkbox">
+          <span>Inventario operativo</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.packagesEnabled" type="checkbox">
+          <span>Paquetes</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.membershipsEnabled" type="checkbox">
+          <span>Membresias</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.rentalsEnabled" type="checkbox">
+          <span>Alquiler de consultorios</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.commissionsEnabled" type="checkbox">
+          <span>Comisiones</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input v-model="form.capabilityConfig.whatsappEnabled" type="checkbox">
+          <span>WhatsApp operativo</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="account-settings-form__section">
+      <div class="account-settings-form__section-header">
+        <h3>Politicas de cobro</h3>
+        <p>Estas reglas gobiernan comprobantes, impuestos y decisiones operativas del cobro.</p>
+      </div>
+
+      <div class="account-settings-form__grid">
+        <label class="account-settings-form__field">
+          <span class="account-settings-form__label">Modo de comprobante</span>
+          <select
+            v-model="form.documentMode"
+            class="account-settings-form__select"
+          >
+            <option value="comprobante_simple">Comprobante simple</option>
+            <option value="prefactura">Prefactura</option>
+          </select>
+        </label>
+        <label class="account-settings-form__field">
+          <span class="account-settings-form__label">Politica de no-show</span>
+          <select
+            v-model="form.noShowPolicy"
+            class="account-settings-form__select"
+          >
+            <option value="informativo">Solo informar</option>
+            <option value="penalidad_manual">Penalidad manual</option>
+          </select>
+        </label>
+        <label class="account-settings-form__field">
+          <span class="account-settings-form__label">Cancelacion tardia</span>
+          <select
+            v-model="form.lateCancellationPolicy"
+            class="account-settings-form__select"
+          >
+            <option value="informativa">Solo informar</option>
+            <option value="penalidad_manual">Penalidad manual</option>
+          </select>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input
+            v-model="form.taxesEnabled"
+            type="checkbox"
+          >
+          <span>Permitir impuestos opcionales</span>
+        </label>
+        <label class="account-settings-form__checkbox">
+          <input
+            v-model="form.allowReceptionManualCharges"
+            type="checkbox"
+          >
+          <span>Recepcion puede emitir cobros manuales</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="account-settings-form__section">
+      <div class="account-settings-form__section-header">
         <h3>Zona horaria</h3>
         <p>Se usa para decidir que reservas ya pasaron y para los cierres mensuales.</p>
       </div>
@@ -252,6 +402,7 @@ function handleSubmit() {
       <p>Si activas la separacion entre procedimientos, la sala quedara bloqueada esos minutos antes de permitir la siguiente reserva.</p>
       <p>La recepcion ejecuta la modalidad procedural definida aqui y luego genera la factura imprimible desde Finanzas.</p>
       <p>Si una factura usa una moneda distinta a la base de la cuenta, recepcion puede ajustarla manualmente para ese caso.</p>
+      <p>Las capacidades que no correspondan al plan comercial pueden quedar visibles aqui, pero el backend las restringe segun el plan de la cuenta.</p>
     </div>
 
     <p v-if="props.errorMessage" class="account-settings-form__error">

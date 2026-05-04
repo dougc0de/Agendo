@@ -5,10 +5,19 @@ import {
     crearWorkspaceSettings
 } from "../repositories/workspaceSettingsRepository.js";
 import {
+    actualizarWorkspaceCapabilities,
+    buscarWorkspaceCapabilitiesPorWorkspaceId,
+    crearWorkspaceCapabilities
+} from "../repositories/workspaceCapabilityRepository.js";
+import {
     DEFAULT_CURRENCY_CODE,
     normalizeSupportedCurrencyCode,
     SUPPORTED_CURRENCY_CODES
 } from "../../shared/currencies.js";
+import {
+    resolveCapabilitySnapshot,
+    sanitizeWorkspaceCapabilitiesRow
+} from "./capabilityResolver.js";
 
 const DEFAULT_CONSULTATION_DURATION = 30;
 const DEFAULT_PROCEDURE_DURATION = 60;
@@ -21,6 +30,11 @@ const DEFAULT_CLOSE_TIME = "17:00";
 const DEFAULT_TIME_ZONE = "America/Costa_Rica";
 const DEFAULT_PROCEDURE_PRICING_POLICY = "bloqueado";
 const DEFAULT_PROCEDURE_PRICING_MODE = "solo_sala";
+const DEFAULT_DOCUMENT_MODE = "comprobante_simple";
+const DEFAULT_TAXES_ENABLED = false;
+const DEFAULT_NO_SHOW_POLICY = "informativo";
+const DEFAULT_LATE_CANCELLATION_POLICY = "informativa";
+const DEFAULT_ALLOW_RECEPTION_MANUAL_CHARGES = true;
 const PROCEDURE_PRICING_POLICIES = ["bloqueado"];
 const PROCEDURE_PRICING_MODES = ["solo_sala", "solo_insumos", "sala_mas_insumos"];
 
@@ -89,6 +103,15 @@ function sanitizeSettings(row) {
         defaultCurrencyCode: normalizeSupportedCurrencyCode(
             row.default_currency_code,
             DEFAULT_CURRENCY_CODE
+        ),
+        documentMode: String(row.document_mode ?? DEFAULT_DOCUMENT_MODE),
+        taxesEnabled: Boolean(row.taxes_enabled ?? DEFAULT_TAXES_ENABLED),
+        noShowPolicy: String(row.no_show_policy ?? DEFAULT_NO_SHOW_POLICY),
+        lateCancellationPolicy: String(
+            row.late_cancellation_policy ?? DEFAULT_LATE_CANCELLATION_POLICY
+        ),
+        allowReceptionManualCharges: Boolean(
+            row.allow_reception_manual_charges ?? DEFAULT_ALLOW_RECEPTION_MANUAL_CHARGES
         ),
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -227,10 +250,99 @@ async function ensureWorkspaceSettings(workspaceId, executor) {
             timeZone: DEFAULT_TIME_ZONE,
             procedurePricingPolicy: DEFAULT_PROCEDURE_PRICING_POLICY,
             defaultProcedurePricingMode: DEFAULT_PROCEDURE_PRICING_MODE,
-            defaultCurrencyCode: DEFAULT_CURRENCY_CODE
+            defaultCurrencyCode: DEFAULT_CURRENCY_CODE,
+            documentMode: DEFAULT_DOCUMENT_MODE,
+            taxesEnabled: DEFAULT_TAXES_ENABLED,
+            noShowPolicy: DEFAULT_NO_SHOW_POLICY,
+            lateCancellationPolicy: DEFAULT_LATE_CANCELLATION_POLICY,
+            allowReceptionManualCharges: DEFAULT_ALLOW_RECEPTION_MANUAL_CHARGES
         },
         executor
     );
+}
+
+function buildCapabilityDefaults(planCode = "basic") {
+    const normalizedPlanCode = String(planCode ?? "basic").trim().toLowerCase() || "basic";
+
+    if (normalizedPlanCode === "enterprise") {
+        return {
+            financeEnabled: true,
+            inventoryEnabled: true,
+            billableCatalogEnabled: true,
+            manualBillingEnabled: true,
+            partialPaymentsEnabled: true,
+            packagesEnabled: false,
+            membershipsEnabled: false,
+            rentalsEnabled: true,
+            commissionsEnabled: true,
+            depositsEnabled: true,
+            penaltiesEnabled: true,
+            whatsappEnabled: false
+        };
+    }
+
+    if (normalizedPlanCode === "premium") {
+        return {
+            financeEnabled: true,
+            inventoryEnabled: true,
+            billableCatalogEnabled: true,
+            manualBillingEnabled: true,
+            partialPaymentsEnabled: true,
+            packagesEnabled: false,
+            membershipsEnabled: false,
+            rentalsEnabled: false,
+            commissionsEnabled: false,
+            depositsEnabled: true,
+            penaltiesEnabled: true,
+            whatsappEnabled: false
+        };
+    }
+
+    return {
+        financeEnabled: true,
+        inventoryEnabled: false,
+        billableCatalogEnabled: true,
+        manualBillingEnabled: false,
+        partialPaymentsEnabled: false,
+        packagesEnabled: false,
+        membershipsEnabled: false,
+        rentalsEnabled: false,
+        commissionsEnabled: false,
+        depositsEnabled: false,
+        penaltiesEnabled: false,
+        whatsappEnabled: false
+    };
+}
+
+async function ensureWorkspaceCapabilities(workspaceId, planCode, executor) {
+    let capabilities = await buscarWorkspaceCapabilitiesPorWorkspaceId(workspaceId, executor);
+
+    if (capabilities) {
+        return capabilities;
+    }
+
+    const defaults = buildCapabilityDefaults(planCode);
+
+    return crearWorkspaceCapabilities(
+        {
+            workspaceId,
+            ...defaults
+        },
+        executor
+    );
+}
+
+function buildSettingsSnapshot(settingsRow, capabilityRow, planCode = "basic") {
+    const settings = sanitizeSettings(settingsRow);
+    const capabilityConfig = sanitizeWorkspaceCapabilitiesRow(capabilityRow);
+    const capabilitySnapshot = resolveCapabilitySnapshot(planCode, capabilityConfig, settingsRow);
+
+    return {
+        ...settings,
+        capabilityConfig,
+        capabilities: capabilitySnapshot.features,
+        policies: capabilitySnapshot.policies
+    };
 }
 
 export async function obtenerConfiguracionOperativaNormalizada(
@@ -239,6 +351,16 @@ export async function obtenerConfiguracionOperativaNormalizada(
 ) {
     const settings = await ensureWorkspaceSettings(workspaceId, executor);
     return sanitizeSettings(settings);
+}
+
+export async function obtenerConfiguracionCuentaNormalizada(
+    workspaceId,
+    planCode = "basic",
+    executor = undefined
+) {
+    const settingsRow = await ensureWorkspaceSettings(workspaceId, executor);
+    const capabilitiesRow = await ensureWorkspaceCapabilities(workspaceId, planCode, executor);
+    return buildSettingsSnapshot(settingsRow, capabilitiesRow, planCode);
 }
 
 export async function obtenerConfiguracionCuenta(auth) {
@@ -253,11 +375,15 @@ export async function obtenerConfiguracionCuenta(auth) {
         }
 
         const settings = await ensureWorkspaceSettings(workspaceId);
+        const capabilities = await ensureWorkspaceCapabilities(
+            workspaceId,
+            auth?.planCode ?? "basic"
+        );
 
         return {
             ok: true,
             msg: "Configuracion cargada correctamente.",
-            data: sanitizeSettings(settings)
+            data: buildSettingsSnapshot(settings, capabilities, auth?.planCode ?? "basic")
         };
     } catch (error) {
         return {
@@ -285,7 +411,13 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             };
         }
 
-        const currentSettings = sanitizeSettings(await ensureWorkspaceSettings(workspaceId));
+        const currentSettingsRow = await ensureWorkspaceSettings(workspaceId);
+        const currentSettings = sanitizeSettings(currentSettingsRow);
+        const currentCapabilitiesRow = await ensureWorkspaceCapabilities(
+            workspaceId,
+            auth?.planCode ?? "basic"
+        );
+        const currentCapabilityConfig = sanitizeWorkspaceCapabilitiesRow(currentCapabilitiesRow);
         const consultationDurationEnabled = normalizeBoolean(
             payload?.consultationDurationEnabled ?? currentSettings.consultationDurationEnabled
         );
@@ -311,6 +443,30 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
         const defaultCurrencyCode = normalizeSupportedCurrencyCode(
             payload?.defaultCurrencyCode ?? currentSettings.defaultCurrencyCode,
             ""
+        );
+        const documentMode = String(
+            payload?.documentMode ?? currentSettings.documentMode ?? DEFAULT_DOCUMENT_MODE
+        )
+            .trim()
+            .toLowerCase();
+        const taxesEnabled = normalizeBoolean(
+            payload?.taxesEnabled ?? currentSettings.taxesEnabled
+        );
+        const noShowPolicy = String(
+            payload?.noShowPolicy ?? currentSettings.noShowPolicy ?? DEFAULT_NO_SHOW_POLICY
+        )
+            .trim()
+            .toLowerCase();
+        const lateCancellationPolicy = String(
+            payload?.lateCancellationPolicy ??
+                currentSettings.lateCancellationPolicy ??
+                DEFAULT_LATE_CANCELLATION_POLICY
+        )
+            .trim()
+            .toLowerCase();
+        const allowReceptionManualCharges = normalizeBoolean(
+            payload?.allowReceptionManualCharges ??
+                currentSettings.allowReceptionManualCharges
         );
 
         const consultationDurationResult = resolveReferenceDuration({
@@ -374,6 +530,13 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             };
         }
 
+        if (![DEFAULT_DOCUMENT_MODE, "prefactura"].includes(documentMode)) {
+            return {
+                ok: false,
+                msg: "El modo de comprobante no es valido."
+            };
+        }
+
         const consultationSchedule = validateScheduleBlock({
             openTime: payload?.consultationOpenTime,
             closeTime: payload?.consultationCloseTime,
@@ -414,13 +577,100 @@ export async function actualizarConfiguracionCuenta(payload, auth) {
             timeZone,
             procedurePricingPolicy,
             defaultProcedurePricingMode,
-            defaultCurrencyCode
+            defaultCurrencyCode,
+            documentMode,
+            taxesEnabled,
+            noShowPolicy,
+            lateCancellationPolicy,
+            allowReceptionManualCharges
+        });
+
+        const capabilityDefaults = buildCapabilityDefaults(auth?.planCode ?? "basic");
+        const updatedCapabilities = await actualizarWorkspaceCapabilities(workspaceId, {
+            financeEnabled: normalizeBoolean(
+                payload?.capabilityConfig?.financeEnabled ??
+                    payload?.financeEnabled ??
+                    currentCapabilityConfig.financeEnabled
+            ),
+            inventoryEnabled: normalizeBoolean(
+                payload?.capabilityConfig?.inventoryEnabled ??
+                    payload?.inventoryEnabled ??
+                    currentCapabilityConfig.inventoryEnabled
+            ),
+            billableCatalogEnabled: normalizeBoolean(
+                payload?.capabilityConfig?.billableCatalogEnabled ??
+                    payload?.billableCatalogEnabled ??
+                    currentCapabilityConfig.billableCatalogEnabled
+            ),
+            manualBillingEnabled:
+                capabilityDefaults.manualBillingEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.manualBillingEnabled ??
+                        payload?.manualBillingEnabled ??
+                        currentCapabilityConfig.manualBillingEnabled
+                ),
+            partialPaymentsEnabled:
+                capabilityDefaults.partialPaymentsEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.partialPaymentsEnabled ??
+                        payload?.partialPaymentsEnabled ??
+                        currentCapabilityConfig.partialPaymentsEnabled
+                ),
+            packagesEnabled:
+                capabilityDefaults.packagesEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.packagesEnabled ??
+                        payload?.packagesEnabled ??
+                        currentCapabilityConfig.packagesEnabled
+                ),
+            membershipsEnabled:
+                capabilityDefaults.membershipsEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.membershipsEnabled ??
+                        payload?.membershipsEnabled ??
+                        currentCapabilityConfig.membershipsEnabled
+                ),
+            rentalsEnabled:
+                capabilityDefaults.rentalsEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.rentalsEnabled ??
+                        payload?.rentalsEnabled ??
+                        currentCapabilityConfig.rentalsEnabled
+                ),
+            commissionsEnabled:
+                capabilityDefaults.commissionsEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.commissionsEnabled ??
+                        payload?.commissionsEnabled ??
+                        currentCapabilityConfig.commissionsEnabled
+                ),
+            depositsEnabled:
+                capabilityDefaults.depositsEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.depositsEnabled ??
+                        payload?.depositsEnabled ??
+                        currentCapabilityConfig.depositsEnabled
+                ),
+            penaltiesEnabled:
+                capabilityDefaults.penaltiesEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.penaltiesEnabled ??
+                        payload?.penaltiesEnabled ??
+                        currentCapabilityConfig.penaltiesEnabled
+                ),
+            whatsappEnabled:
+                capabilityDefaults.whatsappEnabled &&
+                normalizeBoolean(
+                    payload?.capabilityConfig?.whatsappEnabled ??
+                        payload?.whatsappEnabled ??
+                        currentCapabilityConfig.whatsappEnabled
+                )
         });
 
         return {
             ok: true,
             msg: "Configuracion actualizada correctamente.",
-            data: sanitizeSettings(updatedSettings)
+            data: buildSettingsSnapshot(updatedSettings, updatedCapabilities, auth?.planCode ?? "basic")
         };
     } catch (error) {
         return {

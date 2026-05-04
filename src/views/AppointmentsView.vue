@@ -14,6 +14,7 @@ import RoomForm from "../components/rooms/RoomForm.vue";
 import { useAppointments } from "../composables/useAppointments.js";
 import { getAppointmentCalendar } from "../services/appointmentApi.js";
 import { getBranches } from "../services/branchApi.js";
+import { getFinanceBillableItems } from "../services/financeApi.js";
 import { getInternalUsers } from "../services/internalUserApi.js";
 import { createPatient } from "../services/patientApi.js";
 import { createRoom, getRooms } from "../services/roomApi.js";
@@ -67,7 +68,11 @@ const accountSettings = ref({
     procedureNoClosing: false,
     timeZone: "America/Costa_Rica",
     procedurePricingPolicy: "bloqueado",
-    defaultProcedurePricingMode: "solo_sala"
+    defaultProcedurePricingMode: "solo_sala",
+    capabilities: {
+        billableCatalogEnabled: false,
+        billableCatalogMode: "simple"
+    }
 });
 const feedback = ref("");
 const modalError = ref("");
@@ -84,6 +89,7 @@ const calendarDetailModalOpen = ref(false);
 const internalUsers = ref([]);
 const doctorOptionsLoading = ref(false);
 const doctorOptionsError = ref("");
+const billableItemOptions = ref([]);
 const filters = ref({
     search: "",
     status: "todos",
@@ -594,6 +600,22 @@ async function fetchInternalDoctorOptions() {
     }
 }
 
+async function fetchBillableItems() {
+    if (!accountSettings.value.capabilities?.billableCatalogEnabled) {
+        billableItemOptions.value = [];
+        return;
+    }
+
+    try {
+        const response = await getFinanceBillableItems({
+            state: "activo"
+        });
+        billableItemOptions.value = (response.data ?? []).filter((item) => item.reservable);
+    } catch {
+        billableItemOptions.value = [];
+    }
+}
+
 async function fetchAccountSettings() {
     try {
         const response = await getAccountSettings();
@@ -616,7 +638,12 @@ async function fetchAccountSettings() {
             timeZone: response.data?.timeZone ?? "America/Costa_Rica",
             procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
             defaultProcedurePricingMode:
-                response.data?.defaultProcedurePricingMode ?? "solo_sala"
+                response.data?.defaultProcedurePricingMode ?? "solo_sala",
+            capabilities: {
+                billableCatalogEnabled: Boolean(response.data?.capabilities?.billableCatalogEnabled),
+                billableCatalogMode:
+                    response.data?.capabilities?.billableCatalogMode ?? "simple"
+            }
         };
     } catch (requestError) {
         accountSettings.value = {
@@ -634,7 +661,11 @@ async function fetchAccountSettings() {
             procedureNoClosing: false,
             timeZone: "America/Costa_Rica",
             procedurePricingPolicy: "bloqueado",
-            defaultProcedurePricingMode: "solo_sala"
+            defaultProcedurePricingMode: "solo_sala",
+            capabilities: {
+                billableCatalogEnabled: false,
+                billableCatalogMode: "simple"
+            }
         };
 
         if (!pageError.value) {
@@ -731,6 +762,7 @@ function normalizeComparableAppointment(source = {}) {
         descripcion: String(source.descripcion ?? "").trim(),
         tipoAtencion: String(source.tipoAtencion ?? "consulta").trim().toLowerCase(),
         tipoConsulta: String(source.tipoConsulta ?? "").trim(),
+        billableItemId: Number(source.billableItemId ?? 0) || null,
         usuarioId: Number(source.usuarioId ?? 0) || null,
         pacienteId: Number(source.pacienteId ?? 0) || null,
         salaId: Number(source.salaId ?? 0) || null,
@@ -754,6 +786,7 @@ function shouldUseStatusOnlyUpdate(nextPayload) {
         currentComparable.descripcion === nextComparable.descripcion &&
         currentComparable.tipoAtencion === nextComparable.tipoAtencion &&
         currentComparable.tipoConsulta === nextComparable.tipoConsulta &&
+        currentComparable.billableItemId === nextComparable.billableItemId &&
         currentComparable.usuarioId === nextComparable.usuarioId &&
         currentComparable.pacienteId === nextComparable.pacienteId &&
         currentComparable.salaId === nextComparable.salaId
@@ -811,6 +844,7 @@ async function handleSaveAppointment(payload) {
         estado: payload.estado,
         tipoAtencion: payload.tipoAtencion,
         tipoConsulta: payload.tipoConsulta,
+        billableItemId: Number(payload.billableItemId || 0) || null,
         usuarioId: Number(payload.usuarioId || 0) || null,
         pacienteId: patientId,
         salaId: Number(payload.salaId)
@@ -938,12 +972,14 @@ async function bootstrapAppointments() {
         return;
     }
 
+    await fetchAccountSettings();
+
     await Promise.all([
         fetchAppointments(),
         fetchRooms(),
         fetchBranches(),
-        fetchAccountSettings(),
-        fetchInternalDoctorOptions()
+        fetchInternalDoctorOptions(),
+        fetchBillableItems()
     ]);
 
     if (viewMode.value === "calendar") {
@@ -1206,6 +1242,8 @@ onMounted(async () => {
         :doctor-options-loading="doctorOptionsLoading"
         :doctor-options-error="doctorOptionsError"
         :rooms="appointmentRoomOptions"
+        :billable-item-options="billableItemOptions"
+        :catalog-enabled="accountSettings.capabilities?.billableCatalogEnabled"
         @submit="handleSaveAppointment"
         @cancel="closeModal"
       />

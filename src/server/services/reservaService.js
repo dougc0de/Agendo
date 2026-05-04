@@ -21,6 +21,7 @@ import {
     isDoctorUser,
     normalizeRole
 } from "../../shared/roles.js";
+import { buscarBillableItemPorId } from "../repositories/billableItemRepository.js";
 
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
 const TIPOS_ATENCION_PERMITIDOS = ["consulta", "procedimiento"];
@@ -231,6 +232,9 @@ function formatearReservaSalida(filaReserva, options = {}) {
         estado: filaReserva.estado,
         tipoAtencion: filaReserva.tipo_atencion ?? "consulta",
         tipoConsulta: filaReserva.tipo_consulta,
+        billableItemId: filaReserva.billable_item_id ?? null,
+        billableItemName: filaReserva.billable_item_name ?? null,
+        billableItemCategory: filaReserva.billable_item_category ?? null,
         appointmentOutcome: filaReserva.appointment_outcome ?? "pendiente",
         usuarioId: filaReserva.usuario_id,
         usuarioNombre: filaReserva.usuario_nombre ?? null,
@@ -314,6 +318,10 @@ function normalizarDatosEntrada(datosReserva) {
             normalizarTexto(datosReserva?.appointmentOutcome).toLowerCase() || "pendiente",
         tipoAtencion: normalizarTipoAtencion(datosReserva?.tipoAtencion) || "consulta",
         tipoConsulta: normalizarTexto(datosReserva?.tipoConsulta) || null,
+        billableItemId:
+            datosReserva?.billableItemId !== undefined && datosReserva?.billableItemId !== null
+                ? Number(datosReserva.billableItemId)
+                : null,
         usuarioId: Number(datosReserva?.usuarioId),
         pacienteId: Number(datosReserva?.pacienteId),
         salaId: Number(datosReserva?.salaId),
@@ -498,6 +506,69 @@ async function validarDoctorResponsable(usuarioId, workspaceId, filaSala) {
     return {
         ok: true,
         data: filaUsuario
+    };
+}
+
+async function resolverItemFacturableReserva(
+    billableItemId,
+    workspaceId,
+    filaSala,
+    datosNormalizados
+) {
+    if (!esIdValido(billableItemId)) {
+        return {
+            ok: true,
+            data: {
+                billableItemId: null,
+                tipoAtencion: datosNormalizados.tipoAtencion,
+                tipoConsulta: datosNormalizados.tipoConsulta
+            }
+        };
+    }
+
+    const item = await buscarBillableItemPorId(billableItemId, workspaceId);
+
+    if (!item) {
+        return {
+            ok: false,
+            msg: "El item facturable seleccionado no existe en esta cuenta."
+        };
+    }
+
+    if (item.state !== "activo") {
+        return {
+            ok: false,
+            msg: "El item facturable seleccionado esta inactivo."
+        };
+    }
+
+    if (!item.reservable) {
+        return {
+            ok: false,
+            msg: "El item facturable seleccionado no esta habilitado para agenda."
+        };
+    }
+
+    const itemBranchId = Number(item.branch_id ?? 0) || null;
+    const roomBranchId = Number(filaSala?.sucursal_id ?? 0) || null;
+
+    if (itemBranchId && roomBranchId && itemBranchId !== roomBranchId) {
+        return {
+            ok: false,
+            msg: "El item facturable pertenece a otra sucursal y no puede reservarse en esta sala."
+        };
+    }
+
+    return {
+        ok: true,
+        data: {
+            billableItemId: Number(item.id),
+            tipoAtencion:
+                item.appointment_type_hint && item.appointment_type_hint !== "otro"
+                    ? item.appointment_type_hint
+                    : datosNormalizados.tipoAtencion,
+            tipoConsulta: datosNormalizados.tipoConsulta || item.name
+        }
     };
 }
 
@@ -1017,6 +1088,19 @@ async function validarReservaContraContexto(datosReserva, auth, opciones = {}) {
         return validacionDoctorResponsable;
     }
 
+    const validacionItemFacturable = await resolverItemFacturableReserva(
+        datosNormalizados.billableItemId,
+        workspaceId,
+        resultadoSala.data.filaSala,
+        datosNormalizados
+    );
+
+    if (!validacionItemFacturable.ok) {
+        return validacionItemFacturable;
+    }
+
+    Object.assign(datosNormalizados, validacionItemFacturable.data);
+
     const reservaDominio = construirReservaDominio(datosNormalizados);
     const validacionHorario = reservaDominio.validarHorario();
 
@@ -1371,6 +1455,8 @@ export async function editarReserva(id, datosReserva, auth) {
             estado: datosReserva?.estado ?? filaReservaActual.estado,
             tipoAtencion: datosReserva?.tipoAtencion ?? filaReservaActual.tipo_atencion,
             tipoConsulta: datosReserva?.tipoConsulta ?? filaReservaActual.tipo_consulta,
+            billableItemId:
+                datosReserva?.billableItemId ?? filaReservaActual.billable_item_id ?? null,
             appointmentOutcome:
                 datosReserva?.appointmentOutcome ?? filaReservaActual.appointment_outcome ?? "pendiente",
             usuarioId: filaReservaActual.usuario_id,

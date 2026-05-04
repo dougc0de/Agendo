@@ -12,6 +12,7 @@ import {
     buscarWorkspacePorSlug
 } from "../repositories/workspaceRepository.js";
 import { crearWorkspaceSettings } from "../repositories/workspaceSettingsRepository.js";
+import { crearWorkspaceCapabilities } from "../repositories/workspaceCapabilityRepository.js";
 import { crearSucursal } from "../repositories/sucursalRepository.js";
 import {
     crearWorkspaceMember,
@@ -366,7 +367,31 @@ export async function signupWorkspaceOwner(payload) {
                     timeZone: "America/Costa_Rica",
                     procedurePricingPolicy: "bloqueado",
                     defaultProcedurePricingMode: "solo_sala",
-                    defaultCurrencyCode: DEFAULT_CURRENCY_CODE
+                    defaultCurrencyCode: DEFAULT_CURRENCY_CODE,
+                    documentMode: "comprobante_simple",
+                    taxesEnabled: false,
+                    noShowPolicy: "informativo",
+                    lateCancellationPolicy: "informativa",
+                    allowReceptionManualCharges: true
+                },
+                client
+            );
+
+            await crearWorkspaceCapabilities(
+                {
+                    workspaceId: workspace.id,
+                    financeEnabled: true,
+                    inventoryEnabled: plan.code !== "basic",
+                    billableCatalogEnabled: true,
+                    manualBillingEnabled: plan.code !== "basic",
+                    partialPaymentsEnabled: plan.code !== "basic",
+                    packagesEnabled: false,
+                    membershipsEnabled: false,
+                    rentalsEnabled: plan.code === "enterprise",
+                    commissionsEnabled: plan.code === "enterprise",
+                    depositsEnabled: plan.code !== "basic",
+                    penaltiesEnabled: plan.code !== "basic",
+                    whatsappEnabled: false
                 },
                 client
             );

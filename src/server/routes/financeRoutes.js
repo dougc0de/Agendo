@@ -9,6 +9,17 @@ import {
     obtenerResumenFinanciero
 } from "../services/financeService.js";
 import {
+    actualizarItemFacturable,
+    crearItemFacturable,
+    listarItemsFacturables
+} from "../services/billableItemService.js";
+import {
+    confirmarPagoComprobante,
+    crearComprobanteFinanciero,
+    listarComprobantesGenericos,
+    obtenerComprobantePdf
+} from "../services/billingDocumentService.js";
+import {
     actualizarEstadoItemInventario,
     actualizarItemInventario,
     crearItemInventario,
@@ -53,6 +64,26 @@ router.get("/reportes-operacion", async (req, res) => {
     return res.status(200).json(resultado);
 });
 
+router.get("/items-facturables", async (req, res) => {
+    const resultado = await listarItemsFacturables(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/comprobantes", async (req, res) => {
+    const resultado = await listarComprobantesGenericos(req.query, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
 router.get("/reservas-facturables", async (req, res) => {
     const resultado = await listarReservasFacturables(req.query, req.auth);
 
@@ -65,6 +96,16 @@ router.get("/reservas-facturables", async (req, res) => {
 
 router.get("/reportes-operacion/:id/pdf", async (req, res) => {
     const resultado = await obtenerReporteOperacionPdf(req.params.id, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.get("/comprobantes/:id/pdf", async (req, res) => {
+    const resultado = await obtenerComprobantePdf(req.params.id, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
@@ -153,6 +194,26 @@ router.post("/reportes-operacion", async (req, res) => {
     return res.status(201).json(resultado);
 });
 
+router.post("/items-facturables", async (req, res) => {
+    const resultado = await crearItemFacturable(req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(201).json(resultado);
+});
+
+router.post("/comprobantes", async (req, res) => {
+    const resultado = await crearComprobanteFinanciero(req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(201).json(resultado);
+});
+
 router.post("/inventario", async (req, res) => {
     const resultado = await crearItemInventario(req.body, req.auth);
 
@@ -193,6 +254,16 @@ router.put("/reportes-operacion/:id", async (req, res) => {
     return res.status(200).json(resultado);
 });
 
+router.put("/items-facturables/:id", async (req, res) => {
+    const resultado = await actualizarItemFacturable(req.params.id, req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
 router.patch("/cobros/:id/pago", async (req, res) => {
     const resultado = await confirmarPagoCobro(req.params.id, req.body, req.auth);
 
@@ -205,6 +276,16 @@ router.patch("/cobros/:id/pago", async (req, res) => {
 
 router.patch("/reportes-operacion/:id/pago", async (req, res) => {
     const resultado = await confirmarPagoCobro(req.params.id, req.body, req.auth);
+
+    if (!resultado.ok) {
+        return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);
+    }
+
+    return res.status(200).json(resultado);
+});
+
+router.patch("/comprobantes/:id/pago", async (req, res) => {
+    const resultado = await confirmarPagoComprobante(req.params.id, req.body, req.auth);
 
     if (!resultado.ok) {
         return res.status(resolveFinanceStatus(resultado, 400)).json(resultado);

@@ -32,7 +32,29 @@ const settings = ref({
     timeZone: "America/Costa_Rica",
     procedurePricingPolicy: "bloqueado",
     defaultProcedurePricingMode: "solo_sala",
-    defaultCurrencyCode: DEFAULT_CURRENCY_CODE
+    defaultCurrencyCode: DEFAULT_CURRENCY_CODE,
+    documentMode: "comprobante_simple",
+    taxesEnabled: false,
+    noShowPolicy: "informativo",
+    lateCancellationPolicy: "informativa",
+    allowReceptionManualCharges: true,
+    capabilityConfig: {
+        financeEnabled: true,
+        inventoryEnabled: false,
+        billableCatalogEnabled: true,
+        manualBillingEnabled: false,
+        partialPaymentsEnabled: false,
+        packagesEnabled: false,
+        membershipsEnabled: false,
+        rentalsEnabled: false,
+        commissionsEnabled: false,
+        depositsEnabled: false,
+        penaltiesEnabled: false,
+        whatsappEnabled: false
+    },
+    capabilities: {
+        billableCatalogMode: "simple"
+    }
 });
 
 const isAdminUser = computed(() =>
@@ -87,8 +109,63 @@ const statCards = computed(() => [
     {
         label: "Facturacion procedural",
         value: `${formatPricingMode(settings.value.defaultProcedurePricingMode)} · bloqueada`
+    },
+    {
+        label: "Catalogo facturable",
+        value: settings.value.capabilityConfig?.billableCatalogEnabled ? "Activo" : "Inactivo"
+    },
+    {
+        label: "Cobro manual",
+        value: settings.value.capabilityConfig?.manualBillingEnabled
+            ? "Habilitado"
+            : "Solo con reserva"
     }
 ]);
+
+function normalizeSettingsPayload(data = {}) {
+    return {
+        consultationDurationEnabled: Boolean(data.consultationDurationEnabled),
+        consultationDurationMinutes: Number(data.consultationDurationMinutes ?? 30) || 30,
+        procedureDurationEnabled: Boolean(data.procedureDurationEnabled),
+        procedureDurationMinutes: Number(data.procedureDurationMinutes ?? 60) || 60,
+        procedureTurnoverEnabled: Boolean(data.procedureTurnoverEnabled),
+        procedureTurnoverMinutes: Number(data.procedureTurnoverMinutes ?? 15) || 15,
+        consultationOpenTime: data.consultationOpenTime ?? "08:00",
+        consultationCloseTime: data.consultationCloseTime ?? "17:00",
+        consultationNoClosing: Boolean(data.consultationNoClosing),
+        procedureOpenTime: data.procedureOpenTime ?? "08:00",
+        procedureCloseTime: data.procedureCloseTime ?? "17:00",
+        procedureNoClosing: Boolean(data.procedureNoClosing),
+        timeZone: data.timeZone ?? "America/Costa_Rica",
+        procedurePricingPolicy: data.procedurePricingPolicy ?? "bloqueado",
+        defaultProcedurePricingMode: data.defaultProcedurePricingMode ?? "solo_sala",
+        defaultCurrencyCode: data.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE,
+        documentMode: data.documentMode ?? "comprobante_simple",
+        taxesEnabled: Boolean(data.taxesEnabled),
+        noShowPolicy: data.noShowPolicy ?? "informativo",
+        lateCancellationPolicy: data.lateCancellationPolicy ?? "informativa",
+        allowReceptionManualCharges: Boolean(data.allowReceptionManualCharges),
+        capabilityConfig: {
+            financeEnabled: Boolean(data.capabilityConfig?.financeEnabled ?? true),
+            inventoryEnabled: Boolean(data.capabilityConfig?.inventoryEnabled),
+            billableCatalogEnabled: Boolean(
+                data.capabilityConfig?.billableCatalogEnabled ?? true
+            ),
+            manualBillingEnabled: Boolean(data.capabilityConfig?.manualBillingEnabled),
+            partialPaymentsEnabled: Boolean(data.capabilityConfig?.partialPaymentsEnabled),
+            packagesEnabled: Boolean(data.capabilityConfig?.packagesEnabled),
+            membershipsEnabled: Boolean(data.capabilityConfig?.membershipsEnabled),
+            rentalsEnabled: Boolean(data.capabilityConfig?.rentalsEnabled),
+            commissionsEnabled: Boolean(data.capabilityConfig?.commissionsEnabled),
+            depositsEnabled: Boolean(data.capabilityConfig?.depositsEnabled),
+            penaltiesEnabled: Boolean(data.capabilityConfig?.penaltiesEnabled),
+            whatsappEnabled: Boolean(data.capabilityConfig?.whatsappEnabled)
+        },
+        capabilities: {
+            ...data.capabilities
+        }
+    };
+}
 
 async function fetchSettings() {
     loading.value = true;
@@ -96,52 +173,13 @@ async function fetchSettings() {
 
     try {
         const response = await getAccountSettings();
-        settings.value = {
-            consultationDurationEnabled: Boolean(response.data?.consultationDurationEnabled),
-            consultationDurationMinutes:
-                Number(response.data?.consultationDurationMinutes ?? 30) || 30,
-            procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
-            procedureDurationMinutes:
-                Number(response.data?.procedureDurationMinutes ?? 60) || 60,
-            procedureTurnoverEnabled: Boolean(response.data?.procedureTurnoverEnabled),
-            procedureTurnoverMinutes:
-                Number(response.data?.procedureTurnoverMinutes ?? 15) || 15,
-            consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
-            consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
-            consultationNoClosing: Boolean(response.data?.consultationNoClosing),
-            procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
-            procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
-            procedureNoClosing: Boolean(response.data?.procedureNoClosing),
-            timeZone: response.data?.timeZone ?? "America/Costa_Rica",
-            procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
-            defaultProcedurePricingMode:
-                response.data?.defaultProcedurePricingMode ?? "solo_sala",
-            defaultCurrencyCode:
-                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE
-        };
+        settings.value = normalizeSettingsPayload(response.data ?? {});
     } catch (requestError) {
         error.value =
             requestError.response?.msg ||
             requestError.message ||
             "No fue posible cargar la configuracion.";
-        settings.value = {
-            consultationDurationEnabled: false,
-            consultationDurationMinutes: 30,
-            procedureDurationEnabled: false,
-            procedureDurationMinutes: 60,
-            procedureTurnoverEnabled: false,
-            procedureTurnoverMinutes: 15,
-            consultationOpenTime: "08:00",
-            consultationCloseTime: "17:00",
-            consultationNoClosing: false,
-            procedureOpenTime: "08:00",
-            procedureCloseTime: "17:00",
-            procedureNoClosing: false,
-            timeZone: "America/Costa_Rica",
-            procedurePricingPolicy: "bloqueado",
-            defaultProcedurePricingMode: "solo_sala",
-            defaultCurrencyCode: DEFAULT_CURRENCY_CODE
-        };
+        settings.value = normalizeSettingsPayload();
     } finally {
         loading.value = false;
     }
@@ -154,29 +192,7 @@ async function handleSaveSettings(payload) {
 
     try {
         const response = await updateAccountSettings(payload);
-        settings.value = {
-            consultationDurationEnabled: Boolean(response.data?.consultationDurationEnabled),
-            consultationDurationMinutes:
-                Number(response.data?.consultationDurationMinutes ?? 30) || 30,
-            procedureDurationEnabled: Boolean(response.data?.procedureDurationEnabled),
-            procedureDurationMinutes:
-                Number(response.data?.procedureDurationMinutes ?? 60) || 60,
-            procedureTurnoverEnabled: Boolean(response.data?.procedureTurnoverEnabled),
-            procedureTurnoverMinutes:
-                Number(response.data?.procedureTurnoverMinutes ?? 15) || 15,
-            consultationOpenTime: response.data?.consultationOpenTime ?? "08:00",
-            consultationCloseTime: response.data?.consultationCloseTime ?? "17:00",
-            consultationNoClosing: Boolean(response.data?.consultationNoClosing),
-            procedureOpenTime: response.data?.procedureOpenTime ?? "08:00",
-            procedureCloseTime: response.data?.procedureCloseTime ?? "17:00",
-            procedureNoClosing: Boolean(response.data?.procedureNoClosing),
-            timeZone: response.data?.timeZone ?? "America/Costa_Rica",
-            procedurePricingPolicy: response.data?.procedurePricingPolicy ?? "bloqueado",
-            defaultProcedurePricingMode:
-                response.data?.defaultProcedurePricingMode ?? "solo_sala",
-            defaultCurrencyCode:
-                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE
-        };
+        settings.value = normalizeSettingsPayload(response.data ?? {});
         feedback.value = response.msg;
     } catch (requestError) {
         error.value =

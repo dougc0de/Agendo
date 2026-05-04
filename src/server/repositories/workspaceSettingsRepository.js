@@ -35,9 +35,14 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
                     time_zone,
                     procedure_pricing_policy,
                     default_procedure_pricing_mode,
-                    default_currency_code
+                    default_currency_code,
+                    document_mode,
+                    taxes_enabled,
+                    no_show_policy,
+                    late_cancellation_policy,
+                    allow_reception_manual_charges
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             RETURNING *
         `,
         [
@@ -57,7 +62,12 @@ export async function crearWorkspaceSettings(datosSettings, executor = pool) {
             datosSettings.timeZone,
             datosSettings.procedurePricingPolicy,
             datosSettings.defaultProcedurePricingMode,
-            datosSettings.defaultCurrencyCode
+            datosSettings.defaultCurrencyCode,
+            datosSettings.documentMode,
+            datosSettings.taxesEnabled,
+            datosSettings.noShowPolicy,
+            datosSettings.lateCancellationPolicy,
+            datosSettings.allowReceptionManualCharges
         ]
     );
 
@@ -84,7 +94,12 @@ export async function actualizarWorkspaceSettings(workspaceId, datosSettings, ex
                 time_zone = $14,
                 procedure_pricing_policy = $15,
                 default_procedure_pricing_mode = $16,
-                default_currency_code = $17
+                default_currency_code = $17,
+                document_mode = $18,
+                taxes_enabled = $19,
+                no_show_policy = $20,
+                late_cancellation_policy = $21,
+                allow_reception_manual_charges = $22
             WHERE workspace_id = $1
             RETURNING *
         `,
@@ -105,7 +120,12 @@ export async function actualizarWorkspaceSettings(workspaceId, datosSettings, ex
             datosSettings.timeZone,
             datosSettings.procedurePricingPolicy,
             datosSettings.defaultProcedurePricingMode,
-            datosSettings.defaultCurrencyCode
+            datosSettings.defaultCurrencyCode,
+            datosSettings.documentMode,
+            datosSettings.taxesEnabled,
+            datosSettings.noShowPolicy,
+            datosSettings.lateCancellationPolicy,
+            datosSettings.allowReceptionManualCharges
         ]
     );
 

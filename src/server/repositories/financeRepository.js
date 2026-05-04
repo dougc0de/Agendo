@@ -15,7 +15,9 @@ const CHARGE_SELECT = `
         COALESCE(cf.outstanding_amount, COALESCE(rc.total_billed_amount, rc.amount, 0)) AS outstanding_amount,
         COALESCE(cf.payment_count, 0) AS payment_count,
         COALESCE(cf.last_payment_at, rc.paid_at) AS last_payment_at,
-        cf.financial_status
+        cf.financial_status,
+        bi.name AS billable_item_name,
+        bi.category AS billable_item_category
     FROM reservation_charges rc
     INNER JOIN reservas r
         ON r.id = rc.reservation_id
@@ -27,6 +29,8 @@ const CHARGE_SELECT = `
         ON u.id = r.usuario_id
     LEFT JOIN usuarios uw
         ON uw.id = rc.waived_by_user_id
+    LEFT JOIN billable_items bi
+        ON bi.id = rc.billable_item_id
     LEFT JOIN public.reservation_charge_financials cf
         ON cf.charge_id = rc.id
        AND cf.workspace_id = rc.workspace_id
@@ -117,6 +121,7 @@ export async function crearCobro(datosCobro, executor = pool) {
                     branch_name_snapshot,
                     procedure_name,
                     tipo_atencion,
+                    billable_item_id,
                     amount,
                     currency_code,
                     payment_status,
@@ -136,7 +141,7 @@ export async function crearCobro(datosCobro, executor = pool) {
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                $21, $22, $23, $24, $25, $26
+                $21, $22, $23, $24, $25, $26, $27
             )
             RETURNING id
         `,
@@ -152,6 +157,7 @@ export async function crearCobro(datosCobro, executor = pool) {
             datosCobro.branchNameSnapshot,
             datosCobro.procedureName,
             datosCobro.tipoAtencion,
+            datosCobro.billableItemId,
             datosCobro.amount,
             datosCobro.currencyCode,
             datosCobro.paymentStatus,
@@ -193,7 +199,8 @@ export async function actualizarCobro(id, workspaceId, datosCobro, executor = po
                 total_billed_amount = $15,
                 charge_decision = $16,
                 waived_by_user_id = $17,
-                waiver_reason = $18
+                waiver_reason = $18,
+                billable_item_id = $19
             WHERE id = $1
               AND workspace_id = $2
             RETURNING id
@@ -216,7 +223,8 @@ export async function actualizarCobro(id, workspaceId, datosCobro, executor = po
             datosCobro.totalBilledAmount,
             datosCobro.chargeDecision,
             datosCobro.waivedByUserId,
-            datosCobro.waiverReason
+            datosCobro.waiverReason,
+            datosCobro.billableItemId
         ]
     );
 

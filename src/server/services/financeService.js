@@ -30,6 +30,10 @@ import { ChargeInvoice } from "../domain/finance/ChargeInvoice.js";
 import { ChargePayment } from "../domain/finance/ChargePayment.js";
 import { InvoiceStatusPolicy } from "../domain/finance/InvoiceStatusPolicy.js";
 import { Money } from "../domain/finance/Money.js";
+import {
+    listarComprobantesFormateadosPorWorkspaceId,
+    listarReservationBillingDocumentsMap
+} from "./billingDocumentService.js";
 
 const ESTADOS_COBRO = ["pendiente", "pagado", "anulado"];
 const METODOS_PAGO = ["efectivo", "tarjeta", "transferencia", "otro"];
@@ -239,6 +243,9 @@ function formatearCobroSalida(filaCobro, supplies = [], payments = []) {
         branchNameSnapshot: filaCobro.branch_name_snapshot ?? null,
         procedureName: filaCobro.procedure_name,
         tipoAtencion: filaCobro.tipo_atencion,
+        billableItemId: filaCobro.billable_item_id ?? null,
+        billableItemName: filaCobro.billable_item_name ?? null,
+        billableItemCategory: filaCobro.billable_item_category ?? null,
         amount: Number(filaCobro.total_billed_amount ?? filaCobro.amount ?? 0),
         currencyCode: filaCobro.currency_code ?? DEFAULT_CURRENCY_CODE,
         paymentStatus: financialSnapshot.paymentStatus,
@@ -518,15 +525,16 @@ function formatearReservaFacturable(filaReserva) {
         salaNombre: filaReserva.sala_nombre ?? null,
         branchId: filaReserva.sucursal_id ?? null,
         branchName: filaReserva.sucursal_nombre ?? null,
+        billableItemId: filaReserva.billable_item_id ?? null,
         confirmedAt: filaReserva.confirmed_at ?? null
     };
 }
 
-function esReservaFacturable(filaReserva, chargeMap) {
+function esReservaFacturable(filaReserva, chargeMap, documentMap = new Map()) {
     return (
-        filaReserva.tipo_atencion === "procedimiento" &&
         filaReserva.estado === "confirmada" &&
-        !chargeMap.has(Number(filaReserva.id))
+        !chargeMap.has(Number(filaReserva.id)) &&
+        !documentMap.has(Number(filaReserva.id))
     );
 }
 
@@ -1097,11 +1105,21 @@ export async function listarCobros(filtros, auth) {
 
         const rows = await listarCobrosPorWorkspaceId(workspaceId);
         const filteredRows = rows.filter((row) => cumpleFiltrosCobro(row, filtros));
+        const genericDocuments = await listarComprobantesFormateadosPorWorkspaceId(
+            workspaceId,
+            filtros
+        );
+        const legacyCharges = await enriquecerCobrosConLineas(filteredRows, workspaceId);
+        const mergedReports = [...legacyCharges, ...genericDocuments].sort((left, right) => {
+            const leftKey = String(left.createdAt ?? left.issuedAt ?? "");
+            const rightKey = String(right.createdAt ?? right.issuedAt ?? "");
+            return rightKey.localeCompare(leftKey);
+        });
 
         return {
             ok: true,
             msg: "Reportes operativos listados correctamente.",
-            data: await enriquecerCobrosConLineas(filteredRows, workspaceId)
+            data: mergedReports
         };
     } catch (error) {
         return {
@@ -1138,13 +1156,19 @@ export async function listarReservasFacturables(filtros, auth) {
                 )
             ).map((chargeRow) => [Number(chargeRow.reservation_id), chargeRow])
         );
+        const documentMap = await listarReservationBillingDocumentsMap(
+            reservationRows.map((row) => Number(row.id)),
+            workspaceId
+        );
 
         return {
             ok: true,
             msg: "Reservas facturables listadas correctamente.",
             data: reservationRows
                 .filter((filaReserva) => cumpleFiltrosReservaParaResumen(filaReserva, filtros))
-                .filter((filaReserva) => esReservaFacturable(filaReserva, chargeMap))
+                .filter((filaReserva) =>
+                    esReservaFacturable(filaReserva, chargeMap, documentMap)
+                )
                 .sort((left, right) => {
                     const leftKey = `${normalizarFecha(left.fecha)}T${normalizarHora(left.hora_inicio)}`;
                     const rightKey = `${normalizarFecha(right.fecha)}T${normalizarHora(right.hora_inicio)}`;
@@ -1296,6 +1320,7 @@ export async function crearCobro(payload, auth) {
                     branchNameSnapshot: room.sucursal_nombre ?? null,
                     procedureName: normalizedPayload.data.procedureName,
                     tipoAtencion: reservation.tipo_atencion,
+                    billableItemId: reservation.billable_item_id ?? null,
                     amount: normalizedPayload.data.totalBilledAmount,
                     currencyCode: normalizedPayload.data.currencyCode,
                     paymentStatus: normalizedPayload.data.paymentStatus,
@@ -1310,7 +1335,8 @@ export async function crearCobro(payload, auth) {
                     totalBilledAmount: normalizedPayload.data.totalBilledAmount,
                     chargeDecision: normalizedPayload.data.chargeDecision,
                     waivedByUserId: normalizedPayload.data.waivedByUserId,
-                    waiverReason: normalizedPayload.data.waiverReason
+                    waiverReason: normalizedPayload.data.waiverReason,
+                    billableItemId: charge.billable_item_id ?? null
                 },
                 client
             );
@@ -1658,6 +1684,10 @@ export async function obtenerResumenFinanciero(filtros, auth) {
             workspaceId
         );
         const paymentsByChargeId = groupRowsByChargeId(paymentRows, (payment) => payment.charge_id);
+        const genericDocuments = await listarComprobantesFormateadosPorWorkspaceId(
+            workspaceId,
+            filtros
+        );
         const reservationRows = (await listarReservasRepository(workspaceId)).filter((row) =>
             cumpleFiltrosReservaParaResumen(row, filtros)
         );
@@ -1731,6 +1761,62 @@ export async function obtenerResumenFinanciero(filtros, auth) {
             }
         }
 
+        for (const document of genericDocuments) {
+            const billed = Number(document.totalBilledAmount ?? 0);
+            const roomEntryKey = Number(document.roomId ?? 0);
+            const userEntryKey = Number(document.reservationUserId ?? 0);
+            const payments = document.payments ?? [];
+            const collectedInRange = roundMoney(sumPaymentsWithinRange(payments, from, to));
+
+            if (document.chargeDecision === "exonerado") {
+                operacionesExoneradas += 1;
+                montoExonerado += billed;
+                continue;
+            }
+
+            if (collectedInRange > 0) {
+                ingresosCobrados += collectedInRange;
+
+                if (roomEntryKey > 0) {
+                    if (!roomMap.has(roomEntryKey)) {
+                        roomMap.set(roomEntryKey, {
+                            roomId: roomEntryKey,
+                            roomName: document.roomNameSnapshot ?? `Sala #${roomEntryKey}`,
+                            frequency: 0,
+                            hoursUsed: 0,
+                            capitalGenerated: 0
+                        });
+                    }
+
+                    roomMap.get(roomEntryKey).capitalGenerated += collectedInRange;
+                }
+
+                if (userEntryKey > 0) {
+                    if (!userMap.has(userEntryKey)) {
+                        userMap.set(userEntryKey, {
+                            userId: userEntryKey,
+                            userName:
+                                document.reservationUserName ?? `Usuario #${userEntryKey}`,
+                            capitalGenerated: 0
+                        });
+                    }
+
+                    userMap.get(userEntryKey).capitalGenerated += collectedInRange;
+                }
+            }
+
+            if (Number(document.outstandingAmount ?? 0) > 0) {
+                ingresosPendientes += Number(document.outstandingAmount ?? 0);
+            }
+
+            if (
+                document.financialStatus === "pagado" &&
+                estaDentroDelRango(document.lastPaymentAt, from, to)
+            ) {
+                procedimientosCobrados += 1;
+            }
+        }
+
         return {
             ok: true,
             msg: "Resumen financiero generado correctamente.",
@@ -1745,7 +1831,7 @@ export async function obtenerResumenFinanciero(filtros, auth) {
                 montoExonerado: roundMoney(montoExonerado),
                 costoInsumos: roundMoney(costoInsumos),
                 margenBrutoAproximado: roundMoney(margenBrutoAproximado),
-                cobrosRegistrados: filteredCharges.length,
+                cobrosRegistrados: filteredCharges.length + genericDocuments.length,
                 rooms: [...roomMap.values()].sort(
                     (left, right) => right.capitalGenerated - left.capitalGenerated
                 ),

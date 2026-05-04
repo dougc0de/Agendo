@@ -80,7 +80,9 @@ function buildReservationSelectQuery({
                 u.nombre AS usuario_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
-                p.correo AS paciente_correo
+                p.correo AS paciente_correo,
+                bi.name AS billable_item_name,
+                bi.category AS billable_item_category
             FROM ${sourceExpression} ${alias}
             LEFT JOIN salas s
                 ON s.id = ${alias}.sala_id
@@ -92,6 +94,8 @@ function buildReservationSelectQuery({
             LEFT JOIN pacientes p
                 ON p.id = ${alias}.paciente_id
                AND p.workspace_id = ${alias}.workspace_id
+            LEFT JOIN billable_items bi
+                ON bi.id = ${alias}.billable_item_id
             WHERE ${clauses.join(" AND ")}
             ORDER BY ${alias}.fecha ${normalizedOrderDirection}, ${alias}.hora_inicio ${normalizedOrderDirection}
         `,
@@ -129,12 +133,13 @@ export async function crearReserva(reserva, executor = pool) {
                     appointment_outcome,
                     tipo_atencion,
                     tipo_consulta,
+                    billable_item_id,
                     usuario_id,
                     paciente_id,
                     sala_id,
                     workspace_id
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING id
         `,
         [
@@ -146,6 +151,7 @@ export async function crearReserva(reserva, executor = pool) {
             reserva.appointmentOutcome ?? "pendiente",
             reserva.tipoAtencion,
             reserva.tipoConsulta,
+            reserva.billableItemId,
             reserva.usuarioId,
             reserva.pacienteId,
             reserva.salaId,
@@ -169,7 +175,9 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
                 u.nombre AS usuario_nombre,
                 p.nombre AS paciente_nombre,
                 p.telefono AS paciente_telefono,
-                p.correo AS paciente_correo
+                p.correo AS paciente_correo,
+                bi.name AS billable_item_name,
+                bi.category AS billable_item_category
             FROM reservas r
             LEFT JOIN salas s
                 ON s.id = r.sala_id
@@ -181,6 +189,8 @@ export async function buscarReservaPorId(id, workspaceId, executor = pool) {
             LEFT JOIN pacientes p
                 ON p.id = r.paciente_id
                AND p.workspace_id = r.workspace_id
+            LEFT JOIN billable_items bi
+                ON bi.id = r.billable_item_id
             WHERE r.id = $1
               AND r.workspace_id = $2
         `,
@@ -245,21 +255,22 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
                 estado = $5,
                 tipo_atencion = $6,
                 tipo_consulta = $7,
-                usuario_id = $8,
-                paciente_id = $9,
-                sala_id = $10,
-                appointment_outcome = $11,
-                confirmed_at = $12,
-                confirmed_by_user_id = $13,
-                cancelled_at = $14,
-                cancelled_by_user_id = $15,
-                cancellation_reason = $16,
-                checked_in_at = $17,
-                completed_at = $18,
-                outcome_recorded_at = $19,
-                outcome_recorded_by_user_id = $20
-            WHERE id = $21
-              AND workspace_id = $22
+                billable_item_id = $8,
+                usuario_id = $9,
+                paciente_id = $10,
+                sala_id = $11,
+                appointment_outcome = $12,
+                confirmed_at = $13,
+                confirmed_by_user_id = $14,
+                cancelled_at = $15,
+                cancelled_by_user_id = $16,
+                cancellation_reason = $17,
+                checked_in_at = $18,
+                completed_at = $19,
+                outcome_recorded_at = $20,
+                outcome_recorded_by_user_id = $21
+            WHERE id = $22
+              AND workspace_id = $23
         `,
         [
             datos.fecha,
@@ -269,6 +280,7 @@ export async function actualizarReserva(id, datos, workspaceId, executor = pool)
             datos.estado,
             datos.tipoAtencion,
             datos.tipoConsulta,
+            datos.billableItemId,
             datos.usuarioId,
             datos.pacienteId,
             datos.salaId,

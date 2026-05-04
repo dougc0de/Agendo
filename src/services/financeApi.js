@@ -27,6 +27,14 @@ export async function getFinanceBillableReservations(filters = {}) {
     return apiRequest(`/finanzas/reservas-facturables${buildQueryString(filters)}`);
 }
 
+export async function getFinanceBillableItems(filters = {}) {
+    return apiRequest(`/finanzas/items-facturables${buildQueryString(filters)}`);
+}
+
+export async function getFinanceBillingDocuments(filters = {}) {
+    return apiRequest(`/finanzas/comprobantes${buildQueryString(filters)}`);
+}
+
 export async function createFinanceCharge(payload) {
     return apiRequest("/finanzas/cobros", {
         method: "POST",
@@ -36,6 +44,20 @@ export async function createFinanceCharge(payload) {
 
 export async function createFinanceOperationReport(payload) {
     return apiRequest("/finanzas/reportes-operacion", {
+        method: "POST",
+        body: payload
+    });
+}
+
+export async function createFinanceBillableItem(payload) {
+    return apiRequest("/finanzas/items-facturables", {
+        method: "POST",
+        body: payload
+    });
+}
+
+export async function createFinanceBillingDocument(payload) {
+    return apiRequest("/finanzas/comprobantes", {
         method: "POST",
         body: payload
     });
@@ -55,6 +77,13 @@ export async function updateFinanceOperationReport(id, payload) {
     });
 }
 
+export async function updateFinanceBillableItem(id, payload) {
+    return apiRequest(`/finanzas/items-facturables/${id}`, {
+        method: "PUT",
+        body: payload
+    });
+}
+
 export async function confirmFinanceOperationReportPayment(id, payload) {
     return apiRequest(`/finanzas/reportes-operacion/${id}/pago`, {
         method: "PATCH",
@@ -62,8 +91,19 @@ export async function confirmFinanceOperationReportPayment(id, payload) {
     });
 }
 
+export async function confirmFinanceBillingDocumentPayment(id, payload) {
+    return apiRequest(`/finanzas/comprobantes/${id}/pago`, {
+        method: "PATCH",
+        body: payload
+    });
+}
+
 export async function getFinanceOperationReportPdf(id) {
     return apiRequest(`/finanzas/reportes-operacion/${id}/pdf`);
+}
+
+export async function getFinanceBillingDocumentPdf(id) {
+    return apiRequest(`/finanzas/comprobantes/${id}/pdf`);
 }
 
 export async function getFinanceSummary(filters = {}) {
