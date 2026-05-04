@@ -45,7 +45,20 @@ export class ChargeInvoice {
         });
     }
 
+    usesLegacyPaidFallback() {
+        return (
+            this.chargeDecision !== "exonerado" &&
+            this.paymentStatus === "pagado" &&
+            !this.payments.length &&
+            this.totalBilledAmount.isPositive()
+        );
+    }
+
     totalPaid() {
+        if (this.usesLegacyPaidFallback()) {
+            return this.totalBilledAmount;
+        }
+
         return this.payments.reduce(
             (accumulator, payment) => accumulator.plus(payment.amount),
             new Money(0)
@@ -57,6 +70,10 @@ export class ChargeInvoice {
     }
 
     paymentCount() {
+        if (this.usesLegacyPaidFallback()) {
+            return 1;
+        }
+
         return this.payments.length;
     }
 

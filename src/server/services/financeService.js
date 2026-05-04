@@ -144,6 +144,12 @@ function deriveFinancialStatus(row) {
         return "sin_factura";
     }
 
+    const invoice = ChargeInvoice.fromRow(row);
+
+    if (invoice.usesLegacyPaidFallback()) {
+        return "pagado";
+    }
+
     if (row.financial_status) {
         return row.financial_status;
     }
@@ -316,6 +322,18 @@ function sumPaymentsWithinRange(payments = [], from = null, to = null) {
 
         return sum + Number(payment?.amount ?? 0);
     }, 0);
+}
+
+function resolveCollectedAmountWithinRange(invoice, payments = [], from = null, to = null) {
+    const collectedFromLedger = roundMoney(sumPaymentsWithinRange(payments, from, to));
+
+    if (collectedFromLedger > 0 || !invoice?.usesLegacyPaidFallback?.()) {
+        return collectedFromLedger;
+    }
+
+    return estaDentroDelRango(invoice.resolvedLastPaymentAt(), from, to)
+        ? invoice.totalPaid().toNumber()
+        : 0;
 }
 
 function resolveCollectedRatio(collectedAmount, totalBilledAmount) {
@@ -1335,8 +1353,7 @@ export async function crearCobro(payload, auth) {
                     totalBilledAmount: normalizedPayload.data.totalBilledAmount,
                     chargeDecision: normalizedPayload.data.chargeDecision,
                     waivedByUserId: normalizedPayload.data.waivedByUserId,
-                    waiverReason: normalizedPayload.data.waiverReason,
-                    billableItemId: charge.billable_item_id ?? null
+                    waiverReason: normalizedPayload.data.waiverReason
                 },
                 client
             );
@@ -1716,10 +1733,13 @@ export async function obtenerResumenFinanciero(filtros, auth) {
             );
             const invoice = buildChargeInvoiceFromRow(row, payments);
             const financialSnapshot = invoice.toFinancialSnapshot();
-            const collectedInRange = roundMoney(sumPaymentsWithinRange(payments, from, to));
-            const outstandingAmount = roundMoney(
-                row.outstanding_amount ?? invoice.outstandingAmount().toNumber()
+            const collectedInRange = resolveCollectedAmountWithinRange(
+                invoice,
+                payments,
+                from,
+                to
             );
+            const outstandingAmount = financialSnapshot.outstandingAmount;
             const financialStatus = financialSnapshot.financialStatus;
             const collectedRatio = resolveCollectedRatio(collectedInRange, billed);
 

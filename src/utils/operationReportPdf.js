@@ -37,14 +37,22 @@ function buildPaymentFooter(report) {
         return "Caso exonerado por autorizacion administrativa.";
     }
 
-    if (report.paymentStatus === "pagado") {
+    const resolvedPaymentStatus = report.financialStatus || report.paymentStatus;
+
+    if (resolvedPaymentStatus === "pagado") {
         return `Pago confirmado: ${escapeHtml(formatDateTime(report.paidAt))} · Metodo: ${escapeHtml(
             report.paymentMethod || "sin metodo"
         )}`;
     }
 
-    if (report.paymentStatus === "anulado") {
+    if (resolvedPaymentStatus === "anulado") {
         return "Factura anulada. No procede confirmacion de pago.";
+    }
+
+    if (resolvedPaymentStatus === "parcial") {
+        return `Comprobante con abonos registrados. Saldo pendiente: ${escapeHtml(
+            formatCurrency(report.outstandingAmount, report.currencyCode)
+        )}`;
     }
 
     return "Factura emitida y pendiente de pago en recepcion.";
@@ -59,6 +67,237 @@ export function downloadOperationReportPdf(report) {
 
     if (!popup) {
         throw new Error("El navegador bloqueo la ventana del PDF. Permite popups para continuar.");
+    }
+
+    if (report.recordType === "billing_document") {
+        const lineRows = (report.lines ?? [])
+            .map(
+                (line) => `
+                    <tr>
+                        <td>${escapeHtml(line.lineNameSnapshot)}</td>
+                        <td>${escapeHtml(line.categorySnapshot || "-")}</td>
+                        <td>${escapeHtml(line.quantity)}</td>
+                        <td>${escapeHtml(formatCurrency(line.unitPrice, report.currencyCode))}</td>
+                        <td>${escapeHtml(formatCurrency(line.discountAmount, report.currencyCode))}</td>
+                        <td>${escapeHtml(formatCurrency(line.taxAmount, report.currencyCode))}</td>
+                        <td>${escapeHtml(formatCurrency(line.lineTotal, report.currencyCode))}</td>
+                    </tr>
+                `
+            )
+            .join("");
+
+        popup.document.write(`
+            <!doctype html>
+            <html lang="es">
+              <head>
+                <meta charset="utf-8" />
+                <title>${escapeHtml(
+                    report.documentType === "prefactura" ? "Prefactura" : "Comprobante"
+                )} #${escapeHtml(report.id)}</title>
+                <style>
+                  body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 24px;
+                    color: #12313f;
+                    background: #f4fafb;
+                  }
+                  h1, h2, h3, p { margin: 0; }
+                  .sheet {
+                    max-width: 920px;
+                    margin: 0 auto;
+                    background: #ffffff;
+                    border-radius: 12px;
+                    padding: 24px;
+                    box-shadow: 0 18px 42px rgba(16, 38, 44, 0.12);
+                  }
+                  .hero {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 16px;
+                    border-bottom: 2px solid #dcecf1;
+                    padding-bottom: 18px;
+                    margin-bottom: 18px;
+                  }
+                  .eyebrow {
+                    display: inline-block;
+                    padding: 6px 12px;
+                    border-radius: 999px;
+                    background: #d9f2ee;
+                    color: #0f4e5f;
+                    font-size: 12px;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                  }
+                  .meta, .totals {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 14px;
+                    margin: 18px 0;
+                  }
+                  .card {
+                    border: 1px solid #dcecf1;
+                    border-radius: 10px;
+                    padding: 14px;
+                    background: #f9fcfd;
+                  }
+                  .card strong {
+                    display: block;
+                    margin-top: 6px;
+                    font-size: 18px;
+                  }
+                  table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 14px;
+                  }
+                  th, td {
+                    padding: 10px;
+                    border-bottom: 1px solid #deeaef;
+                    text-align: left;
+                    font-size: 13px;
+                  }
+                  th {
+                    background: #eff7fa;
+                  }
+                  .section-title {
+                    margin-top: 22px;
+                    margin-bottom: 10px;
+                    color: #0f4e5f;
+                  }
+                  .footer {
+                    margin-top: 22px;
+                    font-size: 12px;
+                    color: #5f7281;
+                  }
+                  @media print {
+                    body {
+                      background: #fff;
+                      padding: 0;
+                    }
+                    .sheet {
+                      box-shadow: none;
+                      border-radius: 0;
+                    }
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="sheet">
+                  <div class="hero">
+                    <div>
+                      <span class="eyebrow">${escapeHtml(
+                          report.documentType === "prefactura"
+                              ? "Prefactura"
+                              : "Comprobante simple"
+                      )}</span>
+                      <h1>${escapeHtml(report.procedureName || "Comprobante")}</h1>
+                      <p>
+                        ${escapeHtml(report.patientNameSnapshot || "Sin paciente")}
+                        · ${escapeHtml(String(report.reservationDate || report.issuedAt || "").slice(0, 10) || "Sin fecha")}
+                      </p>
+                    </div>
+                    <div>
+                      <p><strong>Estado del cobro:</strong> ${escapeHtml(report.paymentLabel || report.financialStatus || "pendiente")}</p>
+                      <p><strong>Origen:</strong> ${escapeHtml(report.sourceType || "manual")}</p>
+                      <p><strong>Generado:</strong> ${escapeHtml(formatDateTime(report.createdAt ?? report.generatedAt))}</p>
+                    </div>
+                  </div>
+
+                  <div class="meta">
+                    <div class="card">
+                      <h3>Paciente</h3>
+                      <strong>${escapeHtml(report.patientNameSnapshot || "Sin paciente")}</strong>
+                    </div>
+                    <div class="card">
+                      <h3>Sala / sucursal</h3>
+                      <strong>${escapeHtml(report.roomNameSnapshot || "Sin sala")}</strong>
+                      <span>${escapeHtml(report.branchNameSnapshot || "Sin sucursal")}</span>
+                    </div>
+                    <div class="card">
+                      <h3>Profesional</h3>
+                      <strong>${escapeHtml(report.reservationUserName || "Sin responsable")}</strong>
+                    </div>
+                    <div class="card">
+                      <h3>Categoria principal</h3>
+                      <strong>${escapeHtml(report.primaryCategory || "General")}</strong>
+                    </div>
+                  </div>
+
+                  <h2 class="section-title">Lineas del comprobante</h2>
+                  ${
+                      lineRows
+                          ? `
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Categoria</th>
+                            <th>Cantidad</th>
+                            <th>Precio unitario</th>
+                            <th>Descuento</th>
+                            <th>Impuesto</th>
+                            <th>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>${lineRows}</tbody>
+                      </table>
+                    `
+                          : "<p>No se registraron lineas para este comprobante.</p>"
+                  }
+
+                  <h2 class="section-title">Resumen de cobro</h2>
+                  <div class="totals">
+                    <div class="card">
+                      <h3>Total facturado</h3>
+                      <strong>${escapeHtml(formatCurrency(report.totalBilledAmount, report.currencyCode))}</strong>
+                    </div>
+                    <div class="card">
+                      <h3>Total abonado</h3>
+                      <strong>${escapeHtml(formatCurrency(report.paidAmount, report.currencyCode))}</strong>
+                    </div>
+                    <div class="card">
+                      <h3>Saldo pendiente</h3>
+                      <strong>${escapeHtml(formatCurrency(report.outstandingAmount, report.currencyCode))}</strong>
+                    </div>
+                    <div class="card">
+                      <h3>Abonos registrados</h3>
+                      <strong>${escapeHtml(String(report.paymentCount ?? 0))}</strong>
+                    </div>
+                  </div>
+
+                  <h2 class="section-title">Observaciones</h2>
+                  <p>${escapeHtml(report.notes || "Sin observaciones administrativas.")}</p>
+
+                  <h2 class="section-title">Firmas</h2>
+                  <div class="totals">
+                    <div class="card" style="min-height: 96px; display: flex; flex-direction: column; justify-content: end;">
+                      <h3>Firma del paciente</h3>
+                      <div style="margin-top: 42px; border-top: 1px solid #c7d8df;"></div>
+                    </div>
+                    <div class="card" style="min-height: 96px; display: flex; flex-direction: column; justify-content: end;">
+                      <h3>Firma de recepcion</h3>
+                      <div style="margin-top: 42px; border-top: 1px solid #c7d8df;"></div>
+                    </div>
+                  </div>
+
+                  <div class="footer">
+                    ${buildPaymentFooter(report)}
+                  </div>
+                </div>
+              </body>
+            </html>
+        `);
+
+        popup.document.close();
+        popup.focus();
+
+        window.setTimeout(() => {
+            popup.print();
+        }, 200);
+
+        return;
     }
 
     const pricingLabels = {

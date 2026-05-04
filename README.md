@@ -33,6 +33,8 @@ npm run dev:api
 ```bash
 npm run build
 npm run dev:api
+npm run db:push:remote
+npm run db:push:remote:dry
 npm run supabase:status
 npm run supabase:push
 ```
@@ -50,6 +52,23 @@ No todos los cambios se publican igual:
 
 - cambios de **frontend** -> `git push` -> Vercel
 - cambios de **backend** -> `git push` -> Render
-- cambios de **schema en Supabase** -> `npx supabase db push`
+- cambios de **schema en Supabase** -> `npm run db:push:remote`
 
 Si cambias `supabase/migrations` y no haces `db push`, el codigo y la base quedan desalineados.
+
+## Flujo oficial de migraciones
+
+El flujo oficial del repo para empujar migraciones remotas es:
+
+```bash
+npm run db:push:remote:dry
+npm run db:push:remote
+```
+
+Ese wrapper:
+
+- carga `SUPABASE_DB_URL` desde `.env`
+- evita depender de `supabase login`
+- usa un `DOCKER_CONFIG` local al repo para no leer el perfil global de Docker
+
+`supabase:push` y `supabase:status` quedan como alias compatibles de ese mismo flujo.

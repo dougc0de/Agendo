@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import BaseButton from "../components/base/BaseButton.vue";
 import BaseInput from "../components/base/BaseInput.vue";
 import BaseModal from "../components/base/BaseModal.vue";
+import FinanceBillableItemForm from "../components/finance/FinanceBillableItemForm.vue";
+import FinanceBillingDocumentForm from "../components/finance/FinanceBillingDocumentForm.vue";
 import FinanceChargeForm from "../components/finance/FinanceChargeForm.vue";
 import InventoryMovementForm from "../components/finance/InventoryMovementForm.vue";
 import FinancePaymentForm from "../components/finance/FinancePaymentForm.vue";
@@ -14,11 +16,16 @@ import {
     getAppointmentById
 } from "../services/appointmentApi.js";
 import {
+    confirmFinanceBillingDocumentPayment,
     getFinanceBillableReservations,
+    getFinanceBillableItems,
     confirmFinanceOperationReportPayment,
+    createFinanceBillableItem,
+    createFinanceBillingDocument,
     createFinanceInventoryMovement,
     createFinanceInventoryItem,
     createFinanceOperationReport,
+    getFinanceBillingDocumentPdf,
     getFinanceInventory,
     getFinanceInventoryMovements,
     getFinanceInventoryReports,
@@ -26,6 +33,7 @@ import {
     getFinanceOperationReportPdf,
     getFinanceOperationReports,
     getFinanceSummary,
+    updateFinanceBillableItem,
     updateFinanceInventoryItemStatus,
     updateFinanceInventoryItem,
     updateFinanceOperationReport
@@ -46,6 +54,7 @@ const activeTab = ref("cobros");
 const billingView = ref("por_facturar");
 const inventoryTab = ref("catalogo");
 const reports = ref([]);
+const billableItems = ref([]);
 const inventoryItems = ref([]);
 const inventoryCatalogItems = ref([]);
 const inventoryMovements = ref([]);
@@ -81,20 +90,29 @@ const inventoryMovementsLoading = ref(false);
 const inventorySummaryLoading = ref(false);
 const inventoryReportsLoading = ref(false);
 const reportModalOpen = ref(false);
+const billableItemModalOpen = ref(false);
+const billingDocumentModalOpen = ref(false);
 const inventoryModalOpen = ref(false);
 const movementModalOpen = ref(false);
 const paymentModalOpen = ref(false);
 const reportModalMode = ref("create");
+const billableItemModalMode = ref("create");
 const inventoryModalMode = ref("create");
 const reportModalError = ref("");
+const billableItemModalError = ref("");
+const billingDocumentModalError = ref("");
 const inventoryModalError = ref("");
 const movementModalError = ref("");
 const paymentModalError = ref("");
 const savingReport = ref(false);
+const savingBillableItem = ref(false);
+const savingBillingDocument = ref(false);
 const savingInventory = ref(false);
 const savingMovement = ref(false);
 const savingPayment = ref(false);
 const currentReport = ref({});
+const currentBillableItem = ref({});
+const currentBillingDocument = ref({});
 const currentInventoryItem = ref({});
 const currentMovementItem = ref({});
 const currentPaymentReport = ref({});
@@ -111,7 +129,15 @@ const settings = ref({
     timeZone: "America/Costa_Rica",
     procedurePricingPolicy: "bloqueado",
     defaultProcedurePricingMode: "solo_sala",
-    defaultCurrencyCode: DEFAULT_CURRENCY_CODE
+    defaultCurrencyCode: DEFAULT_CURRENCY_CODE,
+    capabilities: {
+        billableCatalogEnabled: false,
+        manualBillingEnabled: false,
+        partialPaymentsEnabled: false
+    },
+    policies: {
+        documentMode: "comprobante_simple"
+    }
 });
 const filters = ref({
     from: "",
@@ -170,7 +196,8 @@ const canWaive = computed(() =>
 
 const heroTitle = computed(() =>
     ({
-        cobros: "Facturacion de procedimientos",
+        cobros: "Cobros y cuentas por cobrar",
+        servicios: "Servicios e items facturables",
         inventario: "Inventario clinico",
         reportes: "Reportes operativos"
     })[activeTab.value] ?? "Finanzas operativas"
@@ -179,7 +206,9 @@ const heroTitle = computed(() =>
 const heroDescription = computed(() =>
     ({
         cobros:
-            "Recepcion emite primero la factura del procedimiento, la imprime y confirma el pago despues cuando el paciente ya cancelo.",
+            "Combina el flujo procedural existente con comprobantes generales para consultas, certificados, productos y otros cargos operativos.",
+        servicios:
+            "Define el catalogo reusable que recepcion puede agendar o cobrar sin duplicar configuraciones por cada caso.",
         inventario:
             "Administra catalogo, stock por sucursal y movimientos reales de hilos, agujas, equipo y cualquier insumo propio de la clinica.",
         reportes:
@@ -189,6 +218,12 @@ const heroDescription = computed(() =>
 
 const reportModalTitle = computed(() =>
     reportModalMode.value === "edit" ? "Editar Factura" : "Emitir Factura"
+);
+
+const billableItemModalTitle = computed(() =>
+    billableItemModalMode.value === "edit"
+        ? "Editar item facturable"
+        : "Nuevo item facturable"
 );
 
 const inventoryModalTitle = computed(() =>
@@ -213,8 +248,41 @@ const summaryCards = computed(() => [
         value: formatCurrency(summary.value.margenBrutoAproximado)
     },
     {
-        label: "Reservas pagadas",
+        label: "Cobros liquidados",
         value: summary.value.procedimientosCobrados ?? 0
+    }
+]);
+
+const billableCatalogEnabled = computed(() =>
+    Boolean(settings.value.capabilities?.billableCatalogEnabled)
+);
+const manualBillingEnabled = computed(() =>
+    Boolean(settings.value.capabilities?.manualBillingEnabled)
+);
+const activeBillableItems = computed(() =>
+    billableItems.value.filter((item) => item.state === "activo")
+);
+const billableItemCategories = computed(() =>
+    [...new Set(billableItems.value.map((item) => item.category).filter(Boolean))].sort(
+        (left, right) => left.localeCompare(right)
+    )
+);
+const billableCatalogSummaryCards = computed(() => [
+    {
+        label: "Items activos",
+        value: activeBillableItems.value.length
+    },
+    {
+        label: "Categorias",
+        value: billableItemCategories.value.length
+    },
+    {
+        label: "Agendables",
+        value: billableItems.value.filter((item) => item.reservable).length
+    },
+    {
+        label: "Cobro manual",
+        value: manualBillingEnabled.value ? "Activo" : "Inactivo"
     }
 ]);
 
@@ -399,6 +467,61 @@ function formatPaymentDetail(report) {
     return report.paymentCount > 0
         ? formatPaymentCountLabel(report.paymentCount)
         : "Sin abonos";
+}
+
+function isGenericBillingDocument(report = {}) {
+    return report?.recordType === "billing_document";
+}
+
+function shouldUseGenericReservationBilling(reservation = {}) {
+    return String(reservation?.tipoAtencion ?? "").trim().toLowerCase() !== "procedimiento";
+}
+
+function getReportDisplayDate(report = {}) {
+    return (
+        report.reservationDate ||
+        String(report.issuedAt ?? report.createdAt ?? "").slice(0, 10) ||
+        "Sin fecha"
+    );
+}
+
+function getReportDisplayTime(report = {}) {
+    if (report.reservationStartTime && report.reservationStartTime !== "--:--") {
+        return `${report.reservationStartTime} - ${report.reservationEndTime || "--:--"}`;
+    }
+
+    return isGenericBillingDocument(report) ? "Sin horario de reserva" : "--:--";
+}
+
+function getReportPrimaryDescriptor(report = {}) {
+    if (isGenericBillingDocument(report)) {
+        return report.procedureName || "Comprobante manual";
+    }
+
+    return report.procedureName || "Procedimiento sin nombre";
+}
+
+function getReportModeLabel(report = {}) {
+    if (isGenericBillingDocument(report)) {
+        return report.primaryCategory || report.sourceType || "manual";
+    }
+
+    return formatPricingMode(report.pricingMode);
+}
+
+function getReportModeDetail(report = {}) {
+    if (isGenericBillingDocument(report)) {
+        const lineCount = Number(report.lineCount ?? 0);
+        return lineCount === 1 ? "1 linea" : `${lineCount} lineas`;
+    }
+
+    return `${report.supplies?.length || 0} insumos`;
+}
+
+function getBillingActionLabel(reservation = {}) {
+    return shouldUseGenericReservationBilling(reservation)
+        ? "Emitir comprobante"
+        : "Emitir factura";
 }
 
 function formatInventoryStatus(status) {
@@ -628,15 +751,54 @@ async function fetchSettings() {
             defaultProcedurePricingMode:
                 response.data?.defaultProcedurePricingMode ?? "solo_sala",
             defaultCurrencyCode:
-                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE
+                response.data?.defaultCurrencyCode ?? DEFAULT_CURRENCY_CODE,
+            capabilities: {
+                billableCatalogEnabled: Boolean(
+                    response.data?.capabilities?.billableCatalogEnabled
+                ),
+                manualBillingEnabled: Boolean(
+                    response.data?.capabilities?.manualBillingEnabled
+                ),
+                partialPaymentsEnabled: Boolean(
+                    response.data?.capabilities?.partialPaymentsEnabled
+                )
+            },
+            policies: {
+                documentMode:
+                    response.data?.policies?.documentMode ??
+                    response.data?.documentMode ??
+                    "comprobante_simple"
+            }
         };
     } catch {
         settings.value = {
             timeZone: "America/Costa_Rica",
             procedurePricingPolicy: "bloqueado",
             defaultProcedurePricingMode: "solo_sala",
-            defaultCurrencyCode: DEFAULT_CURRENCY_CODE
+            defaultCurrencyCode: DEFAULT_CURRENCY_CODE,
+            capabilities: {
+                billableCatalogEnabled: false,
+                manualBillingEnabled: false,
+                partialPaymentsEnabled: false
+            },
+            policies: {
+                documentMode: "comprobante_simple"
+            }
         };
+    }
+}
+
+async function fetchBillableItems() {
+    if (!billableCatalogEnabled.value) {
+        billableItems.value = [];
+        return;
+    }
+
+    try {
+        const response = await getFinanceBillableItems();
+        billableItems.value = response.data ?? [];
+    } catch {
+        billableItems.value = [];
     }
 }
 
@@ -811,6 +973,59 @@ function clearInventoryReportFilters() {
     fetchInventoryReports();
 }
 
+function openCreateBillableItemModal() {
+    billableItemModalMode.value = "create";
+    currentBillableItem.value = {};
+    billableItemModalError.value = "";
+    billableItemModalOpen.value = true;
+}
+
+function openEditBillableItemModal(item) {
+    billableItemModalMode.value = "edit";
+    currentBillableItem.value = { ...item };
+    billableItemModalError.value = "";
+    billableItemModalOpen.value = true;
+}
+
+function closeBillableItemModal() {
+    billableItemModalOpen.value = false;
+    billableItemModalError.value = "";
+    currentBillableItem.value = {};
+}
+
+function openCreateBillingDocumentModal(reservation = null) {
+    if (!activeBillableItems.value.length) {
+        error.value =
+            "Activa al menos un item facturable antes de emitir un comprobante general.";
+        return;
+    }
+
+    currentBillingDocument.value = reservation
+        ? {
+              reservationId: reservation.id,
+              billableItemId: reservation.billableItemId ?? "",
+              patientId: reservation.pacienteId ?? "",
+              professionalUserId: reservation.usuarioId ?? "",
+              roomId: reservation.salaId ?? "",
+              branchId: reservation.branchId ?? "",
+              notes: reservation.descripcion ?? "",
+              documentType: settings.value.policies?.documentMode ?? "comprobante_simple",
+              currencyCode: settings.value.defaultCurrencyCode
+          }
+        : {
+              documentType: settings.value.policies?.documentMode ?? "comprobante_simple",
+              currencyCode: settings.value.defaultCurrencyCode
+          };
+    billingDocumentModalError.value = "";
+    billingDocumentModalOpen.value = true;
+}
+
+function closeBillingDocumentModal() {
+    billingDocumentModalOpen.value = false;
+    billingDocumentModalError.value = "";
+    currentBillingDocument.value = {};
+}
+
 function openCreateReportModal(reservation = null) {
     reportModalMode.value = "create";
     currentReport.value = reservation
@@ -836,6 +1051,10 @@ function openCreateReportModal(reservation = null) {
 }
 
 function openEditReportModal(report) {
+    if (isGenericBillingDocument(report)) {
+        return;
+    }
+
     reportModalMode.value = "edit";
     currentReport.value = {
         ...report,
@@ -855,6 +1074,10 @@ function openEditReportModal(report) {
 }
 
 function canEditReport(report) {
+    if (isGenericBillingDocument(report)) {
+        return false;
+    }
+
     return canWaive.value || report.chargeDecision !== "exonerado";
 }
 
@@ -926,7 +1149,20 @@ function handleReportReservationChange(reservationId) {
     loadSelectedReservation(reservationId);
 }
 
+function openReservationBillingFlow(reservation) {
+    if (shouldUseGenericReservationBilling(reservation)) {
+        openCreateBillingDocumentModal(reservation);
+        return;
+    }
+
+    openCreateReportModal(reservation);
+}
+
 function reportPrimaryActionLabel(report) {
+    if (isGenericBillingDocument(report)) {
+        return "Ver comprobante";
+    }
+
     return report.financialStatus === "pagado" || report.paymentCount > 0
         ? "Ver detalle"
         : "Editar factura";
@@ -935,7 +1171,7 @@ function reportPrimaryActionLabel(report) {
 function canRegisterPayment(report) {
     return (
         report.chargeDecision === "cobrable" &&
-        report.paymentStatus === "pendiente" &&
+        ["pendiente", "parcial"].includes(report.financialStatus ?? report.paymentStatus) &&
         Number(report.outstandingAmount ?? 0) > 0
     );
 }
@@ -964,6 +1200,51 @@ async function handleSaveReport(payload) {
             "No fue posible guardar el reporte operativo.";
     } finally {
         savingReport.value = false;
+    }
+}
+
+async function handleSaveBillableItem(payload) {
+    savingBillableItem.value = true;
+    billableItemModalError.value = "";
+
+    try {
+        const response =
+            billableItemModalMode.value === "edit" && currentBillableItem.value.id
+                ? await updateFinanceBillableItem(currentBillableItem.value.id, payload)
+                : await createFinanceBillableItem(payload);
+
+        feedback.value = response.msg;
+        closeBillableItemModal();
+        await fetchBillableItems();
+    } catch (requestError) {
+        billableItemModalError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible guardar el item facturable.";
+    } finally {
+        savingBillableItem.value = false;
+    }
+}
+
+async function handleSaveBillingDocument(payload) {
+    savingBillingDocument.value = true;
+    billingDocumentModalError.value = "";
+
+    try {
+        const response = await createFinanceBillingDocument(payload);
+
+        feedback.value = response.msg;
+        closeBillingDocumentModal();
+        billingView.value =
+            response.data?.financialStatus === "pagado" ? "pagadas" : "pendientes";
+        await fetchFinanceData();
+    } catch (requestError) {
+        billingDocumentModalError.value =
+            requestError.response?.msg ||
+            requestError.message ||
+            "No fue posible emitir el comprobante.";
+    } finally {
+        savingBillingDocument.value = false;
     }
 }
 
@@ -1044,10 +1325,12 @@ async function handleConfirmPayment(payload) {
     paymentModalError.value = "";
 
     try {
-        const response = await confirmFinanceOperationReportPayment(
-            currentPaymentReport.value.id,
-            payload
-        );
+        const response = isGenericBillingDocument(currentPaymentReport.value)
+            ? await confirmFinanceBillingDocumentPayment(currentPaymentReport.value.id, payload)
+            : await confirmFinanceOperationReportPayment(
+                  currentPaymentReport.value.id,
+                  payload
+              );
 
         feedback.value = response.msg;
         closePaymentModal();
@@ -1068,7 +1351,9 @@ async function handleConfirmPayment(payload) {
 
 async function handleDownloadPdf(report) {
     try {
-        const response = await getFinanceOperationReportPdf(report.id);
+        const response = isGenericBillingDocument(report)
+            ? await getFinanceBillingDocumentPdf(report.id)
+            : await getFinanceOperationReportPdf(report.id);
         downloadOperationReportPdf(response.data);
     } catch (requestError) {
         error.value =
@@ -1098,10 +1383,12 @@ async function bootstrapFinance() {
         return;
     }
 
+    await fetchSettings();
+
     await Promise.all([
-        fetchSettings(),
         fetchFiltersSupport(),
         fetchFinanceData(),
+        fetchBillableItems(),
         fetchInventory(),
         fetchInventoryOptions(),
         fetchInventorySummary(),
@@ -1138,7 +1425,22 @@ onMounted(() => {
               v-if="activeTab === 'cobros'"
               @click="openCreateReportModal"
             >
-              Emitir Factura
+              Emitir factura procedural
+            </BaseButton>
+            <BaseButton
+              v-if="activeTab === 'cobros' && manualBillingEnabled"
+              variant="ghost"
+              :disabled="!activeBillableItems.length"
+              @click="openCreateBillingDocumentModal()"
+            >
+              Nuevo comprobante
+            </BaseButton>
+            <BaseButton
+              v-else-if="activeTab === 'servicios'"
+              :disabled="!billableCatalogEnabled"
+              @click="openCreateBillableItemModal"
+            >
+              Nuevo item facturable
             </BaseButton>
             <BaseButton
               v-else-if="activeTab === 'inventario'"
@@ -1171,6 +1473,14 @@ onMounted(() => {
             @click="activeTab = 'inventario'"
           >
             Inventario
+          </button>
+          <button
+            type="button"
+            class="finance-tabs__button"
+            :class="{ 'finance-tabs__button--active': activeTab === 'servicios' }"
+            @click="activeTab = 'servicios'"
+          >
+            Servicios e items
           </button>
           <button
             type="button"
@@ -1233,20 +1543,20 @@ onMounted(() => {
                   <h2>
                     {{
                       billingView === "por_facturar"
-                        ? "Procedimientos listos para facturar"
+                        ? "Casos listos para cobrar"
                         : billingView === "pagadas"
-                          ? "Historico de facturas pagadas y cierres archivados"
-                          : "Cola de cobro pendiente"
+                          ? "Historico de cobros pagados y cierres archivados"
+                          : "Cobros emitidos con saldo pendiente"
                     }}
                   </h2>
                   <p class="finance-panel__copy">
                     Modalidad actual de la cuenta: {{ formatPricingMode(settings.defaultProcedurePricingMode) }}.
                     {{
                       billingView === "por_facturar"
-                        ? "Recepcion emite la factura solo una vez por procedimiento y luego el caso cambia de bandeja."
+                        ? "Recepcion puede seguir el flujo procedural existente o emitir un comprobante general segun el tipo de reserva."
                         : billingView === "pagadas"
                           ? "Aqui se consolidan los cobros confirmados y los cierres archivables para lectura contable y operativa."
-                          : "Estas reservas ya tienen factura emitida, pero todavia no cuentan como cobro realizado."
+                          : "Estos documentos ya fueron emitidos, pero aun no cuentan como ingreso completamente cobrado."
                     }}
                   </p>
                 </div>
@@ -1363,13 +1673,13 @@ onMounted(() => {
                   v-else-if="billingView === 'por_facturar' && !filteredReservationOptions.length"
                   class="finance-state"
                 >
-                  No hay procedimientos confirmados sin factura emitida con esos filtros.
+                  No hay reservas confirmadas sin cobro emitido con esos filtros.
                 </div>
                 <div
                   v-else-if="billingView !== 'por_facturar' && !displayedReports.length"
                   class="finance-state"
                 >
-                  No hay reservas en esta bandeja con los filtros actuales.
+                  No hay cobros en esta bandeja con los filtros actuales.
                 </div>
                 <table v-else-if="billingView === 'por_facturar'" class="finance-table__table">
                   <thead>
@@ -1389,6 +1699,9 @@ onMounted(() => {
                         <span class="finance-table__subtext">
                           {{ reservation.horaInicio }} - {{ reservation.horaFin }}
                         </span>
+                        <span class="finance-table__subtext">
+                          {{ reservation.tipoAtencion }} · {{ reservation.tipoConsulta || reservation.descripcion || "Sin detalle" }}
+                        </span>
                       </td>
                       <td>
                         <strong>{{ reservation.pacienteNombre }}</strong>
@@ -1402,9 +1715,9 @@ onMounted(() => {
                       <td class="finance-table__actions-cell">
                         <BaseButton
                           size="sm"
-                          @click="openCreateReportModal(reservation)"
+                          @click="openReservationBillingFlow(reservation)"
                         >
-                          Emitir factura
+                          {{ getBillingActionLabel(reservation) }}
                         </BaseButton>
                       </td>
                     </tr>
@@ -1413,11 +1726,11 @@ onMounted(() => {
                 <table v-else class="finance-table__table">
                   <thead>
                     <tr>
-                      <th>Reserva</th>
+                      <th>Caso</th>
                       <th>Paciente</th>
-                      <th>Sala</th>
+                      <th>Sala / origen</th>
                       <th>Responsable</th>
-                      <th>Modalidad</th>
+                      <th>Detalle</th>
                       <th>Total facturado</th>
                       <th>Abonado</th>
                       <th>Saldo</th>
@@ -1428,11 +1741,14 @@ onMounted(() => {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="report in displayedReports" :key="report.id">
+                    <tr v-for="report in displayedReports" :key="report.recordKey || `${report.recordType || 'charge'}:${report.id}`">
                       <td>
-                        <strong>{{ report.reservationDate }}</strong>
+                        <strong>{{ getReportDisplayDate(report) }}</strong>
                         <span class="finance-table__subtext">
-                          {{ report.reservationStartTime }} - {{ report.reservationEndTime }}
+                          {{ getReportDisplayTime(report) }}
+                        </span>
+                        <span class="finance-table__subtext">
+                          {{ getReportPrimaryDescriptor(report) }}
                         </span>
                       </td>
                       <td>
@@ -1441,12 +1757,17 @@ onMounted(() => {
                           {{ report.patientPhoneSnapshot || "Sin telefono" }}
                         </span>
                       </td>
-                      <td>{{ report.roomNameSnapshot }}</td>
+                      <td>
+                        <strong>{{ report.roomNameSnapshot || "Sin sala" }}</strong>
+                        <span class="finance-table__subtext">
+                          {{ report.branchNameSnapshot || "Sin sucursal" }}
+                        </span>
+                      </td>
                       <td>{{ report.reservationUserName || "Sin responsable" }}</td>
                       <td>
-                        <strong>{{ formatPricingMode(report.pricingMode) }}</strong>
+                        <strong>{{ getReportModeLabel(report) }}</strong>
                         <span class="finance-table__subtext">
-                          {{ report.supplies?.length || 0 }} insumos
+                          {{ getReportModeDetail(report) }}
                         </span>
                       </td>
                       <td>{{ formatCurrency(report.totalBilledAmount, report.currencyCode) }}</td>
@@ -1487,7 +1808,7 @@ onMounted(() => {
                           variant="ghost"
                           @click="handleDownloadPdf(report)"
                         >
-                          Imprimir factura
+                          {{ isGenericBillingDocument(report) ? "Imprimir comprobante" : "Imprimir factura" }}
                         </BaseButton>
                         <BaseButton
                           v-if="canRegisterPayment(report)"
@@ -1495,6 +1816,111 @@ onMounted(() => {
                           @click="openPaymentModal(report)"
                         >
                           {{ paymentActionLabel(report) }}
+                        </BaseButton>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </template>
+
+        <template v-else-if="activeTab === 'servicios'">
+          <section class="finance-stats stats-strip">
+            <article
+              v-for="card in billableCatalogSummaryCards"
+              :key="card.label"
+              v-reveal="{ delay: 50 }"
+              class="finance-stat-card"
+            >
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+            </article>
+          </section>
+
+          <section class="finance-layout">
+            <article v-reveal class="finance-panel">
+              <div class="finance-panel__header">
+                <div>
+                  <span class="finance-panel__eyebrow">Catalogo reutilizable</span>
+                  <h2>Servicios e items facturables</h2>
+                  <p class="finance-panel__copy">
+                    Mantiene un solo catalogo para consultas, procedimientos, documentos, productos y cargos administrativos sin duplicar el flujo financiero actual.
+                  </p>
+                </div>
+              </div>
+
+              <p v-if="!billableCatalogEnabled" class="finance-warning">
+                El catalogo facturable no esta habilitado para esta cuenta o plan.
+              </p>
+              <p
+                v-else-if="manualBillingEnabled && !activeBillableItems.length"
+                class="finance-warning"
+              >
+                Activa al menos un item facturable para emitir comprobantes generales desde Finanzas.
+              </p>
+
+              <div class="finance-table">
+                <div v-if="!billableCatalogEnabled" class="finance-state">
+                  Esta cuenta sigue operando solo con el flujo procedural actual.
+                </div>
+                <div v-else-if="!billableItems.length" class="finance-state">
+                  Todavia no hay items facturables cargados en esta cuenta.
+                </div>
+                <table v-else class="finance-table__table finance-table__table--inventory">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Categoria</th>
+                      <th>Precio base</th>
+                      <th>Alcance</th>
+                      <th>Uso</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in billableItems" :key="item.id">
+                      <td>
+                        <strong>{{ item.name }}</strong>
+                        <span class="finance-table__subtext">
+                          {{ item.description || "Sin descripcion" }}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{{ item.category }}</strong>
+                        <span class="finance-table__subtext">
+                          {{ item.appointmentTypeHint || "otro" }}
+                        </span>
+                      </td>
+                      <td>{{ formatCurrency(item.basePrice, item.currencyCode) }}</td>
+                      <td>
+                        {{ item.branchName || "Global para la cuenta" }}
+                      </td>
+                      <td>
+                        <strong>
+                          {{ item.reservable ? "Agendable" : "Solo cobro" }}
+                        </strong>
+                        <span class="finance-table__subtext">
+                          {{ item.billableWithoutReservation ? "Cobro manual permitido" : "Requiere reserva" }}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          class="finance-table__badge"
+                          :class="`finance-table__badge--${item.state === 'activo' ? 'activo' : 'inactivo'}`"
+                        >
+                          {{ item.state }}
+                        </span>
+                      </td>
+                      <td class="finance-table__actions-cell">
+                        <BaseButton
+                          size="sm"
+                          variant="warning"
+                          @click="openEditBillableItemModal(item)"
+                        >
+                          Editar
                         </BaseButton>
                       </td>
                     </tr>
@@ -2072,6 +2498,45 @@ onMounted(() => {
 
       <AppFooter />
     </div>
+
+    <BaseModal
+      :open="billableItemModalOpen"
+      :title="billableItemModalTitle"
+      description="Configura el catalogo reusable que luego podras agendar o cobrar desde la cuenta."
+      @close="closeBillableItemModal"
+    >
+      <FinanceBillableItemForm
+        :initial-value="currentBillableItem"
+        :branches="branchOptions"
+        :submitting="savingBillableItem"
+        :error-message="billableItemModalError"
+        @submit="handleSaveBillableItem"
+        @cancel="closeBillableItemModal"
+      />
+    </BaseModal>
+
+    <BaseModal
+      :open="billingDocumentModalOpen"
+      title="Emitir comprobante"
+      description="Usa este flujo para consultas, documentos, productos u otros cargos que no deban pasar por la factura procedural."
+      @close="closeBillingDocumentModal"
+    >
+      <FinanceBillingDocumentForm
+        :initial-value="currentBillingDocument"
+        :reservation-options="reservationOptions"
+        :billable-item-options="activeBillableItems"
+        :branch-options="branchOptions"
+        :room-options="roomOptions"
+        :user-options="userOptions"
+        :default-currency-code="settings.defaultCurrencyCode"
+        :default-document-type="settings.policies?.documentMode || 'comprobante_simple'"
+        :can-waive="canWaive"
+        :submitting="savingBillingDocument"
+        :error-message="billingDocumentModalError"
+        @submit="handleSaveBillingDocument"
+        @cancel="closeBillingDocumentModal"
+      />
+    </BaseModal>
 
     <BaseModal
       :open="reportModalOpen"

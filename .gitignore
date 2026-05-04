@@ -6,14 +6,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-docs
+docs/*
+!docs/architecture.md
+docs/legacy/
 node_modules
 dist
 dist-ssr
 *.local
 .env
-.env.example
 supabase/.temp
+.docker-config
 
 # Editor directories and files
 .vscode/*

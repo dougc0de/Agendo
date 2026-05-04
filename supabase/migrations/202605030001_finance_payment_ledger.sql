@@ -66,7 +66,7 @@ insert into public.reservation_charge_payments (
 select
     rc.workspace_id,
     rc.id,
-    coalesce(rc.total_billed_amount, rc.amount, 0),
+    coalesce(rc.total_billed_amount, rc.amount),
     upper(coalesce(rc.currency_code, 'CRC')),
     coalesce(rc.payment_method, 'otro'),
     coalesce(rc.paid_at, rc.updated_at, rc.created_at, now()),
@@ -75,6 +75,7 @@ select
 from public.reservation_charges rc
 where rc.payment_status = 'pagado'
   and rc.charge_decision = 'cobrable'
+  and coalesce(rc.total_billed_amount, rc.amount) > 0
   and not exists (
       select 1
       from public.reservation_charge_payments rcp
@@ -167,11 +168,6 @@ select
     rc.currency_code,
     rc.charge_decision,
     rc.pricing_mode,
-    rcf.financial_status,
-    coalesce(rcf.paid_amount, 0) as paid_amount,
-    coalesce(rcf.outstanding_amount, 0) as outstanding_amount,
-    coalesce(rcf.payment_count, 0) as payment_count,
-    rcf.last_payment_at,
     coalesce(rc.room_charge_amount, 0) as room_charge_amount,
     coalesce(rc.supplies_total_amount, 0) as supplies_total_amount,
     coalesce(rc.supplies_total_cost, 0) as supplies_total_cost,
@@ -204,7 +200,12 @@ select
                 2
             )
         else null
-    end as gross_margin_amount
+    end as gross_margin_amount,
+    rcf.financial_status,
+    coalesce(rcf.paid_amount, 0) as paid_amount,
+    coalesce(rcf.outstanding_amount, 0) as outstanding_amount,
+    coalesce(rcf.payment_count, 0) as payment_count,
+    rcf.last_payment_at
 from public.reservas r
 left join public.usuarios u
     on u.id = r.usuario_id
