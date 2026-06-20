@@ -162,7 +162,7 @@ function submitContact() {
               v-for="service in serviceItems"
               :key="service.title"
               v-reveal="{ delay: 70 }"
-              class="service-card"
+              class="service-card" 
             >
               <div class="service-card__visual" :class="service.visualClass">
                 <img :src="service.image" :alt="service.title" />

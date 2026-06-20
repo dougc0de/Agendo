@@ -22,6 +22,7 @@ import {
     normalizeRole
 } from "../../shared/roles.js";
 import { buscarBillableItemPorId } from "../repositories/billableItemRepository.js";
+import { ChargeInvoice } from "../domain/finance/ChargeInvoice.js";
 
 const ESTADOS_RESERVA_PERMITIDOS = ["pendiente", "confirmada", "cancelada"];
 const TIPOS_ATENCION_PERMITIDOS = ["consulta", "procedimiento"];
@@ -161,6 +162,12 @@ function deriveFinancialStatus(filaCobro) {
         return "sin_factura";
     }
 
+    const invoice = ChargeInvoice.fromRow(filaCobro);
+
+    if (invoice.usesLegacyPaidFallback()) {
+        return "pagado";
+    }
+
     if (filaCobro.financial_status) {
         return filaCobro.financial_status;
     }
@@ -222,6 +229,9 @@ function formatearReservaSalida(filaReserva, options = {}) {
 
     const financialCharge = options.financialCharge ?? null;
     const financialStatus = deriveFinancialStatus(financialCharge);
+    const financialSnapshot = financialCharge
+        ? ChargeInvoice.fromRow(financialCharge).toFinancialSnapshot()
+        : null;
 
     return {
         id: filaReserva.id,
@@ -280,19 +290,14 @@ function formatearReservaSalida(filaReserva, options = {}) {
                       0
               )
             : 0,
-        paidAmount: financialCharge
-            ? Number(financialCharge.paid_amount ?? 0)
+        paidAmount: financialSnapshot
+            ? Number(financialSnapshot.paidAmount ?? 0)
             : 0,
-        outstandingAmount: financialCharge
-            ? Number(
-                  financialCharge.outstanding_amount ??
-                      financialCharge.total_billed_amount ??
-                      financialCharge.amount ??
-                      0
-              )
+        outstandingAmount: financialSnapshot
+            ? Number(financialSnapshot.outstandingAmount ?? 0)
             : 0,
-        paymentCount: financialCharge
-            ? Number(financialCharge.payment_count ?? 0)
+        paymentCount: financialSnapshot
+            ? Number(financialSnapshot.paymentCount ?? 0)
             : 0,
         currencyCode: financialCharge?.currency_code ?? null,
         ...(options.timeZone

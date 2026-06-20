@@ -391,9 +391,31 @@ watch(billingView, (value) => {
     } else {
         filters.value.paymentStatus = "todos";
     }
+
+    if (value === "por_facturar") {
+        fetchReservationOptions();
+    }
 });
 
 let reservationRequestToken = 0;
+
+function buildReportsFilters() {
+    return {
+        ...filters.value
+    };
+}
+
+function buildSummaryFilters() {
+    const summaryFilters = {
+        ...filters.value
+    };
+
+    if (billingView.value !== "pagadas" || summaryFilters.paymentStatus === "todos") {
+        delete summaryFilters.paymentStatus;
+    }
+
+    return summaryFilters;
+}
 
 function formatCurrency(
     value,
@@ -806,14 +828,22 @@ async function fetchFinanceData() {
     loading.value = true;
     error.value = "";
 
-    try {
-        const [reportsResponse, summaryResponse] = await Promise.all([
-            getFinanceOperationReports(filters.value),
-            getFinanceSummary(filters.value)
-        ]);
+    const reportsFilters = buildReportsFilters();
+    const summaryFilters = buildSummaryFilters();
 
-        reports.value = reportsResponse.data ?? [];
-        summary.value = summaryResponse.data ?? {
+    const [reportsResult, summaryResult] = await Promise.allSettled([
+        getFinanceOperationReports(reportsFilters),
+        getFinanceSummary(summaryFilters)
+    ]);
+
+    if (reportsResult.status === "fulfilled") {
+        reports.value = reportsResult.value.data ?? [];
+    } else {
+        reports.value = [];
+    }
+
+    if (summaryResult.status === "fulfilled") {
+        summary.value = summaryResult.value.data ?? {
             ingresosCobrados: 0,
             ingresosPendientes: 0,
             ingresosSala: 0,
@@ -828,16 +858,46 @@ async function fetchFinanceData() {
             rooms: [],
             users: []
         };
-        await fetchReservationOptions();
-    } catch (requestError) {
-        reports.value = [];
-        error.value =
-            requestError.response?.msg ||
-            requestError.message ||
-            "No fue posible cargar el modulo financiero.";
-    } finally {
-        loading.value = false;
+    } else {
+        summary.value = {
+            ingresosCobrados: 0,
+            ingresosPendientes: 0,
+            ingresosSala: 0,
+            ingresosInsumos: 0,
+            ingresosMixtos: 0,
+            procedimientosCobrados: 0,
+            operacionesExoneradas: 0,
+            montoExonerado: 0,
+            costoInsumos: 0,
+            margenBrutoAproximado: 0,
+            cobrosRegistrados: 0,
+            rooms: [],
+            users: []
+        };
     }
+
+    await fetchReservationOptions();
+
+    if (reportsResult.status === "rejected" || summaryResult.status === "rejected") {
+        const failedResult =
+            reportsResult.status === "rejected" ? reportsResult.reason : summaryResult.reason;
+        error.value =
+            failedResult?.response?.msg ||
+            failedResult?.message ||
+            "No fue posible cargar por completo el modulo financiero.";
+    }
+
+    loading.value = false;
+}
+
+function handleBillingViewChange(nextView) {
+    billingView.value = nextView;
+
+    if (nextView === "por_facturar") {
+        return;
+    }
+
+    fetchFinanceData();
 }
 
 async function fetchInventory() {
@@ -1513,7 +1573,7 @@ onMounted(() => {
               type="button"
               class="finance-tabs__button"
               :class="{ 'finance-tabs__button--active': billingView === 'por_facturar' }"
-              @click="billingView = 'por_facturar'"
+              @click="handleBillingViewChange('por_facturar')"
             >
               Por facturar
             </button>
@@ -1521,7 +1581,7 @@ onMounted(() => {
               type="button"
               class="finance-tabs__button"
               :class="{ 'finance-tabs__button--active': billingView === 'pendientes' }"
-              @click="billingView = 'pendientes'"
+              @click="handleBillingViewChange('pendientes')"
             >
               Pendientes de pago
             </button>
@@ -1529,7 +1589,7 @@ onMounted(() => {
               type="button"
               class="finance-tabs__button"
               :class="{ 'finance-tabs__button--active': billingView === 'pagadas' }"
-              @click="billingView = 'pagadas'"
+              @click="handleBillingViewChange('pagadas')"
             >
               Pagadas y cerradas
             </button>

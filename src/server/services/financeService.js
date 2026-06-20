@@ -90,8 +90,23 @@ function normalizarHora(valor) {
     return String(valor).slice(0, 5);
 }
 
-function normalizarEstadoCobro(valor) {
-    return normalizarTexto(valor).toLowerCase() || "pendiente";
+function normalizarEstadoCobroPersistencia(valor, fallback = "pendiente") {
+    const normalized = normalizarTexto(valor).toLowerCase();
+    return ESTADOS_COBRO.includes(normalized) ? normalized : fallback;
+}
+
+function normalizarFiltroEstadoCobro(valor) {
+    const normalized = normalizarTexto(valor).toLowerCase();
+
+    if (!normalized) {
+        return "";
+    }
+
+    if (normalized === "todos") {
+        return "todos";
+    }
+
+    return ESTADOS_COBRO.includes(normalized) ? normalized : "";
 }
 
 function normalizarMetodoPago(valor) {
@@ -224,6 +239,48 @@ function buildChargeInvoiceFromRow(filaCobro, payments = []) {
     );
 }
 
+async function ensureLedgerForPaidCharge({
+    chargeId,
+    workspaceId,
+    registeredByUserId,
+    paymentMethod,
+    paidAt,
+    notes = null,
+    executor
+}) {
+    const existingPayments = await listarPagosPorChargeIds([chargeId], workspaceId, executor);
+
+    if (existingPayments.length) {
+        return existingPayments;
+    }
+
+    const charge = await buscarCobroPorId(chargeId, workspaceId, executor);
+
+    if (!charge || charge.charge_decision === "exonerado") {
+        return existingPayments;
+    }
+
+    const amount = Number(charge.total_billed_amount ?? charge.amount ?? 0);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return existingPayments;
+    }
+
+    const createdPayment = new ChargePayment({
+        workspaceId,
+        chargeId,
+        amount,
+        currencyCode: charge.currency_code ?? DEFAULT_CURRENCY_CODE,
+        paymentMethod: normalizarMetodoPago(paymentMethod ?? charge.payment_method) || "otro",
+        paidAt: paidAt ?? charge.paid_at ?? new Date().toISOString(),
+        notes,
+        registeredByUserId
+    });
+
+    await crearPagoCobroRepository(createdPayment.toPersistence(), executor);
+    return listarPagosPorChargeIds([chargeId], workspaceId, executor);
+}
+
 function formatearCobroSalida(filaCobro, supplies = [], payments = []) {
     if (!filaCobro) {
         return null;
@@ -353,7 +410,7 @@ function cumpleFiltrosCobro(filaCobro, filtros = {}) {
     const userId = Number(filtros.userId);
     const roomId = Number(filtros.roomId);
     const branchId = Number(filtros.branchId);
-    const paymentStatus = normalizarEstadoCobro(filtros.paymentStatus);
+    const paymentStatus = normalizarFiltroEstadoCobro(filtros.paymentStatus);
     const scope = normalizarTexto(filtros.scope).toLowerCase();
     const financialStatus = deriveFinancialStatus(filaCobro);
 
@@ -391,22 +448,24 @@ function cumpleFiltrosCobro(filaCobro, filtros = {}) {
     }
 
     if (
-        paymentStatus &&
-        paymentStatus !== "todos" &&
-        ESTADOS_COBRO.includes(paymentStatus) &&
-        filaCobro.payment_status !== paymentStatus
+        paymentStatus === "pagado" &&
+        financialStatus !== "pagado"
     ) {
-        return false;
-    }
-
-    if (scope === "pagado" && financialStatus !== "pagado") {
         return false;
     }
 
     if (
-        scope === "pendiente" &&
+        paymentStatus === "pendiente" &&
         !["pendiente", "parcial"].includes(financialStatus)
     ) {
+        return false;
+    }
+
+    if (paymentStatus === "anulado" && financialStatus !== "anulado") {
+        return false;
+    }
+
+    if (scope === "pagado" && financialStatus !== "pagado") {
         return false;
     }
 
@@ -982,7 +1041,7 @@ async function normalizarPayloadReporte(payload, auth, opciones = {}) {
     ) {
         normalizedPaymentStatus = "pendiente";
     } else if (existingCharge) {
-        normalizedPaymentStatus = normalizarEstadoCobro(
+        normalizedPaymentStatus = normalizarEstadoCobroPersistencia(
             existingCharge?.paymentStatus ?? existingCharge?.payment_status
         );
         paymentMethod = normalizarMetodoPago(
@@ -1380,6 +1439,21 @@ export async function crearCobro(payload, auth) {
                 throw new Error(inventorySyncResult.msg);
             }
 
+            if (
+                normalizedPayload.data.chargeDecision === "cobrable" &&
+                normalizedPayload.data.paymentStatus === "pagado"
+            ) {
+                await ensureLedgerForPaidCharge({
+                    chargeId: createdCharge.id,
+                    workspaceId,
+                    registeredByUserId,
+                    paymentMethod: normalizedPayload.data.paymentMethod,
+                    paidAt: normalizedPayload.data.paidAt,
+                    notes: "Pago sincronizado al guardar una factura procedural ya marcada como pagada.",
+                    executor: client
+                });
+            }
+
             const createdRow = await buscarCobroPorId(createdCharge.id, workspaceId, client);
             const [formattedReport] = await enriquecerCobrosConLineas(
                 [createdRow],
@@ -1513,6 +1587,21 @@ export async function actualizarCobro(id, payload, auth) {
 
             if (!inventorySyncResult.ok) {
                 throw new Error(inventorySyncResult.msg);
+            }
+
+            if (
+                normalizedPayload.data.chargeDecision === "cobrable" &&
+                normalizedPayload.data.paymentStatus === "pagado"
+            ) {
+                await ensureLedgerForPaidCharge({
+                    chargeId,
+                    workspaceId,
+                    registeredByUserId,
+                    paymentMethod: normalizedPayload.data.paymentMethod,
+                    paidAt: normalizedPayload.data.paidAt,
+                    notes: "Pago sincronizado al actualizar una factura procedural marcada como pagada.",
+                    executor: client
+                });
             }
 
             const updatedRow = await buscarCobroPorId(chargeId, workspaceId, client);

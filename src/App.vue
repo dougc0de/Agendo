@@ -9,6 +9,7 @@ if (!authStore.isHydrated) {
 }
 </script>
 
+
 <template>
   <RouterView />
 </template>
